@@ -73,6 +73,8 @@ jobs:
         run: pnpm test:negative
       - name: Lint (oxlint type-aware via tsgolint)
         run: pnpm lint
+      - name: Format check (oxfmt)
+        run: pnpm format:check
       - name: Tests (Vitest + Nest e2e)
         run: pnpm test
 
