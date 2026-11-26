@@ -1,11 +1,11 @@
 # Enduva Individual Contributor License Agreement
 
 > [!WARNING]
-> **DRAFT — not yet in force.** This text requires the owner's approval (and ideally legal review) before it is used. Placeholders in `[BRACKETS]` must be filled in first. Until it is approved, external contributions are not accepted.
+> **DRAFT — not yet in force. Do not sign.** This text needs legal review and the owner's approval before it is used. The placeholders in `[BRACKETS]` must be filled in and the [open points for legal review](#open-points-for-legal-review) settled first. No signatures are collected for this draft. Until the final version is approved and its automated check is active (roadmap task 0.5), external contributions are not accepted.
 
 Version 1.0-draft
 
-Thank you for your interest in contributing to Enduva. This Contributor License Agreement ("Agreement") documents the rights You grant to the Owner when You contribute to the Project. Please read it carefully. You sign it by posting the comment requested by the CLA bot on Your pull request.
+Thank you for your interest in contributing to Enduva. This Contributor License Agreement ("Agreement") documents the rights You grant to the Owner when You contribute to the Project. Please read it carefully. How You sign it is described in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 Enduva is published under the Elastic License 2.0 (ELv2). ELv2 alone would not let the Owner run contributed code as the hosted Enduva service or offer it under other terms. This Agreement grants those rights so the Project can stay source-available and commercially sustainable.
 
@@ -54,8 +54,24 @@ The Owner may transfer or assign this Agreement and the rights granted under it,
 
 ## 7. Signature records
 
-When You sign, Your GitHub username, user ID, the pull request and the time of signing are stored publicly in the repository (branch `cla-signatures`) as proof of agreement. Signing covers all past and future Contributions You Submit to the Project under this version of the Agreement.
+When You sign, Your GitHub username, GitHub account ID, the pull request, the version and content hash of this Agreement and the time of signing are stored publicly in the repository as proof of agreement. Signing covers all past and future Contributions You Submit to the Project under this version of the Agreement. If the Agreement changes, You must sign the new version before further Contributions can be merged.
 
 ## 8. Governing law
 
 This Agreement is governed by the laws of [GOVERNING LAW, e.g. the Federal Republic of Germany], excluding its conflict-of-law rules and the UN Convention on Contracts for the International Sale of Goods. If any provision is held unenforceable, the remaining provisions stay in effect.
+
+---
+
+## Open points for legal review
+
+*Not part of the Agreement. Raised in review and to be checked by counsel before the final version; this list doesn't resolve them.*
+
+1. **Parties and law:** fill in the licensor's legal name (§ 1) and the governing law and venue (§ 8).
+2. **Scope of the grant for known uses:** confirm that §§ 2–3 effectively cover hosting/managed service, sublicensing, relicensing (incl. proprietary/commercial) and the patent licence, and that the "to the extent permitted" wording works as intended.
+3. **Unknown types of use (§ 31a UrhG):** whether assent by a pull request comment can cover types of use not yet known, given the written-form requirement (see § 126a BGB for the electronic form) and the author's revocation right, and what alternative is needed if not.
+4. **Remuneration (§ 32 UrhG):** whether a no-charge licence to a single licensor that may relicense commercially holds up against the author's claim to equitable remuneration.
+5. **Moral rights:** whether the waiver/non-assertion in § 2 has any effect under German law, and what to say instead.
+6. **Employer-owned and third-party material:** how contributions are handled when an employer holds rights, whether a corporate CLA is needed, and how third-party material under narrower licences (§ 4.3) may be accepted.
+7. **Standard terms:** whether the Agreement is subject to standard-terms control (§§ 305 ff. BGB) towards individual contributors and which clauses are at risk.
+8. **Signature records and privacy:** legal basis, retention period and privacy notice for publicly storing signature data (§ 7), and what happens on an erasure request.
+9. **Versioning:** confirm that requiring a re-signature for every new version, and the coverage of "past" Contributions in § 7, is sound.
