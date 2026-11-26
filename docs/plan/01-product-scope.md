@@ -47,10 +47,13 @@ The scope uses MoSCoW: **M**ust (v1), **S**hould (v1 if time allows), **C**ould 
 | Activity detail: map, elevation/pace/HR/cadence charts, splits/laps, summary | M |
 | Edit title, description, sport type, private notes. RPE/feel rating | M |
 | Share a single activity via public link | S |
-| HR zone distribution, simple personal records (see O5) | S |
+| HR zone distribution, simple personal records (fastest 1/5/10 km, longest ride, …) | M |
+| **Training load:** per-session load (HR/pace/swim/sRPE method), CTL (fitness), ATL (fatigue), TSB (form) chart | M |
+| **VO2max** trend (from Apple Health, estimate for other sources) | M |
+| Personal thresholds (max/resting HR, LTHR, threshold pace, CSS): auto-estimated, user-editable | M |
 | AI post-activity analysis ("what went well, what to watch") | M |
 | Garmin / Wahoo / Polar integrations | C |
-| Advanced load metrics (CTL/ATL/TSB), VO2max, power zones, gear | W (for now) |
+| Power zones, gear tracking | W (for now) |
 | Strava integration | W |
 | Live GPS recording inside Enduva | W (Apple Workout app does this) |
 

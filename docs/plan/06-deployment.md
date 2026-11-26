@@ -75,7 +75,7 @@ flowchart LR
 
 | Where | What |
 | --- | --- |
-| 1Password Environments | Local `.env` files (Supabase local keys, OpenAI key, map-tile key if a keyed provider is chosen (O6), Google + Apple OAuth) mounted per developer |
+| 1Password Environments | Local `.env` files (Supabase local keys, OpenAI key, map style URL (OpenFreeMap by default, no key), Google + Apple OAuth) mounted per developer |
 | GitHub Actions secrets (per environment) | `DOKPLOY_URL`, `DOKPLOY_TOKEN`, `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`, project refs, `GHCR` (via `GITHUB_TOKEN`), Apple signing (later) |
 | Dokploy environment | Runtime env for `api`, `worker` and `web` (DB URLs, Supabase URL + publishable key, OpenAI key, GlitchTip DSN, …) |
 

@@ -70,7 +70,7 @@ These can run in parallel with Phase 1. G1 passes only when all are merged and v
 | 1.0a | feat(api) | **Sync protocol** (ADR-0004): `sync_state`, push/pull, base-version conflicts, tombstones, cursor expiry | Test suite from the architecture (parallel transactions, duplicates, stale-after-delete, expiry) green against real Postgres | 0.8c |
 | 1.0b | feat(apple) | `EnduvaKit` sync engine: SwiftData store, outbox, push/pull, conflict notices, full resync | Offline create/edit/delete → reconnect → server state matches. Tests with a mocked API | 1.0a, 0.11b |
 | 1.1 | feat(db,api) | Activities model (+ laps, streams storage per ADR-0003), ingest via sync, list/detail/update/delete | API tests incl. cross-tenant access | 1.0a |
-| 1.2 | feat(domain) ∥ | Splits, moving time, elevation smoothing, pace/speed, HR zones (pending O5), LTTB downsampling, polyline encoding | Unit tests with fixture streams | 0.4 |
+| 1.2 | feat(domain) ∥ | Splits, moving time, elevation smoothing, pace/speed, HR zones, LTTB downsampling, polyline encoding | Unit tests with fixture streams | 0.4 |
 | 1.3a | feat(apple) | HealthKit permissions + anchored-query import (workouts, routes, HR, splits, swim laps), **foreground catch-up**, handling of late-arriving routes/samples (re-import updates the activity) | Synthetic HealthKit data on a simulator imports correctly. A route added later updates the activity | 1.0b, 1.1 |
 | 1.3b | feat(apple) | **Background delivery**: entitlement, observer queries, completion handling, retry | **Real-device check:** a new workout is imported in the background at the system's discretion. Opening the app always catches up fully | 1.3a |
 | 1.4a | feat(api) ∥ | File import backend: signed upload, pg-boss job, FIT/GPX/TCX parsing | Fixture files from Garmin, Wahoo and Coros parse into correct activities | 1.1 |
@@ -81,7 +81,11 @@ These can run in parallel with Phase 1. G1 passes only when all are merged and v
 | 1.8 | feat(api) | AI foundation: AI module, model registry, consent + account re-check before provider egress, usage + quotas, prompt versioning, recorded fixtures | A job queued before consent revocation is not sent. Quota exceeded → 429 | 0.13a |
 | 1.9 | feat(ai) | Post-activity AI analysis (worker job, shown on web + iOS, regenerate) | Fixture-based tests. Output in the user's language | 1.8, 1.6, 1.7 |
 | 1.10 | feat ∥ | **Public share links**: explicit opt-in per activity, response **field allowlist** (no private notes, no HR unless opted in, no device info). **Route hidden by default.** If the user enables it, they see a **preview of the redacted route** before publishing, and redaction uses user-defined **privacy zones** (e.g. home, work) rather than only a fixed trim, which still leaks loop and out-and-back routes. Revocation. `Cache-Control: no-store` on the share page, its API response and **all private media** (map images, streams). No CDN caching | Tests: revoked link → 404 immediately on page, API and media URLs (verified through the deployed proxy/CDN path). Private fields never in the response. Route points inside privacy zones never in the response | 1.6 |
-| 1.11 | feat | Simple personal records + HR zone distribution (pending O5) | Unit + UI tests | 1.2 |
+| 1.11 | feat | Simple personal records + HR zone distribution | Unit + UI tests | 1.2 |
+| 1.12a | feat(domain) ∥ | **Training-load math**: TRIMP/hrTSS, rTSS (threshold pace), sTSS (CSS), sRPE load, CTL (42-day EWMA), ATL (7-day EWMA), TSB, threshold auto-estimation (HRmax, resting HR from HealthKit, LTHR/threshold pace from best efforts) | Unit tests against published reference examples. Load method recorded per session | 0.4 |
+| 1.12b | feat(api) | Thresholds API (auto + user override with validity dates), per-activity load on ingest, daily load series job (recomputes after edits, late imports, threshold changes) | Changing a threshold recomputes affected days. Late-imported activity updates CTL/ATL/TSB | 1.12a, 1.1 |
+| 1.12c | feat ∥ | Training-load chart (CTL/ATL/TSB) + weekly load on web and iOS, with method/estimate labels | UI tests on fixture data | 1.12b, 1.6, 1.7 |
+| 1.13 | feat | **VO2max**: HealthKit `vo2Max` import (sync, dedupe), own estimate for non-Apple sessions (marked as estimate), trend on web + iOS | Apple values imported once. Estimates never overwrite Apple values | 1.3a, 1.12a |
 
 **Exit criteria:** with a **synthetic** 12-month HealthKit dataset (and, once G1 has passed, the owner's real data), imports match the source (spot-checked against the Fitness app). Background delivery works on a real device. Foreground catch-up is complete.
 
@@ -104,6 +108,7 @@ These can run in parallel with Phase 1. G1 passes only when all are merged and v
 | 2.8b | feat(watch) | **watchOS standalone logging**: `HKWorkoutSession`, routine picker, Digital Crown input, rest timer + haptics, HR, sync via WatchConnectivity / direct | Real device: complete a workout with the phone off → synced later without duplicates | 2.6, 2.8a |
 | 2.9 | feat(apple) | Mirrored sessions per the recording-mode table, single HealthKit save authority, start from iPhone wakes the Watch, disconnect handling | Real devices: mirrored, Watch-only and phone-only modes each produce **exactly one** HKWorkout and one intact Enduva workout, including: finish on the iPhone while the Watch is disconnected, Watch power loss mid-session (takeover only after an explicit `lost` report), a retried save after a successful one, and **a successful Watch save whose acknowledgment is lost while the user triggers the iPhone fallback** (reconciliation leaves exactly one) | 2.8b |
 | 2.10 | feat ∥ | Progress: PRs, est. 1RM, volume charts (web + iOS) | UI tests on fixture data | 2.3, 2.4, 2.6 |
+| 2.12 | feat | Strength sessions feed training load (sRPE × duration) | CTL/ATL/TSB include strength sessions, with the method labelled | 1.12b, 2.6 |
 | 2.11 | feat(ai) | AI routine generation + progression suggestions | Generated routines pass validation (volume limits). Fixture tests | 1.8, 2.2 |
 
 **Exit criteria:** four consecutive weeks of strength training logged only in Enduva (Watch + iPhone + one web session) without data loss or duplicates. Real data only after G1.
@@ -144,7 +149,7 @@ These can run in parallel with Phase 1. G1 passes only when all are merged and v
 | 4.2 | feat(ai) | Goal-based plan generation (endurance / strength / hybrid) with server-side validation | Generated plans pass validation (progression, rest days). Fixture tests | 4.1, 1.8 |
 | 4.3 | feat ∥ | Plan calendar UI (web + iOS), move/skip sessions | Playwright + UI test | 4.1 |
 | 4.4 | feat(apple) | **WorkoutKit**: request authorization, check supported activity/device, schedule planned endurance sessions, **reschedule or remove** when a session moves or is skipped | Real device: a scheduled workout appears in the Workout app. Moving it updates it, skipping removes it. Denied permission shows a clear state | 4.3 |
-| 4.5 | feat(ai) | Weekly plan adaptation job | Fixture scenarios (missed week, high RPE) produce sensible adjustments | 4.2 |
+| 4.5 | feat(ai) | Weekly plan adaptation job (uses completed vs. planned sessions, RPE **and CTL/ATL/TSB**) | Fixture scenarios (missed week, high RPE) produce sensible adjustments | 4.2 |
 | 4.6 | feat(ai) | Chat coach with read-only tools (activities, workouts, diary, body, plan), history, delete | Tools are scoped to the current user (cross-tenant test). Deleting the history removes it | 1.8, 1.1, 2.2, 3.3, 3.3b, 4.1 |
 | 4.7 | feat ∥ | Weekly summary (training + nutrition), optional push | Summary generated for a fixture week | 4.5 |
 

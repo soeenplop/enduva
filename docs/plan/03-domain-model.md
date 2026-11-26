@@ -54,6 +54,9 @@ erDiagram
 | Entity | Key fields |
 | --- | --- |
 | `activities` | sport (`run`/`ride`/`hike`/`swim_pool`/`swim_open_water`), sub_type (indoor/trail/…), started_at, time_zone, duration_s, moving_time_s, distance_m, elevation_gain_m, avg/max HR, avg pace/speed, avg cadence, energy_kcal, rpe, title, description, private_notes, source (`healthkit`/`fit`/`gpx`/`tcx`/`manual`), external_id, device, visibility (`private`/`link`) |
+| `activity_load` | activity_id, load_value, method (`trimp`/`hrtss`/`rtss`/`stss`/`srpe`), thresholds_version, is_estimate |
+| `user_thresholds` | hr_max, hr_rest, lthr, threshold_pace, css (swim), source (`auto`/`user`/`healthkit`), valid_from |
+| `daily_training_load` | user_id, date (local), load, ctl, atl, tsb (derived, recomputed by job) |
 | `activity_laps` | index, kind (`auto_km`/`device_lap`/`pool_length`), start offset, duration, distance, avg HR, avg pace |
 | `activity_streams` | activity_id, compressed columns (time, lat, lng, altitude, HR, cadence, speed, power), downsampled preview (for charts and maps), `route_polyline` (encoded) |
 | `activity_files` | original upload (Storage path), parse status |
@@ -98,7 +101,7 @@ Diary entries store a **nutrient snapshot**, so later changes to food data don't
 
 | Entity | Key fields |
 | --- | --- |
-| `body_metrics` | kind (`weight`/`body_fat`/`waist`/…), value, measured_at, source (`manual`/`healthkit`), external_id |
+| `body_metrics` | kind (`weight`/`body_fat`/`waist`/`vo2max`/`resting_hr`/…), value, measured_at, source (`manual`/`healthkit`), external_id |
 
 ## Plans & coach
 

@@ -20,8 +20,8 @@ Once the plan is merged, decisions that matter for architecture are recorded as 
 | P6 | Branding | Name: **Enduva**. Brand concept **B "Daybreak"** (sun rising above an open bowl, in `assets/brand/concept-b/`, PR #2) is chosen. **GPT-6.2 Astra** (design delegate) produces the final icon set and tokens in task 0.6. | Owner |
 | P7 | Endurance sources | Apple Health/Workouts plus FIT/GPX/TCX file import. Garmin, Wahoo and similar integrations come later. | Owner |
 | P8 | Strava | **No Strava integration.** | Owner |
-| P9 | Analysis depth | **No advanced metrics** (CTL/ATL/TSB, VO2max, power zones, gear tracking). Activity analysis covers summary metrics, splits, charts, the map and AI-written analysis. | Interpretation (answer was "Nein"; see open question O5) |
-| P10 | Maps | MapKit on iOS. MapLibre GL on the web. The tile source is a configurable style URL, so the provider can change without code changes. The provider is open (O6). | Default |
+| P9 | Analysis depth | **Full training analysis:** summary metrics, splits, charts, map, HR zone distribution, simple personal records, **training load (CTL/ATL/TSB)** and **VO2max**, plus AI-written analysis. Load per session: power-free methods (HR-based TRIMP/hrTSS, pace-based rTSS for running with threshold pace, swim sTSS from critical swim speed, session-RPE × duration for strength), labelled with the method used. VO2max primarily from Apple's HealthKit `vo2Max` samples, own estimate only for sessions without Apple data, clearly marked as an estimate. Power zones and gear tracking are not in scope for now. | Owner (former O5) |
+| P10 | Maps | MapKit on iOS. MapLibre GL on the web with **OpenFreeMap** (free public OSM vector tiles, no key or account, attribution "© OpenMapTiles © OpenStreetMap contributors"). The tile source is a configurable style URL, so we can move to self-hosted Protomaps PMTiles (privacy, no third party) or MapTiler (outdoor/topo styles) later without code changes. OpenFreeMap has no SLA, so the style URL is a runtime config with a documented fallback. | Owner (former O6) |
 | P11 | Exercise library | Seeded from an open dataset (licence to verify, e.g. `free-exercise-db`). Users can add custom exercises. No animations in v1. | Default |
 | P12 | Strength features | Routines, folders, supersets, RPE/RIR, rest timer, warm-up/drop/failure sets, 1RM estimate, PRs. No plate calculator in v1. | Default |
 | P13 | Watch strength logging | **Full logging on the Watch**: check off sets, adjust weight/reps, rest timer, heart rate. | Owner |
@@ -82,9 +82,4 @@ Once the plan is merged, decisions that matter for architecture are recorded as 
 
 ## Open questions
 
-| # | Question | Why it matters | Proposal |
-| --- | --- | --- | --- |
-| O5 | Confirm P9: is the answer "Nein" to advanced metrics right? What about **HR zone distribution** and simple **personal records** (fastest 5 km, …)? | Changes the analysis scope in Phase 1 | Include HR zones + simple PRs, skip CTL/ATL/TSB/VO2max |
-| O6 | **Map tile provider** for the web | Free tiers of MapTiler and Stadia are **non-commercial only**, which conflicts with the later subscription. Options: MapTiler (outdoor/topo styles with contours and hillshading, satellite; commercial from ~$25/month), Stadia (Alidade/Stamen styles, commercial from $20/month), OpenFreeMap (free public OSM vector tiles, no key, no SLA), self-hosted Protomaps PMTiles (one file on our own storage, no third-party requests, we pay the bandwidth, no terrain out of the box) | Start with **OpenFreeMap** (free, no key, no third-party account). Because the style URL is configurable, we can move to self-hosted PMTiles (privacy) or MapTiler (outdoor styles) later without code changes |
-
-Resolved questions (former O1–O4 and O7–O11) are recorded in the tables above with their former number in the Source column.
+None at the moment. All former open questions (O1–O11) are recorded in the tables above with their former number in the Source column.
