@@ -61,7 +61,7 @@ Key points:
 | API framework | NestJS 11+ (runtime packages only, no Nest CLI) | Built with `@swc/cli` + `@swc/core` directly (`legacyDecorator`, `decoratorMetadata`). Dev: `swc --watch` + `node --watch` |
 | Validation & contracts | Zod 4 schemas in `packages/contracts` | Shared by API + web. OpenAPI generated from them |
 | ORM / migrations | Drizzle ORM + drizzle-kit | drizzle-kit generates SQL into `supabase/migrations/`. RLS policies in SQL |
-| Jobs | pg-boss | Runs on Supabase Postgres (session pooler / direct connection) |
+| Jobs | pg-boss behind a `JobQueue` interface | Runs on Supabase Postgres (session pooler). Supabase Queues/pgmq rejected (see T16) |
 | AI | Vercel AI SDK (`ai`) with OpenAI provider | Structured output via Zod, tool calling for the coach. Model IDs via env |
 | Web | React 19 + React Router 7 (framework mode, Vite, SSR via `@react-router/node`) | Paraglide JS (i18n), Tailwind CSS 4, Radix-based components (shadcn/ui pattern), MapLibre GL (`react-map-gl`), Recharts/ECharts, TanStack Query for the generated API client |
 | Landing | React Router 7 with full prerendering (static files) | Same design tokens and UI package as the web app |
