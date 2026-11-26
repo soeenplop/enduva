@@ -23,7 +23,7 @@ Neither is a workaround: no TS < 7, no alias, no compatibility shim, and no patc
 
 | Area | Package | Version | Notes |
 | --- | --- | --- | --- |
-| Runtime | Node.js | 24 in CI (`engines: >=24`), 26.13.1 locally | Both pass |
+| Runtime | Node.js | CI selects major 24 (`engines: >=24`); observed 24.22.3 on both runners. 26.13.1 locally | Both pass |
 | Package manager | pnpm | 12.21.0 | `packageManager` field, as at the root |
 | Compiler | `typescript` | **7.0.2** | `tsc -p` for type-checking only (`noEmit`) |
 | API | `@nestjs/common`, `@nestjs/core`, `@nestjs/platform-express`, `@nestjs/testing` | 12.6.3 | Nest 12 is **ESM-only**. No `@nestjs/cli` |
@@ -43,7 +43,7 @@ Neither is a workaround: no TS < 7, no alias, no compatibility shim, and no patc
 | DB | `drizzle-orm` / `drizzle-kit` | 0.45.4 / 0.31.11 | Latest stable. 1.0 is at `rc.6`; decide in 0.7 |
 | Types | `@types/node` / `@types/react` / `@types/react-dom` / `@types/express` / `@types/supertest` | 24.19.2 / 19.3.3 / 19.3.0 / 5.0.6 / 7.2.1 | `@types/node` matches the minimum supported Node major (`engines: >=24`, CI). A workspace `overrides` entry keeps transitive `@types/*` (`@types/node: '*'`) on the same version, so `tsc` cannot accept a Node 26-only API |
 | Swift client | `swift-openapi-generator` / `-runtime` / `-urlsession` | 1.14.4 / 1.13.4 / 1.4.0 | `exact:` pins plus a committed `Package.resolved` |
-| Swift toolchain | Xcode | 26.6 on `macos-26` CI runner. 27.2 (Swift 6.4.2) locally | `swift-tools-version: 6.0` |
+| Swift toolchain | Xcode | The `macos-26` runner's default Xcode, not pinned by the workflow; observed Xcode 26.6 (17F113), Swift 6.3.3, image `macos-26-arm64` 20261117.0516.1. 27.2 (Swift 6.4.2) locally | `swift-tools-version: 6.0`. The Swift job prints the versions it used |
 
 ### Workspace layout of the spike
 
