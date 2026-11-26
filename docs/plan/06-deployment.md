@@ -18,7 +18,7 @@ All of these names (and `errors.enduva.soeenplop.dev` for GlitchTip) already res
 | --- | --- | --- | --- |
 | `api` | `ghcr.io/soeenplop/enduva-api:<tag>` | `node dist/main.js` | Port 3000, health check `/v1/health` |
 | `worker` | same image as `api` | `node dist/worker.js` | pg-boss consumers. Scale independently |
-| `web` | `ghcr.io/soeenplop/enduva-web:<tag>` | `react-router-serve ./build/server/index.js` | React Router SSR |
+| `web` | `ghcr.io/soeenplop/enduva-web:<tag>` | `node .output/server/index.mjs` (Node server output; exact preset pinned in 0.12a) | TanStack Start SSR |
 | `landing` | `ghcr.io/soeenplop/enduva-landing:<tag>` | static server (Caddy/nginx) | Prerendered |
 | `tiles` | Caddy/nginx (pinned digest) | caching reverse proxy | `tiles.enduva.soeenplop.dev` → OpenFreeMap. Strips cookies, `Referer`, user agents. Disk cache |
 

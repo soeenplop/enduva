@@ -5,8 +5,8 @@
 ```mermaid
 flowchart LR
   subgraph Clients
-    LP[Landing page<br/>React Router, prerendered]
-    WEB[Web app<br/>React Router SSR]
+    LP[Landing page<br/>TanStack Start, prerendered]
+    WEB[Web app<br/>TanStack Start SSR]
     IOS[iPhone app<br/>SwiftUI]
     WATCH[Watch app<br/>SwiftUI]
   end
@@ -63,8 +63,8 @@ Key points:
 | ORM / migrations | Drizzle ORM + drizzle-kit | drizzle-kit generates SQL into `supabase/migrations/`. RLS policies in SQL |
 | Jobs | pg-boss behind a `JobQueue` interface | Runs on Supabase Postgres (session pooler). Supabase Queues/pgmq rejected (see T16) |
 | AI | Vercel AI SDK (`ai`) with OpenAI provider | Structured output via Zod, tool calling for the coach. Model IDs via env |
-| Web | React 19 + React Router 7 (framework mode, Vite, SSR via `@react-router/node`) | Paraglide JS (i18n), Tailwind CSS 4, Radix-based components (shadcn/ui pattern), MapLibre GL (`react-map-gl`), Recharts/ECharts, TanStack Query for the generated API client |
-| Landing | React Router 7 with full prerendering (static files) | Same design tokens and UI package as the web app |
+| Web | React 19 + TanStack Start 1.x (TanStack Router, Vite, SSR, Node server output; exact output preset pinned in 0.12a) | TanStack Query (generated API client), TanStack Form, TanStack Table, Paraglide JS (i18n), Tailwind CSS 4, Radix-based components (shadcn/ui pattern), MapLibre GL (`react-map-gl`), Recharts/ECharts |
+| Landing | TanStack Start with static prerendering of all routes | Same design tokens and UI package as the web app |
 | Lint / format | oxlint (type-aware via `tsgolint`, which builds on the TS 7 native compiler) + Prettier | typescript-eslint relies on the TS JS API that TS 7 lacks |
 | Tests (TS) | Vitest (+ `unplugin-swc` for Nest), Playwright E2E, Testcontainers or Supabase local for integration | |
 | iOS / watchOS | Swift 6.4, SwiftUI, SwiftData, HealthKit, WorkoutKit, ActivityKit, WidgetKit, VisionKit | Xcode 27, iOS/watchOS 27 deployment target |
@@ -81,7 +81,7 @@ TS 7 ships the Go-based compiler but **not the full JS compiler API**. That affe
 | --- | --- | --- |
 | NestJS DI (`emitDecoratorMetadata`) | Needs metadata emit | **SWC directly** (`@swc/cli` + `@swc/core` with `legacyDecorator` and `decoratorMetadata`) emits metadata. **Not** via the Nest CLI (`nest build`/`nest start`), because the Nest CLI has a direct dependency on an older `typescript` package. Dev mode uses `swc --watch` + `node --watch`. TS 7 `tsc --noEmit` is the only type checker |
 | NestJS Swagger compiler plugin | Runs as a TS compiler plugin, which is unavailable with SWC + TS 7 | **Not used.** OpenAPI is generated from the Zod contracts in `packages/contracts` (e.g. `zod-openapi`), independently of Nest decorators and compiler plugins |
-| React / React Router | `.tsx` is plain TypeScript. React Router generates route types (`react-router typegen`) as `.ts` files. `@react-router/dev` declares TypeScript 5/6 only as an **optional** peer dependency | **No special checker needed:** TS 7 `tsc` type-checks components and the generated route types directly. Typegen runs before `tsc` in CI. The optional TS 5/6 peer must stay uninstalled (lockfile audit). (SvelteKit was dropped because `svelte-check` needs TS 6 next to TS 7; former O10) |
+| React / TanStack Router | `.tsx` is plain TypeScript. TanStack Router's Vite plugin generates the route tree (`routeTree.gen.ts`) as a `.ts` file. TanStack's packages migrated to TypeScript 7 upstream | **No special checker needed:** TS 7 `tsc` type-checks components and the generated route tree (route params, search params, loaders) directly. Route generation runs before `tsc` in CI (the generator also works without starting the dev server). Any optional pre-7 TypeScript peer of a TanStack/Vite package must stay uninstalled (lockfile audit). (SvelteKit was dropped because `svelte-check` needs TS 6 next to TS 7; former O10) |
 | typescript-eslint | Uses the JS API | Use oxlint with type-aware rules (`tsgolint`) instead |
 | drizzle-kit, vitest | Transpile via esbuild/oxc | Expected to work. Verify |
 
@@ -90,9 +90,9 @@ TS 7 ships the Go-based compiler but **not the full JS compiler API**. That affe
 1. A representative Nest controller + service + guard with constructor injection boots and passes an e2e test (proves decorator metadata via SWC).
 2. TS 7 `tsc --noEmit` fails on an intentional type error in `apps/api`, `packages/*`, `apps/web` and `apps/landing`.
 3. A Zod contract → `openapi.json` → `swift-openapi-generator` client compiles for that route, and the web client types are generated from the same spec.
-4. In both React apps, a broken component prop and a broken route param/loader type (from `react-router typegen`) fail CI. Nothing in the toolchain pulls in TypeScript 6 (checked with `pnpm why typescript`).
+4. In both React apps, a broken component prop and a broken route param, search-param or loader type (from the generated `routeTree.gen.ts`) fail CI. Nothing in the toolchain pulls in TypeScript 6 (checked with `pnpm why typescript`).
 5. oxlint type-aware rules run on top of the TS 7 compiler.
-6. **Pinned candidate stack** (exact versions in ADR-0001). `pnpm install --frozen-lockfile`, typegen, type-check and **production builds** of `api`, `web` and `landing` all pass, and a CI **lockfile audit** fails if the resolved lockfile contains any `typescript` below 7, any alias of it (`npm:typescript@…`), or any other pre-7 compiler package.
+6. **Pinned candidate stack** (exact versions in ADR-0001). `pnpm install --frozen-lockfile`, route-tree generation, type-check and **production builds** of `api`, `web` and `landing` all pass, and a CI **lockfile audit** fails if the resolved lockfile contains any `typescript` below 7, any alias of it (`npm:typescript@…`), or any other pre-7 compiler package.
 
 If any criterion can't be met **without** TS 6, the spike stops, documents the gap in ADR-0001 and the owner decides (T1 says no TS 6). No silent fallback.
 
@@ -102,8 +102,8 @@ If any criterion can't be met **without** TS 6, the spike stops, documents the g
 enduva/
 ├─ apps/
 │  ├─ api/                 NestJS API + worker entrypoint
-│  ├─ web/                 React Router web app (app.enduva…)
-│  ├─ landing/             React Router landing page, prerendered (enduva…)
+│  ├─ web/                 TanStack Start web app (app.enduva…)
+│  ├─ landing/             TanStack Start landing page, prerendered (enduva…)
 │  └─ apple/               Xcode project: Enduva (iOS), EnduvaWatch (watchOS), widgets, shared Swift packages
 ├─ packages/
 │  ├─ contracts/           Zod schemas, DTO types, OpenAPI generation
