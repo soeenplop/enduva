@@ -110,5 +110,7 @@ Diary entries store a **nutrient snapshot**, so later changes to food data don't
 
 | Entity | Key fields |
 | --- | --- |
-| `sync_mutations` | mutation_id (idempotency), user_id, entity, entity_id, applied_at, result |
-| per-user `change_seq` | a sequence column on synced tables + `sync_tombstones` |
+| `sync_state` | user_id (PK), last_seq. Locked and incremented per write transaction, so `change_seq` follows commit order |
+| `sync_mutations` | (user_id, mutation_id) unique, entity, entity_id, base_version, applied_at, result (applied/conflict + server record) |
+| `change_seq` column | on every synced table, plus tombstones (soft-deleted rows, retained for 90 days) |
+| `devices` | user_id, kind (`iphone`/`watch`/`web`), name, auth session ID, last_seen_at, revoked_at |
