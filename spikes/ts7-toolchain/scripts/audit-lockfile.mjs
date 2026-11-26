@@ -6,6 +6,11 @@
 //      resolves to `typescript@…`);
 //   3. any other pre-7 compiler package: the TS 7 preview builds and tools that embed or patch a
 //      pre-7 TypeScript compiler (list below).
+//   4. any package that does not resolve from the registry by integrity hash (tarball, git,
+//      directory): such a source can carry any code under any name, so it needs a decision.
+//
+// TypeScript compiler code bundled *inside* a package is invisible here; see
+// audit-bundled-typescript.mjs, which scans the installed files.
 //
 // Usage: node scripts/audit-lockfile.mjs <pnpm-lock.yaml>... | --self-test
 // The scan is textual on purpose: pnpm lockfiles can be multi-document YAML, and a text scan also
@@ -52,6 +57,13 @@ export function audit(text) {
   for (const m of text.matchAll(/^ {2}['"]?((?:@[^@\s/'"]+\/)?[^@\s'"]+)@[^\s'"]+['"]?:/gm)) {
     if (BANNED.some((re) => re.test(m[1]))) problems.add(`banned compiler package: ${m[1]}`);
   }
+
+  // 4. Registry resolutions only (`resolution: {integrity: sha512-…}`).
+  for (const m of text.matchAll(/^\s+resolution:(.*)$/gm)) {
+    if (!/^\s*\{integrity: sha512-[A-Za-z0-9+/]+=*\}\s*$/.test(m[1])) {
+      problems.add(`non-registry resolution: ${m[1].trim() || '(block)'}`);
+    }
+  }
   return [...problems];
 }
 
@@ -65,6 +77,10 @@ function selfTest() {
     'native preview': "packages:\n  '@typescript/native-preview@7.0.0-dev.20260707.2':\n    resolution: {}\n",
     'ts-morph': 'packages:\n  ts-morph@27.0.0:\n    resolution: {}\n',
     'nest cli': "packages:\n  '@nestjs/cli@12.0.0':\n    resolution: {}\n",
+    'tarball resolution': 'packages:\n  tool@1.0.0:\n    resolution: {tarball: https://example.com/tool-1.0.0.tgz}\n',
+    'git resolution':
+      'packages:\n  tool@https://codeload.github.com/x/tool/tar.gz/abc:\n    resolution: {tarball: https://codeload.github.com/x/tool/tar.gz/abc}\n',
+    'directory resolution': 'packages:\n  tool@file:../tool:\n    resolution: {directory: ../tool, type: directory}\n',
   };
   let failed = 0;
   for (const [name, text] of Object.entries(cases)) {
@@ -73,7 +89,7 @@ function selfTest() {
     if (!ok) failed++;
   }
   const clean =
-    "packages:\n  typescript@7.0.2:\n    resolution: {}\n  '@typescript/typescript-linux-x64@7.0.2':\n    resolution: {}\n";
+    "packages:\n  typescript@7.0.2:\n    resolution: {integrity: sha512-AAAA==}\n  '@typescript/typescript-linux-x64@7.0.2':\n    resolution: {integrity: sha512-BBBB}\n";
   const cleanOk = audit(clean).length === 0;
   console.log(`${cleanOk ? 'ok  ' : 'FAIL'} accepts typescript@7.0.2`);
   if (failed > 0 || !cleanOk) process.exit(1);
@@ -94,7 +110,7 @@ if (process.argv[2] === '--self-test') {
       console.error(`FAIL ${file}:\n  ${problems.join('\n  ')}`);
     } else {
       console.log(
-        `ok   ${file}: no pre-7 TypeScript, aliases or banned compiler packages (typescript: ${versions.join(', ') || 'none'})`,
+        `ok   ${file}: no pre-7 TypeScript, aliases, banned compiler packages or non-registry sources (typescript: ${versions.join(', ') || 'none'})`,
       );
     }
   }
