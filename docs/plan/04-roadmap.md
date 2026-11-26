@@ -101,7 +101,7 @@ These can run in parallel with Phase 1. G1 passes only when all are merged and v
 | 2.7 | feat(apple) | Live Activity + Dynamic Island | Shown on device during a workout | 2.6 |
 | 2.8a | feat(apple) | **Watch device session** (ADR-0005): link code, own session, refresh, revocation | Real paired device: works with the phone off. Sign-out on the phone wipes the Watch | 0.11b, 0.8b |
 | 2.8b | feat(watch) | **watchOS standalone logging**: `HKWorkoutSession`, routine picker, Digital Crown input, rest timer + haptics, HR, sync via WatchConnectivity / direct | Real device: complete a workout with the phone off → synced later without duplicates | 2.6, 2.8a |
-| 2.9 | feat(apple) | Mirrored sessions per the recording-mode table, single HealthKit save authority, start from iPhone wakes the Watch, disconnect handling | Real devices: mirrored, Watch-only and phone-only modes each produce **exactly one** HKWorkout and one Enduva workout | 2.8b |
+| 2.9 | feat(apple) | Mirrored sessions per the recording-mode table, single HealthKit save authority, start from iPhone wakes the Watch, disconnect handling | Real devices: mirrored, Watch-only and phone-only modes each produce **exactly one** HKWorkout and one intact Enduva workout, including: finish on the iPhone while the Watch is disconnected, Watch power loss mid-session (save authority moves to the iPhone), and a retried save after a successful one | 2.8b |
 | 2.10 | feat ∥ | Progress: PRs, est. 1RM, volume charts (web + iOS) | UI tests on fixture data | 2.3, 2.4, 2.6 |
 | 2.11 | feat(ai) | AI routine generation + progression suggestions | Generated routines pass validation (volume limits). Fixture tests | 1.8, 2.2 |
 
