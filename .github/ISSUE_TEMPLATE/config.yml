@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Project plan
+    url: https://github.com/soeenplop/enduva/tree/main/docs/plan
+    about: Scope, architecture and roadmap. Check here before proposing a feature.

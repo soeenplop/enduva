@@ -41,7 +41,7 @@ flowchart TD
 
 - [Conventional Commits 1.0](https://www.conventionalcommits.org/): `type(scope): subject`
   - types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`
-  - scopes: `api`, `web`, `landing`, `apple`, `watch`, `db`, `domain`, `contracts`, `ai`, `i18n`, `ui`, `deploy`, `deps`
+  - scopes: `api`, `web`, `landing`, `apple`, `watch`, `db`, `domain`, `contracts`, `ai`, `i18n`, `ui`, `deploy`, `deps`, `plan` (plan docs under `docs/plan/`)
   - breaking changes: `feat(api)!: …` + a `BREAKING CHANGE:` footer
 - Several small, logical commits per PR. Each commit should build. Since we don't squash, **commit history is part of the review**: no "wip" / "fix typo" noise. Fix-ups are folded in with `git commit --fixup` + `git rebase --autosquash` before the final review round.
 - Enforced by commitlint (local hook via lefthook + CI on all PR commits and the PR title).
@@ -60,7 +60,7 @@ flowchart TD
 1. When a PR is ready, the lead starts a **new Codex delegate** (`gpt-6.2-sol`, reasoning effort `high`; `xhigh` for security-relevant or architectural PRs) with the PR number, the linked issue and the relevant plan sections.
 2. The reviewer reads the diff and posts a **GitHub review** with inline comments plus a summary comment.
    - Each comment starts with **`[Sol]`** and a severity: `blocker`, `major`, `minor`, `nit`, `question`.
-   - The summary ends with a verdict: `Verdict: changes requested` or `Verdict: LGTM`.
+   - The summary ends with a verdict bound to the reviewed head: `Verdict: changes requested @ <full-sha>` or `Verdict: LGTM @ <full-sha>`.
 3. The implementer answers **every** comment in its thread, prefixed with **`[Claude]`**: either "Fixed in `<sha>`" or a reasoned disagreement.
 4. For re-checks, the lead starts a **new** reviewer run that receives the previous findings and the replies. It resolves fixed threads and responds to disagreements.
 5. **Disagreement:** after at most two exchanges on a thread, the lead adds the label `needs-arbiter` and posts a PR comment `[Claude] arbiter request` summarising both positions. **The owner decides** by replying in that thread (or the PR) with `Ruling: …`. Then the lead (a) implements the ruling if needed, (b) replies `[Claude] ruling applied in <sha>`, (c) resolves the thread and (d) removes the label. The ruling is final. The next reviewer run receives it and must not re-raise the point.
@@ -74,7 +74,7 @@ flowchart TD
 8. **Merge with a head guard:** `gh pr merge <n> --merge --match-head-commit <head-sha>`, so a push between verification and merge aborts the merge.
 
 > **Note:** all agents use the owner's GitHub account (`gh` auth), so GitHub shows every comment as written by the owner. The `[Sol]`/`[Claude]`/`[Astra]` prefixes make authorship visible. GitHub also doesn't let you approve your own PR, so the "required approvals" rule can't enforce the review. **Enforcement is therefore split:**
-> - **GitHub ruleset on `main`** (task 0.5): pull request required, required status checks (lint, typecheck, test, build, commitlint, gitleaks) that must pass on the latest commit, no force pushes, no deletions, only merge commits allowed.
+> - **GitHub ruleset on `main`** (task 0.5): pull request required, required status checks (lint, typecheck, test, build, commitlint, gitleaks, CLA) that must pass on the latest commit, no force pushes, no deletions, only merge commits allowed.
 > - **Review verdict + owner approval:** enforced by the merge procedure above (head-bound verdict + `--match-head-commit`). Optionally later, a small required status check (GitHub Action) can parse the latest `[Sol] … Verdict: LGTM @ <sha>` and fail if the SHA doesn't equal the head.
 > - A dedicated bot account or GitHub App for the reviewer would enable real approvals. That's an optional later improvement.
 
