@@ -8,7 +8,7 @@ Once the owner approves the plan, phases become **GitHub milestones** and tasks 
 
 | Gate | Blocks | Criteria |
 | --- | --- | --- |
-| **G1 — Real data** | Opening sign-up on **production** and storing real health data anywhere. Until then, staging uses **synthetic data only** | Legal basis documented (Art. 6(1)(b) for the service, Art. 9(2)(a) **explicit consent** for health data, separate purpose-specific consent for AI). DPIA screening done and, if required, a DPIA. Real privacy policy + imprint live on the landing page. Account deletion and data export work end to end, **including Storage objects and queued jobs**. The restore procedure re-applies deletions (deletion log) after a backup restore. AI provider terms + retention documented (see architecture). |
+| **G1 — Real data** | Opening sign-up on **production** and storing real health data anywhere. Until then, staging uses **synthetic data only**, and production sign-up is **disabled in Supabase Auth** (not just hidden in the UI) | Legal basis documented (Art. 6(1)(b) for the service, Art. 9(2)(a) **explicit consent** for health data, separate purpose-specific consent for AI). DPIA screening done and, if required, a DPIA. Tasks **G1.1–G1.4** merged and verified: real privacy policy + imprint live, data-sources page live, deletion-aware restore drill passed, sign-up lock verified. Account deletion and data export work end to end, **including Storage objects and queued jobs**. AI provider terms + retention documented (see architecture). |
 | **G2 — External distribution** | External TestFlight and App Store | Guideline 4.8 met (Sign in with Apple or another qualifying login, see O2). Privacy nutrition labels. HealthKit usage strings. G1 passed. |
 
 ---
@@ -45,6 +45,19 @@ Once the owner approves the plan, phases become **GitHub milestones** and tasks 
 
 **Exit criteria:** staging is live. Synthetic accounts can sign up via web and internal TestFlight. Deletion and export work. CI is green, `main` is protected, and the review workflow has run on every PR above.
 
+### G1 readiness tasks
+
+These can run in parallel with Phase 1. G1 passes only when all are merged and verified.
+
+| ID | Type | Task | Acceptance check | Depends on |
+| --- | --- | --- | --- | --- |
+| G1.0 | chore(deploy) | **Sign-up lock** on production: `enable_signup = false` in Supabase Auth (prod) plus a UI notice, until G1 is declared passed | Sign-up through the Auth API directly (bypassing the UI) is rejected on prod. Checked in CI against prod config | 0.12b |
+| G1.1 | docs(landing) | **Live legal pages** (de/en): privacy policy (health data, AI processors, retention, rights), imprint, AI/medical disclaimer, terms. Texts supplied or approved by the owner | Pages live and linked from landing, web app and iOS settings. Owner approval in the PR | 0.10 |
+| G1.2 | feat | **Data-sources page** (BLS CC BY, OFF ODbL + offer link) + in-app "About" | Linked from landing and apps | 0.10 |
+| G1.3 | feat(api) | **Deletion log outside the rollback boundary**: append-only log of deleted user IDs + timestamps, stored outside the main database (separate object storage bucket with versioning or a separate DB), and a replay command | Replay removes all data of logged users from a restored DB + Storage | 0.13b |
+| G1.4 | chore | **Deletion-aware restore drill**: restore prod-like backup (DB + objects) into a scratch project in maintenance mode, replay the deletion log, verify, and only then serve traffic. Runbook in `docs/runbooks/restore.md` | Drill passes with synthetic data, including a user deleted after the backup was taken | G1.3, 0.12b |
+| G1.5 | docs | DPIA screening (+ DPIA if required), records of processing, legal basis/consent mapping, AI provider terms + transfer basis | Document in `docs/privacy/`, owner approval | 1.8 |
+
 ---
 
 ## Phase 1 — Endurance
@@ -66,7 +79,7 @@ Once the owner approves the plan, phases become **GitHub milestones** and tasks 
 | 1.7 | feat(apple) ∥ | Activity list + detail (MapKit, Swift Charts), edit metadata | UI test on fixture data | 1.3a |
 | 1.8 | feat(api) | AI foundation: AI module, model registry, consent + account re-check before provider egress, usage + quotas, prompt versioning, recorded fixtures | A job queued before consent revocation is not sent. Quota exceeded → 429 | 0.13a |
 | 1.9 | feat(ai) | Post-activity AI analysis (worker job, shown on web + iOS, regenerate) | Fixture-based tests. Output in the user's language | 1.8, 1.6, 1.7 |
-| 1.10 | feat ∥ | **Public share links**: explicit opt-in per activity, response **field allowlist** (no private notes, no HR unless opted in, no device info), route privacy (hide map, or trim the first/last 500 m), revocation, `Cache-Control: no-store` / short CDN TTL | Tests: revoked link → 404 at once and no cached copy. Private fields never in the response | 1.6 |
+| 1.10 | feat ∥ | **Public share links**: explicit opt-in per activity, response **field allowlist** (no private notes, no HR unless opted in, no device info). **Route hidden by default.** If the user enables it, they see a **preview of the redacted route** before publishing, and redaction uses user-defined **privacy zones** (e.g. home, work) rather than only a fixed trim, which still leaks loop and out-and-back routes. Revocation. `Cache-Control: no-store` on the share page, its API response and **all private media** (map images, streams). No CDN caching | Tests: revoked link → 404 immediately on page, API and media URLs (verified through the deployed proxy/CDN path). Private fields never in the response. Route points inside privacy zones never in the response | 1.6 |
 | 1.11 | feat | Simple personal records + HR zone distribution (pending O5) | Unit + UI tests | 1.2 |
 
 **Exit criteria:** with a **synthetic** 12-month HealthKit dataset (and, once G1 has passed, the owner's real data), imports match the source (spot-checked against the Fitness app). Background delivery works on a real device. Foreground catch-up is complete.
@@ -105,10 +118,11 @@ Once the owner approves the plan, phases become **GitHub milestones** and tasks 
 | 3.1 | feat(db) | Food catalog schema (**separate datasets per source**, see architecture), translations, servings, composable search, **BLS 4.0 importer** (CC BY 4.0 attribution) | Search "Vollkornbrot" / "whole grain bread" returns BLS items. Attribution is visible | 0.12c |
 | 3.2 | feat(api) ∥ | **Open Food Facts dataset**: barcode lookup + cache in the OFF dataset, optional DACH importer job (O4), ODbL attribution + share-alike offer page | Barcode lookup works. OFF data lives only in OFF tables. The attribution page is linked from the apps | 3.1 |
 | 3.3 | feat(api) | Diary API: entries, meals, quick-add, water, favourites/recents, custom foods, nutrient snapshots, sync support | API + sync tests. Custom foods private (cross-tenant test) | 3.1, 1.0a |
+| 3.3b | feat(api) ∥ | **Body metrics API**: weight, body fat, measurements, trend (smoothed), HealthKit-sourced samples via sync | API + sync tests. Trend endpoint returns a smoothed series | 3.3, 1.0a |
 | 3.4 | feat(domain) ∥ | BMR/TDEE, goal pace → kcal, macro split, dynamic target from training energy | Unit tests | 0.4 |
 | 3.5 | feat(api) | Goals API + daily targets (pulls energy from activities **and** workouts) | Targets change after a logged activity/workout | 3.3, 3.4, 1.1, 2.2 |
-| 3.6 | feat(web) ∥ | Diary UI, food search, custom foods, goals, weight chart | Playwright | 3.3, 3.5 |
-| 3.7a | feat(apple) | **iOS diary with offline CRUD**: food search (cached recents/favourites offline), entries, water, weight, outbox sync | **Offline:** add, edit and delete entries → reconnect → server matches, including editing/deleting an entry created offline | 3.3, 3.5, 1.0b |
+| 3.6 | feat(web) ∥ | Diary UI, food search, custom foods, goals, weight chart | Playwright | 3.3, 3.3b, 3.5 |
+| 3.7a | feat(apple) | **iOS diary with offline CRUD**: food search (cached recents/favourites offline), entries, water, weight (via 3.3b), outbox sync | **Offline:** add, edit and delete entries → reconnect → server matches, including editing/deleting an entry created offline | 3.3, 3.3b, 3.5, 1.0b |
 | 3.7b | feat(apple) | Barcode scanner (VisionKit) + HealthKit write (nutrition, water, weight) + weight read, deduped | Scan → entry. Health shows the samples once. Deleting removes them from Health | 3.7a, 3.2 |
 | 3.8a | feat(ai) | Recognition storage + API: photo upload, `ai_recognitions`, model call, items + grams + clarifying questions, answer round-trip | Fixture tests: "Auflauf" → asks about cheese. Answers refine the grams | 1.8, 3.3 |
 | 3.8b | feat(ai) | Matching of recognised items to the catalog (BLS/OFF/custom), "AI estimate" fallback | ≥ 80 % top-3 match rate on a fixture set of 30 meals | 3.8a, 3.2 |
@@ -130,7 +144,7 @@ Once the owner approves the plan, phases become **GitHub milestones** and tasks 
 | 4.3 | feat ∥ | Plan calendar UI (web + iOS), move/skip sessions | Playwright + UI test | 4.1 |
 | 4.4 | feat(apple) | **WorkoutKit**: request authorization, check supported activity/device, schedule planned endurance sessions, **reschedule or remove** when a session moves or is skipped | Real device: a scheduled workout appears in the Workout app. Moving it updates it, skipping removes it. Denied permission shows a clear state | 4.3 |
 | 4.5 | feat(ai) | Weekly plan adaptation job | Fixture scenarios (missed week, high RPE) produce sensible adjustments | 4.2 |
-| 4.6 | feat(ai) | Chat coach with read-only tools (activities, workouts, diary, body, plan), history, delete | Tools are scoped to the current user (cross-tenant test). Deleting the history removes it | 1.8, 1.1, 2.2, 3.3, 4.1 |
+| 4.6 | feat(ai) | Chat coach with read-only tools (activities, workouts, diary, body, plan), history, delete | Tools are scoped to the current user (cross-tenant test). Deleting the history removes it | 1.8, 1.1, 2.2, 3.3, 3.3b, 4.1 |
 | 4.7 | feat ∥ | Weekly summary (training + nutrition), optional push | Summary generated for a fixture week | 4.5 |
 
 **Exit criteria (install/smoke gate):** a fresh TestFlight install → onboarding → generate a 4-week hybrid plan → sessions appear in the calendar and the endurance ones in the Watch's Workout app → complete one → the plan adapts → the coach answers a question citing the user's data correctly.
@@ -142,7 +156,7 @@ Once the owner approves the plan, phases become **GitHub milestones** and tasks 
 | ID | Type | Task | Acceptance check |
 | --- | --- | --- | --- |
 | 5.1 | feat(landing) | Final landing page: screenshots, feature tour, FAQ, TestFlight / App Store links | Lighthouse ≥ 90. de/en complete |
-| 5.2 | chore | Production hardening: backups incl. Storage objects (see deployment), **restore drill**, monitoring/alerts, rate-limit review, load test of hot endpoints | Restore drill documented and successful. p95 targets met under load |
+| 5.2 | chore | Production hardening: backups incl. Storage objects (see deployment), **repeat the restore drill** (G1.4) on production backups, monitoring/alerts, rate-limit review, load test of hot endpoints | Restore drill documented and successful. p95 targets met under load |
 | 5.3 | feat | Admin area: users, quotas, entitlements, feature flags (incl. AI kill switch) | Admin-only (authorisation tests) |
 | 5.4 | chore(apple) | **G2** checklist + App Store submission | G2 criteria met. Build accepted for external testing |
 | 5.5 | docs | User docs / help pages (de/en) | Linked from the apps and landing |
