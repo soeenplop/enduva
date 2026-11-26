@@ -19,15 +19,15 @@ flowchart TD
   C --> P[Open PR<br/>template filled, CI running]
   P --> R[Lead starts reviewer<br/>GPT-6.2 Sol]
   R --> F{Findings?}
-  F -- none --> M[Verdict: LGTM]
+  F -- none --> M[Verdict: LGTM @ head SHA]
   F -- yes --> D[Implementer fixes or<br/>replies with reasoning in PR]
   D --> R2[New reviewer run re-checks]
   R2 --> A{Agreement?}
   A -- yes --> M
   A -- "no, after 2 rounds" --> O[Label needs-arbiter<br/>owner decides in PR]
   O --> D
-  M --> G{CI green?}
-  G -- yes --> MERGE[Merge commit --no-ff<br/>delete branch + worktree]
+  M --> G{CI green on head?<br/>owner approval if required?}
+  G -- yes --> MERGE[Merge commit with head guard<br/>delete branch + worktree]
 ```
 
 ## Branches & worktrees
@@ -63,14 +63,24 @@ flowchart TD
    - The summary ends with a verdict: `Verdict: changes requested` or `Verdict: LGTM`.
 3. The implementer answers **every** comment in its thread, prefixed with **`[Claude]`**: either "Fixed in `<sha>`" or a reasoned disagreement.
 4. For re-checks, the lead starts a **new** reviewer run that receives the previous findings and the replies. It resolves fixed threads and responds to disagreements.
-5. **Disagreement:** after at most two exchanges on a thread, the lead adds the label `needs-arbiter` and posts a short summary of both positions. **The owner decides** in the PR. Their decision is final and documented in the thread.
-6. Merge requires: `Verdict: LGTM` (nits may remain open if marked as follow-ups), all `blocker`/`major` threads resolved, CI green, no `needs-arbiter` label.
+5. **Disagreement:** after at most two exchanges on a thread, the lead adds the label `needs-arbiter` and posts a PR comment `[Claude] arbiter request` summarising both positions. **The owner decides** by replying in that thread (or the PR) with `Ruling: …`. Then the lead (a) implements the ruling if needed, (b) replies `[Claude] ruling applied in <sha>`, (c) resolves the thread and (d) removes the label. The ruling is final. The next reviewer run receives it and must not re-raise the point.
+6. **The verdict is bound to a commit.** The reviewer's summary names the reviewed head: `Verdict: LGTM @ <full-sha>`. Any push after that invalidates the verdict, and a new reviewer run (at least a delta review) is required.
+7. **Merge requires**, all for the **current head SHA**:
+   - `Verdict: LGTM @ <head-sha>`. Nits may remain open if they are turned into follow-up issues.
+   - All `blocker`/`major` threads resolved.
+   - All required status checks green **on that head** (checks re-run after every push).
+   - No `needs-arbiter` label.
+   - **Owner approval** (`Approved @ <sha>` comment) for PRs that change `docs/plan/`, ADRs, licence, security-relevant config, or that the owner asked to review.
+8. **Merge with a head guard:** `gh pr merge <n> --merge --match-head-commit <head-sha>`, so a push between verification and merge aborts the merge.
 
-> **Note:** all agents use the owner's GitHub account (`gh` auth), so GitHub shows every comment as written by the owner. The `[Sol]`/`[Claude]` prefixes make authorship visible. GitHub also doesn't let you formally "approve" your own PR, so the reviewer posts `COMMENT` reviews and the verdict line is the approval signal. A dedicated bot account or GitHub App would fix both; it's an optional later improvement.
+> **Note:** all agents use the owner's GitHub account (`gh` auth), so GitHub shows every comment as written by the owner. The `[Sol]`/`[Claude]`/`[Astra]` prefixes make authorship visible. GitHub also doesn't let you approve your own PR, so the "required approvals" rule can't enforce the review. **Enforcement is therefore split:**
+> - **GitHub ruleset on `main`** (task 0.5): pull request required, required status checks (lint, typecheck, test, build, commitlint, gitleaks) that must pass on the latest commit, no force pushes, no deletions, only merge commits allowed.
+> - **Review verdict + owner approval:** enforced by the merge procedure above (head-bound verdict + `--match-head-commit`). Optionally later, a small required status check (GitHub Action) can parse the latest `[Sol] … Verdict: LGTM @ <sha>` and fail if the SHA doesn't equal the head.
+> - A dedicated bot account or GitHub App for the reviewer would enable real approvals. That's an optional later improvement.
 
 ## Merging
 
-- `gh pr merge --merge --delete-branch` (merge commit). **Squash and rebase merges are disabled** in the repo settings.
+- `gh pr merge <n> --merge --match-head-commit <sha> --delete-branch` (merge commit). **Squash and rebase merges are disabled** in the repo settings.
 - The lead merges once all merge criteria are met. The owner can always merge or veto manually.
 - After merging: remove the worktree, close the issue (via `Closes #n` in the PR), and the staging deploy runs automatically.
 
