@@ -29,7 +29,8 @@ function check(label, status, actual, expected) {
   const want = describe(expected);
   const got = actual.map((d) => d.raw ?? describe(d));
   if (status === 0) failures.push(`${label}: passed, expected ${want}`);
-  else if (actual.length !== 1 || describe(actual[0]) !== want) failures.push(`${label}: expected only ${want}, got:\n  ${got.join('\n  ') || '(no diagnostics)'}`);
+  else if (actual.length !== 1 || describe(actual[0]) !== want)
+    failures.push(`${label}: expected only ${want}, got:\n  ${got.join('\n  ') || '(no diagnostics)'}`);
   else console.log(`ok   ${label} fails with ${want}`);
 }
 
@@ -43,7 +44,10 @@ for (const pkg of packages) {
     const configPath = join(pkg, 'tsconfig.negative.json');
     const config = { extends: './tsconfig.json', include: [...base.include, `negative/${name}`] };
     writeFileSync(configPath, JSON.stringify(config));
-    const result = spawnSync(bin('tsc'), ['-p', 'tsconfig.negative.json', '--pretty', 'false'], { cwd: pkg, encoding: 'utf8' });
+    const result = spawnSync(bin('tsc'), ['-p', 'tsconfig.negative.json', '--pretty', 'false'], {
+      cwd: pkg,
+      encoding: 'utf8',
+    });
     rmSync(configPath);
 
     // `file(line,col): error TSxxxx: …`; any other `error TS` line (global errors) counts as unexpected.
@@ -66,7 +70,9 @@ for (const pkg of packages) {
   for (const name of readdirSync(lintDir).filter((f) => /\.tsx?$/.test(f))) {
     const file = join(lintDir, name);
     const expected = { file, ...expectation(file, 'expect-lint') };
-    const result = spawnSync(bin('oxlint'), ['--type-aware', '-c', lintConfigPath, '--format', 'json', file], { encoding: 'utf8' });
+    const result = spawnSync(bin('oxlint'), ['--type-aware', '-c', lintConfigPath, '--format', 'json', file], {
+      encoding: 'utf8',
+    });
     let diagnostics;
     try {
       diagnostics = JSON.parse(result.stdout).diagnostics.map((d) => ({

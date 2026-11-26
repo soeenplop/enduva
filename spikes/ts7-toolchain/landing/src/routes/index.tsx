@@ -9,5 +9,7 @@ export const Route = createFileRoute('/')({
 
 function Home() {
   const other = getLocale() === 'de' ? 'en' : 'de';
-  return <Hero title={m.hero_title()} switchLabel={m.switch_language()} switchHref={localizeHref('/', { locale: other })} />;
+  return (
+    <Hero title={m.hero_title()} switchLabel={m.switch_language()} switchHref={localizeHref('/', { locale: other })} />
+  );
 }

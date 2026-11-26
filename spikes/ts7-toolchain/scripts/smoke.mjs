@@ -14,25 +14,40 @@ function assert(condition, message) {
 try {
   let res;
   for (let i = 0; i < 50 && !res; i++) {
-    res = await fetch(`http://127.0.0.1:3001/v1/activities/${id}`, { headers: { Authorization: 'Bearer spike-token' } }).catch(() => undefined);
+    res = await fetch(`http://127.0.0.1:3001/v1/activities/${id}`, {
+      headers: { Authorization: 'Bearer spike-token' },
+    }).catch(() => undefined);
     if (!res) await delay(200);
   }
   assert(res, 'API did not start');
   const body = await res.json();
-  assert(res.status === 200 && body.distanceUnit === 'km', `unexpected API response ${res.status} ${JSON.stringify(body)}`);
+  assert(
+    res.status === 200 && body.distanceUnit === 'km',
+    `unexpected API response ${res.status} ${JSON.stringify(body)}`,
+  );
   console.log('api ok:', JSON.stringify(body));
 
   const { default: server } = await import(pathToFileURL('web/dist/server/server.js').href);
-  const render = (units) => server.fetch(new Request(`http://localhost/activities/${id}?units=${units}`)).then((r) => r.text());
+  const render = (units) =>
+    server.fetch(new Request(`http://localhost/activities/${id}?units=${units}`)).then((r) => r.text());
   const [metric, imperial] = await Promise.all([render('metric'), render('imperial')]);
-  assert(metric.includes('10.00<!-- --> <!-- -->km') && !metric.includes('6.21'), 'metric SSR page is wrong or contains imperial data');
-  assert(imperial.includes('6.21<!-- --> <!-- -->mi') && !imperial.includes('10.00'), 'imperial SSR page is wrong or contains metric data');
+  assert(
+    metric.includes('10.00<!-- --> <!-- -->km') && !metric.includes('6.21'),
+    'metric SSR page is wrong or contains imperial data',
+  );
+  assert(
+    imperial.includes('6.21<!-- --> <!-- -->mi') && !imperial.includes('10.00'),
+    'imperial SSR page is wrong or contains metric data',
+  );
   assert(metric.includes('run on 2026-11-26'), 'loader data missing from SSR HTML');
   console.log('web SSR ok: two concurrent requests rendered their own data');
 
   // Server function + typed middleware context, called by the index loader during SSR.
   const home = await server.fetch(new Request('http://localhost/')).then((r) => r.text());
-  assert(home.includes('Hello athlete<!-- --> (<!-- -->user-1<!-- -->)'), 'server function result missing from SSR HTML');
+  assert(
+    home.includes('Hello athlete<!-- --> (<!-- -->user-1<!-- -->)'),
+    'server function result missing from SSR HTML',
+  );
   console.log('web server function ok');
 } finally {
   api.kill();

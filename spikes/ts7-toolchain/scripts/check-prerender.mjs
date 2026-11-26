@@ -30,7 +30,10 @@ for (const [locale, { title, otherHref }] of Object.entries(expected)) {
   }
   const html = readFileSync(file, 'utf8');
   const lang = htmlLang(html);
-  if (lang !== locale) failures.push(`${file}: expected <html lang="${locale}">, got ${lang === undefined ? 'no single lang attribute' : `lang="${lang}"`}`);
+  if (lang !== locale)
+    failures.push(
+      `${file}: expected <html lang="${locale}">, got ${lang === undefined ? 'no single lang attribute' : `lang="${lang}"`}`,
+    );
   if (!html.includes(`<h1>${title}</h1>`)) failures.push(`${file}: translated title missing`);
   if (!html.includes(`href="${otherHref}"`)) failures.push(`${file}: link to ${otherHref} missing`);
   if (failures.length === 0) console.log(`ok   ${file}: lang="${locale}", translated, links to ${otherHref}`);

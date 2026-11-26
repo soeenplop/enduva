@@ -33,7 +33,13 @@ describe('GET /v1/activities/:activityId (e2e)', () => {
   it('returns the activity, valid against the contract (service injected into controller)', async () => {
     const res = await request(server()).get(`/v1/activities/${id}`).set(auth);
     expect(res.status).toBe(200);
-    expect(Activity.parse(res.body)).toEqual({ id, sport: 'run', distance: 10, distanceUnit: 'km', startedAt: '2026-11-26T08:00:00Z' });
+    expect(Activity.parse(res.body)).toEqual({
+      id,
+      sport: 'run',
+      distance: 10,
+      distanceUnit: 'km',
+      startedAt: '2026-11-26T08:00:00Z',
+    });
   });
 
   it('applies the query contract', async () => {

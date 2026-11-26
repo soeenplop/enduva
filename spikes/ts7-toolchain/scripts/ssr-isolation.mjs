@@ -23,16 +23,22 @@ const stub = createServer((req, res) => {
   }
   const distance = ++calls * 11;
   // Delay so both SSR requests are in flight at the same time.
-  setTimeout(() => res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ ...activity, distance })), 300);
+  setTimeout(
+    () => res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ ...activity, distance })),
+    300,
+  );
 });
 stub.listen(3001, '127.0.0.1');
 await once(stub, 'listening');
 
 try {
   const { default: server } = await import(pathToFileURL('web/dist/server/server.js').href);
-  const render = () => server.fetch(new Request(`http://localhost/activities/${id}?units=metric`)).then((r) => r.text());
+  const render = () =>
+    server.fetch(new Request(`http://localhost/activities/${id}?units=metric`)).then((r) => r.text());
   const pages = await Promise.all([render(), render()]);
-  const distances = pages.map((html) => [...html.matchAll(/(\d+\.\d{2})<!-- --> <!-- -->km/g)].map((m) => m[1]).join(','));
+  const distances = pages.map((html) =>
+    [...html.matchAll(/(\d+\.\d{2})<!-- --> <!-- -->km/g)].map((m) => m[1]).join(','),
+  );
   assert(calls === 2, `expected one backend call per SSR request, got ${calls}`);
   assert(
     distances.toSorted((a, b) => a.localeCompare(b)).join(' | ') === '11.00 | 22.00',

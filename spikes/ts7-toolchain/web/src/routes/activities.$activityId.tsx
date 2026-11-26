@@ -25,7 +25,11 @@ function ActivityPage() {
     <main>
       <h1 data-testid="title">{title}</h1>
       <DistanceBadge distance={activity.distance} unit={activity.distanceUnit} />
-      <Link to="/activities/$activityId" params={{ activityId }} search={{ units: units === 'metric' ? 'imperial' : 'metric' }}>
+      <Link
+        to="/activities/$activityId"
+        params={{ activityId }}
+        search={{ units: units === 'metric' ? 'imperial' : 'metric' }}
+      >
         Switch units
       </Link>
     </main>

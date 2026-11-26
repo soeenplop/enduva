@@ -57,12 +57,13 @@ export function audit(text) {
 
 function selfTest() {
   const cases = {
-    'typescript 5 package': "packages:\n  typescript@5.9.3:\n    resolution: {}\n",
-    'typescript 6 peer suffix': "snapshots:\n  foo@1.0.0(typescript@6.0.3):\n    dependencies: {}\n",
-    'npm alias specifier': "importers:\n  .:\n    devDependencies:\n      ts6:\n        specifier: npm:typescript@^6\n        version: typescript@6.0.3\n",
-    'renamed alias to TS 7': "snapshots:\n  bar@1.0.0:\n    dependencies:\n      tsc-old: typescript@7.0.2\n",
+    'typescript 5 package': 'packages:\n  typescript@5.9.3:\n    resolution: {}\n',
+    'typescript 6 peer suffix': 'snapshots:\n  foo@1.0.0(typescript@6.0.3):\n    dependencies: {}\n',
+    'npm alias specifier':
+      'importers:\n  .:\n    devDependencies:\n      ts6:\n        specifier: npm:typescript@^6\n        version: typescript@6.0.3\n',
+    'renamed alias to TS 7': 'snapshots:\n  bar@1.0.0:\n    dependencies:\n      tsc-old: typescript@7.0.2\n',
     'native preview': "packages:\n  '@typescript/native-preview@7.0.0-dev.20260707.2':\n    resolution: {}\n",
-    'ts-morph': "packages:\n  ts-morph@27.0.0:\n    resolution: {}\n",
+    'ts-morph': 'packages:\n  ts-morph@27.0.0:\n    resolution: {}\n',
     'nest cli': "packages:\n  '@nestjs/cli@12.0.0':\n    resolution: {}\n",
   };
   let failed = 0;
@@ -71,7 +72,8 @@ function selfTest() {
     console.log(`${ok ? 'ok  ' : 'FAIL'} rejects ${name}`);
     if (!ok) failed++;
   }
-  const clean = "packages:\n  typescript@7.0.2:\n    resolution: {}\n  '@typescript/typescript-linux-x64@7.0.2':\n    resolution: {}\n";
+  const clean =
+    "packages:\n  typescript@7.0.2:\n    resolution: {}\n  '@typescript/typescript-linux-x64@7.0.2':\n    resolution: {}\n";
   const cleanOk = audit(clean).length === 0;
   console.log(`${cleanOk ? 'ok  ' : 'FAIL'} accepts typescript@7.0.2`);
   if (failed > 0 || !cleanOk) process.exit(1);
@@ -91,7 +93,9 @@ if (process.argv[2] === '--self-test') {
       bad = true;
       console.error(`FAIL ${file}:\n  ${problems.join('\n  ')}`);
     } else {
-      console.log(`ok   ${file}: no pre-7 TypeScript, aliases or banned compiler packages (typescript: ${versions.join(', ') || 'none'})`);
+      console.log(
+        `ok   ${file}: no pre-7 TypeScript, aliases or banned compiler packages (typescript: ${versions.join(', ') || 'none'})`,
+      );
     }
   }
   if (bad) process.exit(1);
