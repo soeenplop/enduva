@@ -1,0 +1,26 @@
+# Dependencies & build output
+node_modules/
+dist/
+build/
+.svelte-kit/
+.turbo/
+coverage/
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+
+# Local worktrees
+.worktrees/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Xcode
+DerivedData/
+xcuserdata/
+*.xcuserstate
