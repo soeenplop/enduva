@@ -102,5 +102,5 @@ flowchart TD
 ## Releases
 
 - release-please keeps a release PR open on `main` and maintains `CHANGELOG.md` and versions.
-- Merging the release PR → tag `vX.Y.Z` → production deploy (manual approval in GitHub Environments).
+- Merging the release PR → tag `vX.Y.Z` → production deploy (manual approval in GitHub Environments). This applies **from G1.6**. Before that, production is deployed continuously from `main` after isolated verification (T25), and releases only produce versions and changelog.
 - The iOS build number comes from CI. The marketing version follows the release version.
