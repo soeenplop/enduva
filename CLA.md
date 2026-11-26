@@ -1,7 +1,7 @@
 # Enduva Individual Contributor License Agreement
 
 > [!WARNING]
-> **DRAFT — not yet in force. Do not sign.** This text needs legal review and the owner's approval before it is used. The placeholders in `[BRACKETS]` must be filled in and the [open points for legal review](#open-points-for-legal-review) settled first. No signatures are collected for this draft. Until the final version is approved and its automated check is active (roadmap task 0.5), external contributions are not accepted.
+> **DRAFT — not yet in force. Do not sign.** This text needs legal review and the owner's approval before it is used. The [open points for legal review](#open-points-for-legal-review) must be settled first. No signatures are collected for this draft. Until the final version is approved and its automated check is active (roadmap task 0.5), external contributions are not accepted.
 
 Version 1.0-draft
 
@@ -12,7 +12,7 @@ Enduva is published under the Elastic License 2.0 (ELv2). ELv2 alone would not l
 ## 1. Definitions
 
 - **"You"** (or **"Your"**): the individual who signs this Agreement and Submits a Contribution.
-- **"Owner"**: [OWNER LEGAL NAME], the licensor of Enduva and owner of the GitHub repository `soeenplop/enduva`, and the Owner's successors and assigns.
+- **"Owner"**: the Enduva project maintainer (GitHub: `soeenplop`), the licensor of Enduva and owner of the GitHub repository `soeenplop/enduva`, and the Owner's successors and assigns.
 - **"Project"**: Enduva, including all software, documentation, designs and other material hosted in or derived from that repository.
 - **"Contribution"**: any original work of authorship, including any modifications or additions to an existing work, that You Submit to the Project.
 - **"Submit"**: any form of electronic, verbal or written communication sent to the Owner or the Project, including pull requests, commits, patches, issues and comments, except communication that You conspicuously mark as "Not a Contribution".
@@ -58,7 +58,7 @@ When You sign, Your GitHub username, GitHub account ID, the pull request, the ve
 
 ## 8. Governing law
 
-This Agreement is governed by the laws of [GOVERNING LAW, e.g. the Federal Republic of Germany], excluding its conflict-of-law rules and the UN Convention on Contracts for the International Sale of Goods. If any provision is held unenforceable, the remaining provisions stay in effect.
+This Agreement is governed by the laws of the Federal Republic of Germany, excluding its conflict-of-law rules and the UN Convention on Contracts for the International Sale of Goods. If any provision is held unenforceable, the remaining provisions stay in effect.
 
 ---
 
@@ -66,7 +66,7 @@ This Agreement is governed by the laws of [GOVERNING LAW, e.g. the Federal Repub
 
 *Not part of the Agreement. Raised in review and to be checked by counsel before the final version; this list doesn't resolve them.*
 
-1. **Parties and law:** fill in the licensor's legal name (§ 1) and the governing law and venue (§ 8).
+1. **Parties and law:** the licensor is identified by role and GitHub account (§ 1), and German law applies (§ 8). Confirm that this identification of the Owner is sufficient, and whether a venue clause should be added.
 2. **Scope of the grant for known uses:** confirm that §§ 2–3 effectively cover hosting/managed service, sublicensing, relicensing (incl. proprietary/commercial) and the patent licence, and that the "to the extent permitted" wording works as intended.
 3. **Unknown types of use (§ 31a UrhG):** whether assent by a pull request comment can cover types of use not yet known, given the written-form requirement (see § 126a BGB for the electronic form) and the author's revocation right, and what alternative is needed if not.
 4. **Remuneration (§ 32 UrhG):** whether a no-charge licence to a single licensor that may relicense commercially holds up against the author's claim to equitable remuneration.
