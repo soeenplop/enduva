@@ -135,10 +135,20 @@ Swift code that runs on both iPhone and Watch (models, sync engine, HealthKit ma
 
 1. Clients sign in with Supabase Auth (email + password, magic link, Google OAuth. Apple if O2 is accepted).
 2. Clients send the Supabase access token as `Authorization: Bearer` to the API.
-3. The API verifies the JWT against Supabase's **JWKS** (asymmetric signing keys) and caches the keys. The `sub` claim is the user ID.
-4. On the user's first request, the API creates their `profiles` row (or a DB trigger on `auth.users` does it).
-5. Authorisation: resource ownership checks in services. `role` (user/admin) and **entitlements** live in our DB, not in the JWT, so they can change without re-login.
-6. RLS: every user-owned table has `user_id = auth.uid()` policies. The API uses a server role for jobs and sets `request.jwt.claims` for user-scoped queries where feasible (decided in ADR during 0.7).
+3. **Token verification:** the API verifies the JWT against Supabase's **JWKS** (asymmetric signing keys, cached with rotation support). It accepts only the asymmetric algorithm configured for the project (e.g. `ES256`) and never `HS256`/`none`. It requires the exact per-environment `iss` (`https://<project>.supabase.co/auth/v1`, local URL in dev), `aud = authenticated`, `role = authenticated`, and a valid `exp`/`iat` with small clock-skew tolerance. Only then is `sub` trusted as the user ID. Asymmetric signing keys are enabled in **local and hosted** environments, so the JWKS path is tested everywhere.
+4. **Account/session status:** a verified token can outlive logout or account deletion (until `exp`). For every **write** and before each **queued job** runs, the API checks that the profile is active (not deleted or locked) and that the token's `session_id` still exists (cached for a few seconds). Reads check profile status. Test: delete an account, then reuse its unexpired token → 401 for writes and jobs.
+5. On the user's first request, the API creates their `profiles` row (or a DB trigger on `auth.users` does it).
+6. **Authorisation:** resource ownership checks in services. `role` (user/admin) and **entitlements** live in our DB, not in the JWT, so they can change without re-login.
+
+### Tenant isolation (ADR-0002, task 0.7)
+
+RLS is only a safety net if the API actually runs **under** it, so:
+
+- **Least-privilege roles:** `enduva_api` (request path) and `enduva_worker` (jobs) are custom roles **without** `BYPASSRLS` and not table owners. Migrations run as a separate owner role. `service_role` is never used by the running API.
+- **Transaction-local identity:** every request runs its queries in one transaction that first executes `set_config('request.jwt.claims', <verified claims>, true)` / `set local role`. Nothing is session-scoped, so this works with Supabase's **transaction pooler**. If the driver uses named prepared statements, they are disabled for the pooler.
+- **No Data API exposure:** API-only tables are not granted to `anon`/`authenticated`, and the API schema isn't exposed through PostgREST, because clients never query Supabase directly.
+- **Worker jobs** carry a `user_id`, and the worker sets the same transaction-local identity per job. Cross-user jobs (imports of global catalogs) use a dedicated catalog-writer role limited to catalog tables.
+- **Tests:** an integration suite runs as user A against user B's data (parent and child tables, private custom foods/exercises, storage paths) **through the real pooler connection string**, and every query must return nothing or 404.
 
 ## Apple Health & sync
 
@@ -188,7 +198,12 @@ apps/api/src/ai/
 - **Training:** plan generation produces a typed plan (weeks → sessions with structured intervals or strength prescriptions). The server validates it (volume sanity limits, rest days) before saving.
 - **Coach:** the chat model gets read-only tools (`getActivities`, `getWorkouts`, `getDiarySummary`, `getBodyTrend`, `getCurrentPlan`) scoped to the current user. Conversations are stored and can be deleted.
 - **Cost control:** every call is logged in `ai_usage` (tokens, model, feature, cost estimate). Quotas per entitlement tier and day/month. Long-running calls run in the worker and are streamed or polled.
-- **Privacy:** only feature-relevant data is sent. Consent is stored with a timestamp and version. The OpenAI API does not use API data for training by default. Check OpenAI's EU data-residency options (open item for prod).
+- **Privacy & data processing:**
+  - Only feature-relevant data is sent (data-minimised payloads per feature, documented in `docs/privacy/ai-data-flows.md`: which endpoint receives which fields).
+  - Consent is purpose-specific (AI nutrition, AI training/coach), stored with timestamp and version, and revocable.
+  - The **worker re-checks consent and account status immediately before calling the provider.** Queued jobs of a revoked or deleted user are dropped, not sent.
+  - **Before the beta gate (see roadmap)**: document the provider terms (OpenAI DPA, no training on API data, retention: default abuse-monitoring retention vs. Zero Data Retention / EU data residency eligibility), the regional processing, and the transfer basis (EU–US Data Privacy Framework / SCCs). Pick the strictest retention setting available to the account.
+  - **HealthKit data** is only sent to the AI provider with the user's explicit permission for that purpose, in line with App Review Guideline 5.1.3 (no use for advertising, no sharing beyond the stated purpose). The App Store privacy label lists the AI provider as a processor.
 
 ## Food data pipeline
 
