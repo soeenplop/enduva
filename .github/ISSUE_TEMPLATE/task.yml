@@ -1,0 +1,27 @@
+name: Feature or task
+description: Propose a feature or describe a unit of work (one task = one PR).
+body:
+  - type: input
+    id: task-id
+    attributes:
+      label: Roadmap task ID
+      description: From docs/plan/04-roadmap.md, e.g. `1.3`. Leave empty if it's a new proposal.
+  - type: textarea
+    id: task
+    attributes:
+      label: Task
+      description: What should be built or changed, and why?
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance check
+      description: An observable check that proves the task is done.
+    validations:
+      required: true
+  - type: textarea
+    id: depends
+    attributes:
+      label: Depends on
+      description: Other tasks or issues that must be merged first.
