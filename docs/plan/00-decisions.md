@@ -79,6 +79,7 @@ Once the plan is merged, decisions that matter for architecture are recorded as 
 | W8 | Plan location | This directory (`docs/plan/`). Changes go through PRs. | Default |
 | W9 | Commit signing | A dedicated **SSH signing key without 1Password** (`~/.ssh/enduva_signing_ed25519`, ed25519, signing only, no passphrase so unattended agents can sign), configured repo-locally (`gpg.format=ssh`, `gpg.ssh.program=ssh-keygen`) and registered on GitHub as a signing key. Never used for authentication. | Owner (former O9) |
 | W10 | Review rounds | **No fixed limit** on review rounds. Disagreements still go to the owner per the arbiter rule. | Owner |
+| W12 | Owner approval | Not required when Sol (LGTM @ head) and the lead agree. Still required only for owner-only decisions (legal texts, final CLA, licence, accounts, costs, third-party contracts), gate passes (G1, G2), arbiter rulings and PRs the owner asked to review. | Owner (2026-11-27) |
 | W11 | Release automation | A GitHub App **"Enduva Release"** (contents + pull-requests write, this repo only) authenticates release-please. The owner creates and installs it during task 0.12d. | Owner (former O11) |
 
 ## Open questions

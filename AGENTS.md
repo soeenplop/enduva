@@ -48,7 +48,7 @@ The lead's merge procedure: merge only when all of these hold **for the current 
 - `Verdict: LGTM @ <head-sha>`; open nits are turned into follow-up issues.
 - All `blocker`/`major` threads resolved, no `needs-arbiter` label.
 - All required status checks green on that head.
-- **Owner approval** (`Approved @ <sha>` comment) if the PR changes `docs/plan/`, ADRs, the licence or CLA, or security-relevant config, or if the owner asked to review it.
+- **Owner approval** is **not** required when Sol's verdict is LGTM and the lead agrees (owner ruling, 2026-11-27). It is still required only for: (a) decisions only the owner can make or provide (legal texts such as the privacy policy, imprint and the final CLA text, licence changes, accounts, costs or contracts with third parties), (b) passing the gates G1 and G2, (c) arbiter rulings on unresolved disagreements (`needs-arbiter`), and (d) PRs the owner explicitly asked to review. In those cases an `Approved @ <sha>` comment (or an approval relayed by the lead with the SHA) is needed.
 
 Merge commits only, with a head guard:
 

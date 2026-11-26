@@ -4,7 +4,7 @@
 
 | Role | Who | Responsibilities |
 | --- | --- | --- |
-| **Owner / arbiter** | Sören | Approves the plan and scope changes, arbitrates review disagreements, holds secrets and accounts (Apple, Supabase, Dokploy) |
+| **Owner / arbiter** | `soeenplop` | Sets direction and scope, makes owner-only decisions (legal texts, licence, accounts, costs), passes gates G1/G2, arbitrates review disagreements, holds secrets and accounts (Apple, Supabase, Dokploy). Plan and scope changes need no separate approval when Sol and the lead agree (W12) |
 | **Lead agent** | Claude (orchestrating session) | Turns roadmap tasks into issues, starts implementer subagents, handles review rounds, merges |
 | **Implementer** | Claude subagent, one per task | Implements one task in its own worktree, writes tests, opens the PR, answers review comments |
 | **Reviewer** | **GPT-6.2 Sol** (Codex delegate) | Reviews every PR and comments on it, re-checks after fixes, gives a final verdict |
@@ -26,7 +26,7 @@ flowchart TD
   A -- yes --> M
   A -- "no, after 2 rounds" --> O[Label needs-arbiter<br/>owner decides in PR]
   O --> D
-  M --> G{CI green on head?<br/>owner approval if required?}
+  M --> G{CI green on head?<br/>owner approval only in the listed cases?}
   G -- yes --> MERGE[Merge commit with head guard<br/>delete branch + worktree]
 ```
 
@@ -70,7 +70,7 @@ flowchart TD
    - All `blocker`/`major` threads resolved.
    - All required status checks green **on that head** (checks re-run after every push).
    - No `needs-arbiter` label.
-   - **Owner approval** (`Approved @ <sha>` comment) for PRs that change `docs/plan/`, ADRs, licence, security-relevant config, or that the owner asked to review.
+   - **Owner approval** is **not** required when Sol's verdict is LGTM and the lead agrees (owner ruling, 2026-11-27). It is still required only for: (a) decisions only the owner can make or provide (legal texts such as the privacy policy, imprint and the final CLA text, licence changes, accounts, costs or contracts with third parties), (b) passing the gates G1 and G2, (c) arbiter rulings on unresolved disagreements (`needs-arbiter`), and (d) PRs the owner explicitly asked to review. In those cases: `Approved @ <sha>` (or an owner approval relayed by the lead, recorded with the SHA).
 8. **Merge with a head guard:** `gh pr merge <n> --merge --match-head-commit <head-sha>`, so a push between verification and merge aborts the merge.
 
 > **Note:** all agents use the owner's GitHub account (`gh` auth), so GitHub shows every comment as written by the owner. The `[Sol]`/`[Claude]`/`[Astra]` prefixes make authorship visible. GitHub also doesn't let you approve your own PR, so the "required approvals" rule can't enforce the review. **Enforcement is therefore split:**
