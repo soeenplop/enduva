@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 327 76" role="img">
+  <title>Enduva</title>
+  <style>svg { fill: #152B23 } @media (prefers-color-scheme: dark) { svg { fill: #EFF7E8 } }</style>
+  <g transform="translate(10 3) skewX(-9)" fill-rule="evenodd">
+    <path transform="translate(0 0)" d="M0 0H45L42 10H11V27H39L36 37H11V56H46L43 66H0Z"/>
+    <path transform="translate(53 0)" d="M0 17H10V23Q17 15 27 16Q45 16 45 37V66H34V38Q34 26 24 26Q11 26 11 41V66H0Z"/>
+    <path transform="translate(106 0)" d="M36 0H47V66H37V60Q31 67 21 67Q0 67 0 42Q0 16 21 16Q30 16 36 23ZM24 26Q11 26 11 42Q11 57 24 57Q37 57 37 42Q37 26 24 26Z"/>
+    <path transform="translate(159 0)" d="M0 17H11V45Q11 57 21 57Q34 57 34 42V17H45V66H35V60Q28 68 18 67Q0 67 0 46Z"/>
+    <path transform="translate(212 0)" d="M0 17H12L26 54L40 17H52L32 66H20Z"/>
+    <path transform="translate(265 0)" d="M37 17H47V66H37V60Q30 67 21 67Q0 67 0 42Q0 16 21 16Q31 16 37 23ZM24 26Q11 26 11 42Q11 57 24 57Q37 57 37 42Q37 26 24 26Z"/>
+  </g>
+</svg>
