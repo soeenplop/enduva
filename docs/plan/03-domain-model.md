@@ -28,9 +28,9 @@ erDiagram
   WORKOUT_EXERCISE }o--|| EXERCISE : uses
   WORKOUT }o--o| ROUTINE : from
 
-  DIARY_ENTRY }o--o| FOOD : references
+  DIARY_ENTRY }o--o| FOOD_REF : "references bls, off or custom"
   DIARY_ENTRY }o--o| RECIPE : references
-  FOOD ||--o{ FOOD_SERVING : has
+  RECIPE_INGREDIENT }o--|| FOOD_REF : references
   RECIPE ||--o{ RECIPE_INGREDIENT : has
 
   TRAINING_PLAN ||--o{ PLANNED_SESSION : has
@@ -70,7 +70,7 @@ Streams are stored as compressed arrays (e.g. `bytea` with columnar delta encodi
 | `routine_folders` | name, sort_order |
 | `routines` | folder_id, name, notes, sort_order |
 | `routine_exercises` | routine_id, exercise_id, sort_order, superset_group, rest_s, notes, target_sets (JSON: type, reps range, weight, RPE) |
-| `workouts` | routine_id?, title, started_at, ended_at, time_zone, notes, source (`ios`/`watch`/`web`), healthkit_workout_id, avg/max HR, energy_kcal, rpe |
+| `workouts` | routine_id?, title, started_at, ended_at, time_zone, notes, source (`ios`/`watch`/`web`), recording_mode (`watch_only`/`mirrored`/`phone_only`/`none`), healthkit_save_owner (`watch`/`iphone`/`none`), healthkit_status (`recording`/`saved`/`lost`), healthkit_workout_uuid, avg/max HR, energy_kcal, rpe |
 | `workout_exercises` | workout_id, exercise_id, sort_order, superset_group, notes |
 | `workout_sets` | workout_exercise_id, index, kind (`normal`/`warmup`/`drop`/`failure`), weight_kg, reps, duration_s, distance_m, rpe, rir, completed_at |
 | `personal_records` | (derived) exercise_id, kind (`max_weight`/`est_1rm`/`max_volume_set`/`max_reps`), value, workout_set_id, achieved_at |
@@ -79,13 +79,15 @@ Streams are stored as compressed arrays (e.g. `bytea` with columnar delta encodi
 
 | Entity | Key fields |
 | --- | --- |
-| `foods` | source (`bls`/`off`/`custom`/`ai_estimate`), source_id, barcode(s), owner_user_id (custom), brand, nutrients per 100 g/ml (kcal, protein, carbs, sugar, fat, sat. fat, fiber, salt + JSON for the rest), basis (`g`/`ml`), density, quality score, last_synced_at |
-| `food_translations` | food_id, locale, name, aliases[] (search vectors) |
-| `food_servings` | food_id, label (translated key or text), grams |
-| `recipes`, `recipe_ingredients` | private recipes, portions, computed nutrients |
-| `diary_entries` | date (local), meal (`breakfast`/`lunch`/`dinner`/`snack`), food_id or recipe_id or quick-add, amount_g, serving_id, multiplier, computed nutrient snapshot, source (`manual`/`barcode`/`ai_photo`/`ai_text`), ai_recognition_id, healthkit_sample_ids |
+| **BLS dataset** (CC BY 4.0): `bls_foods`, `bls_nutrients`, `bls_translations`, `bls_servings` | BLS code (PK), category, nutrients per 100 g, de/en names. Read-only, replaced by the importer |
+| **OFF dataset** (ODbL): `off_products`, `off_nutrients`, `off_translations`, `off_servings` | barcode (PK), brand, nutrients per 100 g/ml, basis, quantity, completeness/quality score, last_synced_at. Only OFF-derived data, so the **ODbL offer export is scoped to these tables** |
+| **Custom foods** (private): `custom_foods`, `custom_food_servings` | owner_user_id, name, brand, nutrients per 100 g/ml, origin (`manual`/`ai_estimate`). RLS. Never part of the OFF/BLS datasets or the OFF export |
+| Food reference (type) | **Source-qualified reference** `(food_source, food_ref)` with `food_source ∈ {bls, off, custom}`, used by diary entries, recipe ingredients and favourites instead of a shared `food_id` |
+| Search | `search_foods(query, locale, user)` composes per-dataset queries (no shared table) |
+| `recipes`, `recipe_ingredients` | private recipes, portions. Ingredients reference `(food_source, food_ref)` + amount + nutrient snapshot |
+| `diary_entries` | date (local), meal (`breakfast`/`lunch`/`dinner`/`snack`), `(food_source, food_ref)` or recipe_id or quick-add, amount_g, serving ref, multiplier, **nutrient snapshot**, source (`manual`/`barcode`/`ai_photo`/`ai_text`), ai_recognition_id, healthkit_sample_ids |
 | `water_entries` | date, amount_ml |
-| `favourite_foods` | user_id, food_id |
+| `favourite_foods` | user_id, `(food_source, food_ref)` |
 | `nutrition_goals` | goal type (`lose`/`maintain`/`gain`), pace kg/week, activity level, macro split, dynamic mode (`off`/`partial`/`full`) + training-energy factor |
 | `daily_targets` | (derived per day) base kcal, training kcal added, macro targets |
 | `ai_recognitions` | input (photo path, text), model output (items, questions), answers, final items, status |
