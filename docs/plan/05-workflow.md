@@ -70,7 +70,12 @@ flowchart TD
    - All `blocker`/`major` threads resolved.
    - All required status checks green **on that head** (checks re-run after every push).
    - No `needs-arbiter` label.
-   - **Owner approval** is **not** required when Sol's verdict is LGTM and the lead agrees (owner ruling, 2026-11-27). It is still required only for: (a) decisions only the owner can make or provide (legal texts such as the privacy policy, imprint and the final CLA text, licence changes, accounts, costs or contracts with third parties), (b) passing the gates G1 and G2, (c) arbiter rulings on unresolved disagreements (`needs-arbiter`), and (d) PRs the owner explicitly asked to review. In those cases: `Approved @ <sha>` (or an owner approval relayed by the lead, recorded with the SHA).
+   - **Owner approval** is **not** required when Sol's verdict is LGTM and the lead agrees (owner ruling W12, 2026-11-27). Exceptions, each with its own record:
+     - **Owner-only decisions** (legal texts such as the privacy policy, imprint and the final CLA text, licence changes, accounts, costs or contracts with third parties): owner approval for the exact head SHA.
+     - **Gates G1/G2:** a gate is passed **only** by the owner's sign-off **in the gate issue** (#93 for G1, #94 for G2). PRs that contribute to a gate need no owner approval themselves. A PR that records a gate decision links to that sign-off comment.
+     - **Arbiter rulings:** the owner's `Ruling: …` comment in the disputed thread is the record. Once the lead has applied it (`[Claude] ruling applied in <sha>`), the normal merge criteria apply again, including a fresh Sol verdict on the new head. No second owner approval is needed.
+     - **PRs the owner asked to review:** owner approval for the exact head SHA.
+     - **How approvals are recorded:** all agents share the owner's GitHub account, so an `Approved @ <sha>`, `Ruling:` or gate sign-off comment counts as the owner's only if the owner wrote it personally (no `[Claude]`/`[Sol]`/`[Astra]` prefix). If the owner approves in chat, the lead relays it as `[Claude] Owner approval relayed: "<quote>" (given in <where>, <date>), Approved @ <full-sha>`.
 8. **Merge with a head guard:** `gh pr merge <n> --merge --match-head-commit <head-sha>`, so a push between verification and merge aborts the merge.
 
 > **Note:** all agents use the owner's GitHub account (`gh` auth), so GitHub shows every comment as written by the owner. The `[Sol]`/`[Claude]`/`[Astra]` prefixes make authorship visible. GitHub also doesn't let you approve your own PR, so the "required approvals" rule can't enforce the review. **Enforcement is therefore split:**
