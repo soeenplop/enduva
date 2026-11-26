@@ -8,6 +8,8 @@ export default {
       target: './src/api/generated.ts',
       client: 'fetch',
       override: { mutator: { path: './src/api/fetcher.ts', name: 'apiFetch' } },
+      // No `formatter` on purpose: `prettier` would run the Prettier that TanStack's route
+      // generator pulls in. The generated client is excluded from lint and format (ADR-0001).
     },
   },
 };

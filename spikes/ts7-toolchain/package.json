@@ -14,6 +14,8 @@
     "test:negative": "node scripts/negative-tests.mjs",
     "audit:lockfile": "node scripts/audit-lockfile.mjs --self-test && node scripts/audit-lockfile.mjs pnpm-lock.yaml ../../pnpm-lock.yaml",
     "lint": "oxlint --type-aware --deny-warnings",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check .",
     "test": "pnpm -r run test",
     "build": "pnpm -r run build",
     "smoke": "node scripts/smoke.mjs && node scripts/ssr-isolation.mjs",
@@ -21,6 +23,7 @@
     "swift:openapi": "cp contracts/openapi.json swift-client/Sources/SpikeAPIClient/openapi.json"
   },
   "devDependencies": {
+    "oxfmt": "0.80.0",
     "oxlint": "1.95.0",
     "oxlint-tsgolint": "7.0.2009",
     "typescript": "7.0.2"
