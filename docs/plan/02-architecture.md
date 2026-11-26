@@ -162,17 +162,45 @@ RLS is only a safety net if the API actually runs **under** it, so:
 
 ### Offline-first sync (iPhone + Watch ↔ API)
 
-- Local store: **SwiftData** with client-generated UUIDv7 IDs.
-- Outbox pattern: every local mutation writes an outbox entry. The sync engine pushes batches to `POST /v1/sync/push` (idempotent per mutation ID).
-- Pull: `GET /v1/sync/pull?cursor=…` returns changes since a server cursor (monotonic `change_seq` per user), including tombstones for deletions.
-- Conflicts: last-writer-wins per record using a server-assigned version. Workout sets are append-mostly, which keeps conflicts rare. Diary entries are LWW.
-- **Watch:** syncs with the iPhone over WatchConnectivity when reachable, and otherwise directly with the API over Wi-Fi/LTE (same sync protocol, own auth token shared via Keychain access group).
+The sync contract is specified in ADR-0004 and covered by a dedicated test suite before any feature relies on it.
 
-### Watch strength session
+- **Local store:** SwiftData with client-generated UUIDv7 IDs. Every local change writes an **outbox mutation** `{mutation_id, entity, entity_id, op (upsert/delete), base_version, payload, client_time}`.
+- **Push:** `POST /v1/sync/push` takes batches. `mutation_id` is unique per user, so a duplicate delivery (Watch → iPhone relay **and** Watch → API directly, retries after timeouts) returns the stored result instead of applying twice.
+- **Commit-ordered change feed:** each user has a `sync_state(user_id, last_seq)` row. Every write transaction increments it with `UPDATE … RETURNING` and stamps the changed rows with that `change_seq`. The row lock is held until commit, so a user's changes **become visible in sequence order** and a pull can never skip a lower sequence that commits later. Tested with parallel write transactions and interleaved pulls against real Postgres.
+- **Pull:** `GET /v1/sync/pull?cursor=<seq>` returns all rows and tombstones with `change_seq > cursor`, paginated, plus the new cursor.
+- **Stale writes (optimistic concurrency):** a mutation carries the `base_version` it was made against.
+  - `base_version` = current version → applied, version + 1.
+  - Stale `base_version` → **rejected with a conflict result** containing the current server record. The client then applies a per-entity policy. For workout sets and diary entries, the server state is kept and the local change is shown as a "changed on another device" notice the user can re-apply. No silent overwrite.
+  - Creates (no `base_version`) never conflict, because IDs are client-generated UUIDs.
+- **Deletes:** soft deletes produce tombstones. A delete **wins** against any update with an older `base_version`, so a delayed Watch edit can't resurrect a deleted set. Restoring is an explicit user action that creates a new version.
+- **Tombstone retention:** 90 days. A cursor older than the retention window gets `410 Gone`. The client then performs a **full resync**: it reloads a snapshot and rebases its still-unsent outbox on top.
+- **Required tests:** duplicate delivery via two paths, stale update after delete, concurrent edits from Watch and iPhone, cursor expiry + full resync with a pending outbox, and offline create → edit → delete before the first sync.
 
-- `HKWorkoutSession` + `HKLiveWorkoutBuilder` (activity type `traditionalStrengthTraining` / `functionalStrengthTraining` / `highIntensityIntervalTraining`) for HR and energy.
-- The session can be started on either device. With iOS/watchOS mirrored workout sessions, the iPhone shows the same session and a Live Activity.
-- When finished: the HKWorkout is saved to Health (tagged with the Enduva ID), and the workout with all sets is synced to the API.
+### Watch credentials
+
+The Watch has its own keychain, so keychain access groups **can't** share the iPhone's session with it. The Watch therefore gets its own **device-specific session**:
+
+1. On the iPhone, the signed-in app requests a short-lived, single-use **device link code** (`POST /v1/devices/link`) and sends it to the Watch via WatchConnectivity.
+2. The Watch exchanges the code (`POST /v1/devices/exchange`) for its **own Supabase session**, e.g. via a server-generated one-time token verified by the Watch. The exact mechanism is decided in ADR-0005. The result is a separate session ID and refresh token, registered in `devices`.
+3. The Watch stores the session in **its own keychain** and refreshes it independently, so it works with the phone offline (Wi-Fi/LTE).
+4. **Revocation:** sign-out or account switch on the iPhone revokes all device sessions server-side and tells the Watch (WatchConnectivity) to wipe its keychain and local store. A "Devices" list in settings revokes single devices. Revoked sessions fail the session check (see Authentication).
+5. Validated on a real paired device: setup, token expiry with the phone switched off, recovery after revocation.
+
+### Strength session recording (Watch ↔ iPhone)
+
+Apple's mirroring model: the **Watch owns the primary `HKWorkoutSession`**, and the iPhone gets a mirrored session.
+
+| Mode | Started on | Recorder (primary session) | HealthKit save authority | HR |
+| --- | --- | --- | --- | --- |
+| Watch-only | Watch | Watch | Watch | yes |
+| Mirrored | Watch, or iPhone with a reachable paired Watch (`startWatchApp(toHandle:)` wakes the Watch, which creates the primary session) | Watch | **Watch only** | yes |
+| Phone-only | iPhone, no Watch available or user chooses "without Watch" | iPhone (own workout session) | iPhone | from other sources only |
+
+- Activity types: `traditionalStrengthTraining`, `functionalStrengthTraining`, `highIntensityIntervalTraining`.
+- **Set logging is Enduva data, not HealthKit data.** Set edits on either device become outbox mutations (same IDs and semantics as the sync protocol). During a mirrored session they are exchanged live over the session's data channel (`sendToRemoteWorkoutSession`), and both devices also push them to the API. Duplicates are removed by `mutation_id`.
+- **Disconnect:** both devices keep logging locally. On reconnect, mutations are exchanged, and either way the API converges them. Only the primary device ends and saves the `HKWorkout` (tagged with the Enduva workout ID). The other device never saves a second one.
+- **Watch becomes unavailable mid-session** (battery, out of range): the iPhone continues logging sets. The HealthKit workout is finalised by the Watch when it comes back, or recovered via `HKHealthStore.recoverActiveWorkoutSession`. The Enduva workout can be finished from either device independently of the HealthKit session.
+- Live Activity on the iPhone in mirrored and phone-only modes.
 
 ## AI architecture
 
