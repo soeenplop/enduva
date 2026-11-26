@@ -82,7 +82,7 @@ flowchart TD
 
 - `gh pr merge <n> --merge --match-head-commit <sha> --delete-branch` (merge commit). **Squash and rebase merges are disabled** in the repo settings.
 - The lead merges once all merge criteria are met. The owner can always merge or veto manually.
-- After merging: remove the worktree, close the issue (via `Closes #n` in the PR), and the staging deploy runs automatically.
+- After merging: remove the worktree, close the issue (via `Closes #n` in the PR), and the deploy pipeline runs automatically (to production after isolated verification until G1.6, to staging afterwards).
 
 ## Parallelism
 
@@ -102,5 +102,5 @@ flowchart TD
 ## Releases
 
 - release-please keeps a release PR open on `main` and maintains `CHANGELOG.md` and versions.
-- Merging the release PR → tag `vX.Y.Z` → production deploy (manual approval in GitHub Environments).
+- Merging the release PR → tag `vX.Y.Z` → production deploy (manual approval in GitHub Environments). This applies **from G1.6**. Before that, production is deployed continuously from `main` after isolated verification (T25), and releases only produce versions and changelog.
 - The iOS build number comes from CI. The marketing version follows the release version.

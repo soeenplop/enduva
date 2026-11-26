@@ -5,8 +5,10 @@
 | Env | Landing | Web app | API | Database | Trigger |
 | --- | --- | --- | --- | --- | --- |
 | **local** | `localhost:5174` | `localhost:5173` | `localhost:3000` | Supabase CLI (`supabase start`, Docker) | `pnpm dev` |
-| **staging** | `staging.enduva.soeenplop.dev` | `app.staging.enduva.soeenplop.dev` | `api.staging.enduva.soeenplop.dev` | Supabase Cloud project `enduva-staging` (EU) | Merge to `main` |
-| **production** | `enduva.soeenplop.dev` | `app.enduva.soeenplop.dev` | `api.enduva.soeenplop.dev` | Supabase Cloud project `enduva-prod` (EU, Frankfurt) | Release tag + manual approval |
+| **staging** *(from G1.6)* | `staging.enduva.soeenplop.dev` | `app.staging.enduva.soeenplop.dev` | `api.staging.enduva.soeenplop.dev` | Supabase Cloud project `enduva-staging` (EU), created in G1.6 | Merge to `main` |
+| **production** | `enduva.soeenplop.dev` | `app.enduva.soeenplop.dev` | `api.enduva.soeenplop.dev` | Supabase Cloud production project (EU; exists, credentials in the 1Password Environment `enduva`) | **Until G1.6:** merge to `main` after isolated verification. **From G1.6:** release tag + manual approval |
+
+**Single-environment phase (T25):** until task G1.6 there is no staging environment. Production holds synthetic data only. In the pipeline below, the **isolated candidate environment** takes the place of staging: every push to `main` is verified there (migrations from the production history + candidate migrations, candidate image digests, smoke tests), produces the receipt, and is then deployed to production. From G1.6 on, the full staging → release → production flow below applies.
 
 All of these names (and `errors.enduva.soeenplop.dev` for GlitchTip) already resolve to the Dokploy server via the wildcard DNS record (checked). Traefik in Dokploy issues Let's Encrypt certificates per host.
 
@@ -22,7 +24,7 @@ All of these names (and `errors.enduva.soeenplop.dev` for GlitchTip) already res
 | `landing` | `ghcr.io/soeenplop/enduva-landing:<tag>` | static server (Caddy/nginx) | Prerendered |
 | `tiles` | Caddy/nginx (pinned digest) | caching reverse proxy | `tiles.enduva.soeenplop.dev` → OpenFreeMap. Strips cookies, `Referer`, user agents. Disk cache |
 
-- There is no database in the compose file: Supabase Cloud is used for staging and production.
+- There is no database in the compose file: Supabase Cloud is used for production (and staging from G1.6).
 - Images: multi-stage builds, `pnpm deploy --prod` for minimal node_modules, non-root user, distroless or alpine runtime.
 - Labels/domains are configured in Dokploy (via CLI). Env vars come from Dokploy's environment settings.
 
@@ -32,17 +34,30 @@ All of these names (and `errors.enduva.soeenplop.dev` for GlitchTip) already res
 flowchart LR
   PR[PR] --> CI[CI: lint · typecheck · test · build]
   CI --> MERGE[merge to main]
-  subgraph RUN["one workflow run per push to main"]
+  subgraph PRE["until G1.6: one run per push to main (T25)"]
+    IMG0[Build + push images<br/>by digest] --> ISO[Isolated candidate env<br/>prod migration history + candidate]
+    ISO --> REC0[Receipt<br/>SHA + digests + migration set]
+    REC0 --> GATE0{receipt valid for exact SHA,<br/>digests, migrations vs. applied prod history?}
+    GATE0 -- yes, under prod lock --> MIG0[supabase db push → prod]
+    MIG0 --> DEP0[deploy same digests → prod]
+    GATE0 -- no --> STOP0[refuse: no production write]
+  end
+  subgraph RUN["from G1.6: one run per push to main"]
     IMG[Build + push images<br/>by digest] --> MIG_S[supabase db push → staging]
     MIG_S --> DEP_S[deploy digests → staging]
     DEP_S --> SMOKE[Smoke tests]
     SMOKE -- pass --> RECEIPT[Staging receipt<br/>SHA + digests]
-    RECEIPT --> RP[release-please<br/>via GitHub App token]
-    RP -- release_created --> APPROVE{production environment<br/>manual approval}
-    APPROVE --> MIG_P[supabase db push → prod]
+    RECEIPT --> RP[release-please<br/>release PR via GitHub App token]
+    RP -- pending release --> VER[candidate verifier<br/>for the release PR merge SHA]
+    VER --> TAG[tag + release on the verified SHA]
+    TAG --> APPROVE{production environment<br/>manual approval}
+    APPROVE --> GATE1{receipt valid for exact SHA,<br/>digests, migrations vs. applied prod history?}
+    GATE1 -- yes, under prod lock --> MIG_P[supabase db push → prod]
+    GATE1 -- no --> REVER[re-verify same SHA in isolation<br/>against current prod baseline]
     MIG_P --> DEP_P[deploy same digests → prod]
   end
-  MERGE --> RUN
+  MERGE --> PRE
+  MERGE -- "after G1.6" --> RUN
 ```
 
 - **Serialised pipeline:** the `main` pipeline runs in one `concurrency` group (`main-pipeline`, `cancel-in-progress: false`), so runs never overlap: a later push waits until the earlier run has finished.
@@ -51,12 +66,13 @@ flowchart LR
 - **Release candidate = tested SHA:** release-please only runs `release-pr` (open/update the release PR) on every push. The release step is **driven by the pending release, not by the run's own SHA**: it looks up the merged release PR still labelled `autorelease: pending` and takes **its merge commit SHA**, which is exactly the SHA release-please will tag. It calls the **candidate verifier** (see below) for that SHA. Then the workflow **creates the tag and GitHub release itself on exactly that SHA** (`gh release create vX.Y.Z --target <verified-sha>` with the changelog section from the release PR) and relabels the PR `autorelease: tagged`. release-please is configured with `skip-github-release: true`, so it only maintains the release PR and changelog and **never chooses a tagging candidate**. The verified SHA and the published SHA are therefore the same by construction.
 - **No lost releases:** because the release step works from the `autorelease: pending` label, it doesn't matter which run handles it. If GitHub cancels a queued run (only one pending run per concurrency group is kept), the next push, an hourly scheduled run or a manual `workflow_dispatch` picks up the pending release. Retries use the same lookup, so a retry can never publish a different candidate.
 - **Strict ordering in one run:** every push to `main` runs build → staging migrations → staging deploy → smoke tests → **staging receipt** → release-please → (only if a release was created) production. A release can therefore never be created before its commit passed staging. The receipt (release SHA + image digests + smoke result) is stored durably as a GitHub deployment status + artifact.
-- **Production requires a receipt:** the production job (protected `production` environment, manual approval) looks up the receipt for the **exact release SHA**. It refuses to run migrations or deploy if the receipt is missing or failed.
-- **Candidate verifier (single code path for release, retries and recovery):** (1) re-use an existing successful receipt for the SHA. Otherwise (2) if shared staging currently runs **exactly** that SHA, meaning both the candidate's image digests **and** an applied migration history (`supabase_migrations`) identical to the candidate's migration set, smoke-test it there. A failed deploy can leave old images on a newer schema, so a digest match alone isn't enough. Otherwise (3) — whenever staging has moved ahead, runs anything else, or its state is unknown — verify the SHA in the **isolated candidate environment**. The candidate is **never** deployed back onto shared staging.
+- **Production requires a receipt (both paths):** before **any** production write, the job looks up the receipt for the **exact SHA** (the push SHA in the continuous phase, the release SHA from G1.6) and checks that its image digests and migration set match. Under the production concurrency lock, it then reads the **applied production migration history** and verifies that the receipt was produced against exactly that history. Migrations and deploy run in the same locked job, so no other deploy can change the history in between. A missing, failed or mismatched receipt makes it **refuse** to migrate or deploy. In the continuous phase this is an unattended job; from G1.6 it additionally requires manual approval in the protected `production` environment.
+- **Candidate verifier (single code path for release, retries and recovery):** there are two kinds of receipt. A **staging receipt** proves the candidate ran on staging. A **production receipt** proves it was verified against the **current production baseline** (the applied production migration history). **Only a production receipt can authorise a production write.** For a production promotion the verifier (1) reuses an existing production receipt for the SHA only if its recorded baseline equals the current production history. Otherwise (2) it verifies the same SHA in the **isolated candidate environment** against the current production baseline (production history replayed, then the candidate's migrations and image digests, same smoke tests), which produces a new production receipt. A staging smoke test on its own never produces a production receipt. For a staging deploy, staging may be used directly only if it runs **exactly** that SHA (image digests **and** applied migration history identical to the candidate's), because a failed deploy can leave old images on a newer schema. Otherwise the isolated environment is used as well. The candidate is **never** deployed back onto shared staging.
 - **Recovery:** if anything fails after the release was created (e.g. a flaky smoke test), the fix is to **re-run the failed jobs** of that run, or to start a `workflow_dispatch` "promote release" workflow with the tag. Both go through the candidate verifier. No manual tagging.
 - **Release PR checks:** release-please authenticates with a **GitHub App token** ("Enduva Release" app, installed only on this repo with contents + pull-requests write), not `GITHUB_TOKEN`. Its release PRs therefore trigger the required checks normally, and the PR can be merged under the ruleset like any other PR.
 - **Promote, don't rebuild:** every image is referenced **by digest** (`…@sha256:…`). Production deploys exactly the digests from the receipt. 0.12c/0.12d prove that the Dokploy CLI deploys a pinned digest (compose file rendered with digests, then `dokploy compose` deploy).
-- **0.12d acceptance:** run the whole chain from a generated release PR (required checks start automatically) through merge to the production deploy, including once with **deliberately slow staging** (production waits) and once with a **failing smoke test** (no release, no prod deploy, recovery via re-run).
+- **Receipt edge cases (0.12c/0.12d acceptance):** a staging receipt (or a staging smoke test alone) is never accepted for production, and a retry after migrations succeeded but the image deploy failed re-verifies against the advanced production baseline instead of reusing the old receipt.
+- **0.12d acceptance:** run the whole release chain from a generated release PR (required checks start automatically) through merge, verification, tagging and deploy **against the isolated rehearsal target**, including a **failing smoke test** (no release, no deploy, recovery via re-run). The live staging → approved-production exercise with **deliberately slow staging** happens in G1.6.
 - **Serialisation:** GitHub Actions `concurrency` groups per environment (`deploy-staging`, `deploy-production`) so migrations and deploys never overlap. Migrations always run before the deploy in the same job.
 
 - Deploy commands go through the **Dokploy CLI** (`dokploy compose …`, installed v0.30.x), scripted in `deploy/scripts/deploy.sh` so they run the same way locally and in GitHub Actions. The exact commands are fixed in task 0.12 (`dokploy compose --help`).
@@ -66,12 +82,12 @@ flowchart LR
 ## Supabase
 
 - **Local:** `supabase start`. Migrations in `supabase/migrations`, seed in `supabase/seed.sql` + TS seed scripts for BLS/exercise data. `supabase db reset` gives a clean state.
-- **Cloud:** two projects (staging, prod) in an EU region. Auth configuration (redirect URLs, Google OAuth client, email templates de/en, SMTP via a transactional mail provider) lives in `supabase/config.toml` where possible and is otherwise documented.
-- **Sign in with Apple (web):** one Apple Services ID with the Supabase callback URL per environment. Apple's client secret is a JWT that expires after at most six months, so a **scheduled GitHub Action** regenerates it monthly from the Apple key (`.p8`, stored as an Actions secret) and updates the Supabase Auth config of both projects via the Management API. Rotation smoke test: a token request to Apple with the new secret and a dummy code must fail with `invalid_grant` (secret accepted), not `invalid_client`. A failed rotation alerts the owner. The lead agent maintains the workflow, and the owner owns the Apple key.
-- **Connections:** the API uses the **transaction pooler** (transaction-local identity, no named prepared statements). The worker uses pg-boss in its default **polling** mode (no `LISTEN/NOTIFY`) over the **session pooler**, so it is independent of IPv6 support for direct connections. Task 0.12b tests enqueue and consume against the real staging connection strings.
+- **Cloud:** the production project in an EU region now, and a staging project from G1.6. Auth configuration (redirect URLs, Google OAuth client, email templates de/en, SMTP via a transactional mail provider) lives in `supabase/config.toml` where possible and is otherwise documented.
+- **Sign in with Apple (web):** one Apple Services ID with the Supabase callback URL per environment. Apple's client secret is a JWT that expires after at most six months, so a **scheduled GitHub Action** regenerates it monthly from the Apple key (`.p8`, stored as an Actions secret) and updates the Supabase Auth config of **every existing project** (production now, staging from G1.6) via the Management API. Rotation smoke test: a token request to Apple with the new secret and a dummy code must fail with `invalid_grant` (secret accepted), not `invalid_client`. A failed rotation alerts the owner. The lead agent maintains the workflow, and the owner owns the Apple key.
+- **Connections:** the API uses the **transaction pooler** (transaction-local identity, no named prepared statements). The worker uses pg-boss in its default **polling** mode (no `LISTEN/NOTIFY`) over the **session pooler**, so it is independent of IPv6 support for direct connections. Task 0.12c tests enqueue and consume against the real production connection strings (synthetic data) **after the first receipt-gated migration** has created the queue schema, and G1.6 repeats it for staging when it is provisioned.
 - **Connection budget:** API pool ≈ 10 per replica, worker ≈ 5 per replica (pg-boss maintenance included). The total stays below the plan's pooler/client limits with headroom for migrations and admin. Documented in `deploy/README.md` and revisited when scaling replicas.
 - **Storage buckets:** `avatars`, `activity-files`, `meal-photos` (retention policy), `exports` (7-day expiry), **all private**: no Storage policies for `anon`/`authenticated`, and no public or signed download URLs. Objects are served only through the API (see architecture). Checked by a test that tries direct reads with a user JWT.
-- **Plan:** Free for staging, and for production until G1 (no real data before then). Production moves to **Pro** when G1 passes (daily backups, no pausing, 8 GB DB). PITR is optional. See T13a.
+- **Plan:** Free for production until G1, and Free for staging once it exists (no real data before then). Production moves to **Pro** when G1 passes (daily backups, no pausing, 8 GB DB). PITR is optional. See T13a.
 
 ## Secrets & configuration
 
