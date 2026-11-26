@@ -25,7 +25,7 @@ Once the plan is merged, decisions that matter for architecture are recorded as 
 | P11 | Exercise library | Seeded from an open dataset (licence to verify, e.g. `free-exercise-db`). Users can add custom exercises. No animations in v1. | Default |
 | P12 | Strength features | Routines, folders, supersets, RPE/RIR, rest timer, warm-up/drop/failure sets, 1RM estimate, PRs. No plate calculator in v1. | Default |
 | P13 | Watch strength logging | **Full logging on the Watch**: check off sets, adjust weight/reps, rest timer, heart rate. | Owner |
-| P14 | Food data | Open Food Facts (barcodes, EU products, ODbL) + **BLS 4.0** (Bundeslebensmittelschlüssel, free since 12/2025; exact terms to verify) + private custom foods. | Default (BLS licence verified as free of charge) |
+| P14 | Food data | Open Food Facts (barcodes, EU products, ODbL, kept as an independent dataset) + **BLS 4.0** (Bundeslebensmittelschlüssel, free since 12/2025, CC BY 4.0, Max Rubner-Institut) + private custom foods. | Default |
 | P15 | AI nutrition | Photo recognition and free-text entry. The AI **estimates portion weights** and **asks clarifying questions** when it matters (e.g. "casserole: how much cheese?"). | Owner |
 | P16 | Nutrition scope | Macros, water, weight, **dynamic calorie goal** (adjusted by training energy). Micronutrients and fasting come later. | Owner |
 | P17 | Community foods | Not for now. Custom foods and recipes stay private. | Owner |

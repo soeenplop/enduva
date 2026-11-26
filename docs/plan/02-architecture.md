@@ -235,13 +235,17 @@ apps/api/src/ai/
 
 ## Food data pipeline
 
-| Source | Import | Notes |
-| --- | --- | --- |
-| **BLS 4.0** | One-time import + update script (`packages/db/seed/bls`) | ~7,000 generic foods, up to 138 nutrients. German names, English names where provided. Keep source IDs |
-| **Open Food Facts** | (a) On-demand barcode lookup via OFF API → cached in `foods`. (b) Optional import of a **DACH subset** (products sold in DE/AT/CH with complete nutrition) from the OFF dump, refreshed weekly by a worker job | ODbL: attribution required, and the derived DB remains ODbL. Respect the OFF API rate limits and set a proper User-Agent |
-| **Custom foods** | User-created, private | Also produced by "save AI estimate as food" |
+The food catalog is a **collective database of separately maintained datasets**. Each source keeps its own tables and licence, and search composes them at query time:
 
-Search: Postgres `tsvector` (German + English configs) + `pg_trgm`, ranked by source quality, popularity per user (recents/favourites) and completeness. `pgvector` embeddings can be added later if needed.
+| Dataset | Tables | Licence & obligations | Import |
+| --- | --- | --- | --- |
+| **BLS 4.0** (Max Rubner-Institut) | `bls_foods`, `bls_nutrients` | **CC BY 4.0** (per the blsdb.de download terms; the exact version is pinned in the importer PR): attribution "Bundeslebensmittelschlüssel (BLS) 4.0, Max Rubner-Institut" with licence link, in the food detail view and on the landing page's data-sources page. Changes are indicated | One-time import + update script (`packages/db/seed/bls`), keeping the BLS codes |
+| **Open Food Facts** | `off_products`, `off_nutrients` | **ODbL 1.0** (database) / DbCL (contents): attribution "© Open Food Facts contributors, ODbL" in every view showing OFF data and on the data-sources page. The OFF tables stay an **independent dataset**: no mixing with BLS or user data. If we publicly use an adapted OFF dataset (normalisation, corrections), we **offer it under ODbL** (downloadable dump of the OFF-derived tables + transformation scripts, linked from the data-sources page) | (a) On-demand barcode lookup via OFF API → cached in `off_products`. (b) Optional DACH subset from the OFF dump (O4), refreshed weekly. Respect API rate limits and a proper User-Agent |
+| **Custom foods** | `custom_foods` | Private per user (RLS), never merged into the OFF/BLS datasets, never exported in the ODbL offer | User-created, or "save AI estimate as food" |
+
+- **Composable search:** a search function queries each dataset separately (Postgres `tsvector` de/en + `pg_trgm`) and merges the results ranked by match quality, source quality, completeness and per-user popularity (recents/favourites). `pgvector` embeddings can be added later.
+- **References:** diary entries and recipe ingredients reference `(source, source_id)` and store a **nutrient snapshot**, so history is stable and datasets can be refreshed independently.
+- **Data-sources page** (landing + in-app "About"): lists every dataset, its licence, its attribution and the ODbL offer link. Required before G1.
 
 ## Internationalisation
 
