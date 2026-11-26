@@ -7,12 +7,20 @@ on:
       - 'spikes/**'
       - 'docs/adr/**'
       - '.github/workflows/spike-ts7.yml'
+      # The lockfile audit also checks the root lockfile.
+      - 'pnpm-lock.yaml'
+      - 'package.json'
+      - 'pnpm-workspace.yaml'
   push:
     branches: [main]
     paths:
       - 'spikes/**'
       - 'docs/adr/**'
       - '.github/workflows/spike-ts7.yml'
+      # The lockfile audit also checks the root lockfile.
+      - 'pnpm-lock.yaml'
+      - 'package.json'
+      - 'pnpm-workspace.yaml'
 
 permissions:
   contents: read
