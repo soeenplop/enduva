@@ -72,7 +72,7 @@ Also checked in CI:
 
 - **SSR and the per-request `QueryClient`:** the smoke test renders the web SSR bundle through its `fetch` handler for two concurrent requests (metric vs. imperial). Each response contains only its own data. [`web/test/router.test.ts`](../../spikes/ts7-toolchain/web/test/router.test.ts) asserts that every `getRouter()` creates a new `QueryClient`.
 - **Server functions with typed request context:** `createServerFn().middleware([…]).validator(zod)` in [`web/src/api/greeting.ts`](../../spikes/ts7-toolchain/web/src/api/greeting.ts) runs during SSR (smoke test). Wrong input and a wrong context field fail `tsc`.
-- **Landing prerender:** [`scripts/check-prerender.mjs`](../../spikes/ts7-toolchain/scripts/check-prerender.mjs) checks that `dist/client/de/index.html` and `en/index.html` exist with `<html lang="de">` / `lang="en"`, the translated copy and a link to the other locale. There is no unprefixed `/` page.
+- **Landing prerender:** [`scripts/check-prerender.mjs`](../../spikes/ts7-toolchain/scripts/check-prerender.mjs) checks that `dist/client/de/index.html` and `en/index.html` exist with `<html lang="de">` / `lang="en"`, the translated copy and a link to the other locale. `lang` is read from the opening `<html>` tag's own attribute. There is no unprefixed `/` page, and the check fails if `dist/client/index.html` exists.
 - **drizzle-kit:** `drizzle-kit generate` loads the TS schema with its own esbuild loader and writes `CREATE TABLE "activities"`.
 - **Route-tree identity:** the hashes of the two `routeTree.gen.ts` files from `tsr generate` match after `vite build` rewrote them.
 
