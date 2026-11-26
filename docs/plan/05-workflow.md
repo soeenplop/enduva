@@ -82,7 +82,7 @@ flowchart TD
 
 - `gh pr merge <n> --merge --match-head-commit <sha> --delete-branch` (merge commit). **Squash and rebase merges are disabled** in the repo settings.
 - The lead merges once all merge criteria are met. The owner can always merge or veto manually.
-- After merging: remove the worktree, close the issue (via `Closes #n` in the PR), and the staging deploy runs automatically.
+- After merging: remove the worktree, close the issue (via `Closes #n` in the PR), and the deploy pipeline runs automatically (to production after isolated verification until G1.6, to staging afterwards).
 
 ## Parallelism
 

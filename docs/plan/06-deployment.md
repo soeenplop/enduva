@@ -5,8 +5,10 @@
 | Env | Landing | Web app | API | Database | Trigger |
 | --- | --- | --- | --- | --- | --- |
 | **local** | `localhost:5174` | `localhost:5173` | `localhost:3000` | Supabase CLI (`supabase start`, Docker) | `pnpm dev` |
-| **staging** | `staging.enduva.soeenplop.dev` | `app.staging.enduva.soeenplop.dev` | `api.staging.enduva.soeenplop.dev` | Supabase Cloud project `enduva-staging` (EU) | Merge to `main` |
-| **production** | `enduva.soeenplop.dev` | `app.enduva.soeenplop.dev` | `api.enduva.soeenplop.dev` | Supabase Cloud project `enduva-prod` (EU, Frankfurt) | Release tag + manual approval |
+| **staging** *(from G1.6)* | `staging.enduva.soeenplop.dev` | `app.staging.enduva.soeenplop.dev` | `api.staging.enduva.soeenplop.dev` | Supabase Cloud project `enduva-staging` (EU), created in G1.6 | Merge to `main` |
+| **production** | `enduva.soeenplop.dev` | `app.enduva.soeenplop.dev` | `api.enduva.soeenplop.dev` | Supabase Cloud production project (EU; exists, credentials in the 1Password Environment `enduva`) | **Until G1.6:** merge to `main` after isolated verification. **From G1.6:** release tag + manual approval |
+
+**Single-environment phase (T25):** until task G1.6 there is no staging environment. Production holds synthetic data only. In the pipeline below, the **isolated candidate environment** takes the place of staging: every push to `main` is verified there (migrations from the production history + candidate migrations, candidate image digests, smoke tests), produces the receipt, and is then deployed to production. From G1.6 on, the full staging → release → production flow below applies.
 
 All of these names (and `errors.enduva.soeenplop.dev` for GlitchTip) already resolve to the Dokploy server via the wildcard DNS record (checked). Traefik in Dokploy issues Let's Encrypt certificates per host.
 
@@ -22,7 +24,7 @@ All of these names (and `errors.enduva.soeenplop.dev` for GlitchTip) already res
 | `landing` | `ghcr.io/soeenplop/enduva-landing:<tag>` | static server (Caddy/nginx) | Prerendered |
 | `tiles` | Caddy/nginx (pinned digest) | caching reverse proxy | `tiles.enduva.soeenplop.dev` → OpenFreeMap. Strips cookies, `Referer`, user agents. Disk cache |
 
-- There is no database in the compose file: Supabase Cloud is used for staging and production.
+- There is no database in the compose file: Supabase Cloud is used for production (and staging from G1.6).
 - Images: multi-stage builds, `pnpm deploy --prod` for minimal node_modules, non-root user, distroless or alpine runtime.
 - Labels/domains are configured in Dokploy (via CLI). Env vars come from Dokploy's environment settings.
 
@@ -66,12 +68,12 @@ flowchart LR
 ## Supabase
 
 - **Local:** `supabase start`. Migrations in `supabase/migrations`, seed in `supabase/seed.sql` + TS seed scripts for BLS/exercise data. `supabase db reset` gives a clean state.
-- **Cloud:** two projects (staging, prod) in an EU region. Auth configuration (redirect URLs, Google OAuth client, email templates de/en, SMTP via a transactional mail provider) lives in `supabase/config.toml` where possible and is otherwise documented.
+- **Cloud:** the production project in an EU region now, and a staging project from G1.6. Auth configuration (redirect URLs, Google OAuth client, email templates de/en, SMTP via a transactional mail provider) lives in `supabase/config.toml` where possible and is otherwise documented.
 - **Sign in with Apple (web):** one Apple Services ID with the Supabase callback URL per environment. Apple's client secret is a JWT that expires after at most six months, so a **scheduled GitHub Action** regenerates it monthly from the Apple key (`.p8`, stored as an Actions secret) and updates the Supabase Auth config of both projects via the Management API. Rotation smoke test: a token request to Apple with the new secret and a dummy code must fail with `invalid_grant` (secret accepted), not `invalid_client`. A failed rotation alerts the owner. The lead agent maintains the workflow, and the owner owns the Apple key.
 - **Connections:** the API uses the **transaction pooler** (transaction-local identity, no named prepared statements). The worker uses pg-boss in its default **polling** mode (no `LISTEN/NOTIFY`) over the **session pooler**, so it is independent of IPv6 support for direct connections. Task 0.12b tests enqueue and consume against the real staging connection strings.
 - **Connection budget:** API pool ≈ 10 per replica, worker ≈ 5 per replica (pg-boss maintenance included). The total stays below the plan's pooler/client limits with headroom for migrations and admin. Documented in `deploy/README.md` and revisited when scaling replicas.
 - **Storage buckets:** `avatars`, `activity-files`, `meal-photos` (retention policy), `exports` (7-day expiry), **all private**: no Storage policies for `anon`/`authenticated`, and no public or signed download URLs. Objects are served only through the API (see architecture). Checked by a test that tries direct reads with a user JWT.
-- **Plan:** Free for staging, and for production until G1 (no real data before then). Production moves to **Pro** when G1 passes (daily backups, no pausing, 8 GB DB). PITR is optional. See T13a.
+- **Plan:** Free for production until G1, and Free for staging once it exists (no real data before then). Production moves to **Pro** when G1 passes (daily backups, no pausing, 8 GB DB). PITR is optional. See T13a.
 
 ## Secrets & configuration
 
