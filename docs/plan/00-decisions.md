@@ -38,9 +38,9 @@ Once the plan is merged, decisions that matter for architecture are recorded as 
 
 | # | Topic | Decision | Source |
 | --- | --- | --- | --- |
-| T1 | Language | **TypeScript 7** (native `tsgo` compiler) for every TS package. **No TypeScript 6 fallback.** | Owner |
-| T2 | Backend | NestJS (REST + OpenAPI). Because TS 7 ships no JS compiler API and `tsgo` is not used for emit, NestJS is **compiled with SWC** (legacy decorators + decorator metadata) and **type-checked with `tsgo`**. To be validated in spike 0.3. | Owner + Default |
-| T3 | Web app | **React 19 with React Router 7 (framework mode, Vite, SSR)** at `app.enduva.soeenplop.dev`. Replaces SvelteKit because `svelte-check` needs TS 6 next to TS 7, and the owner allows **no workarounds** (former O10). `.tsx` and React Router's generated route types are plain TypeScript, so `tsgo` checks everything. To be confirmed in spike 0.3. | Owner |
+| T1 | Language | **TypeScript 7** (native Go-based compiler; CLI `tsc` from `typescript@7`) for every TS package. **No TypeScript 6 fallback.** | Owner |
+| T2 | Backend | NestJS (REST + OpenAPI). Because TS 7 ships no JS compiler API and its `tsc` is not used for emit, NestJS is **compiled with SWC directly** (legacy decorators + decorator metadata; no Nest CLI, which depends on an older `typescript`) and **type-checked with TS 7 `tsc --noEmit`**. To be validated in spike 0.3. | Owner + Default |
+| T3 | Web app | **React 19 with React Router 7 (framework mode, Vite, SSR)** at `app.enduva.soeenplop.dev`. Replaces SvelteKit because `svelte-check` needs TS 6 next to TS 7, and the owner allows **no workarounds** (former O10). `.tsx` and React Router's generated route types are plain TypeScript, so TS 7 `tsc` checks everything. To be confirmed in spike 0.3. | Owner |
 | T4 | Landing page | **Separate** React Router 7 app, **fully prerendered** (static output), at `enduva.soeenplop.dev`. | Owner |
 | T5 | API host | `api.enduva.soeenplop.dev`. | Owner |
 | T6 | Native apps | Swift 6 / SwiftUI, iPhone + Apple Watch. Targets **iOS 27 / watchOS 27** (latest; old devices are not supported). | Owner |
@@ -61,8 +61,8 @@ Once the plan is merged, decisions that matter for architecture are recorded as 
 | T20 | Secrets | 1Password Environments for local `.env`. GitHub Actions secrets and Dokploy env for deployed environments. | Default |
 | T21 | Apple Developer Program | Paid membership is available (Team ID provided during task 0.11a). | Owner (former O3) |
 | T22 | Staging domains | `staging.enduva.soeenplop.dev` (landing), `app.staging.enduva.soeenplop.dev` (web), `api.staging.enduva.soeenplop.dev` (API). Verified to resolve via the existing wildcard DNS. | Owner (former O8) |
-| T23 | Licence | **Elastic License 2.0 (ELv2)**, source-available: everyone may use, modify and self-host the code, but **may not offer it as a hosted/managed service** to third parties or circumvent licence-key functionality. This keeps the subscription business open. ELv2 is not an OSI open-source licence. Added as `LICENSE` in PR #1. | Owner (former O1) |
-| T24 | Contributions | External contributions require a **CLA** (e.g. via CLA Assistant), because under ELv2 alone the owner couldn't run contributed code as the hosted Enduva service or relicense it. Set up in task 0.2. | Default |
+| T23 | Licence | **Elastic License 2.0 (ELv2)**, source-available: everyone may use, modify and self-host the code, but **may not provide it to third parties as a hosted or managed service that gives users access to any substantial set of its features or functionality**, and may not circumvent licence-key functionality. This keeps the subscription business open. ELv2 is not an OSI open-source licence. Added as `LICENSE` in PR #1. | Owner (former O1) |
+| T24 | Contributions | External contributions require a **CLA** (e.g. via CLA Assistant), because under ELv2 alone the owner couldn't run contributed code as the hosted Enduva service or relicense it. The CLA explicitly grants the owner the right to use contributions in a hosted/managed service and to relicense them (incl. commercially). A required status check blocks unsigned external contributions before merge. Set up in task 0.2, with the CLA text approved by the owner. | Default |
 
 ## Process
 

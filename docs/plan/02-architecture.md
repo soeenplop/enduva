@@ -56,7 +56,7 @@ Key points:
 
 | Layer | Choice | Notes |
 | --- | --- | --- |
-| Language (TS) | TypeScript 7 (`tsgo`) | Type checking only. Emit is done by SWC / Vite / esbuild (see below) |
+| Language (TS) | TypeScript 7 (`typescript@7`, native CLI `tsc`) | Type checking only. Emit is done by SWC / Vite / esbuild (see below) |
 | Package manager / build | pnpm workspaces + Turborepo | Remote caching optional |
 | API framework | NestJS 11+ | Built with `@swc/core` (`legacyDecorator`, `decoratorMetadata`). `nest start -b swc` in dev |
 | Validation & contracts | Zod 4 schemas in `packages/contracts` | Shared by API + web. OpenAPI generated from them |
@@ -65,7 +65,7 @@ Key points:
 | AI | Vercel AI SDK (`ai`) with OpenAI provider | Structured output via Zod, tool calling for the coach. Model IDs via env |
 | Web | React 19 + React Router 7 (framework mode, Vite, SSR via `@react-router/node`) | Paraglide JS (i18n), Tailwind CSS 4, Radix-based components (shadcn/ui pattern), MapLibre GL (`react-map-gl`), Recharts/ECharts, TanStack Query for the generated API client |
 | Landing | React Router 7 with full prerendering (static files) | Same design tokens and UI package as the web app |
-| Lint / format | oxlint (type-aware via `tsgolint`, which builds on `tsgo`) + Prettier | typescript-eslint relies on the TS JS API that TS 7 lacks |
+| Lint / format | oxlint (type-aware via `tsgolint`, which builds on the TS 7 native compiler) + Prettier | typescript-eslint relies on the TS JS API that TS 7 lacks |
 | Tests (TS) | Vitest (+ `unplugin-swc` for Nest), Playwright E2E, Testcontainers or Supabase local for integration | |
 | iOS / watchOS | Swift 6.4, SwiftUI, SwiftData, HealthKit, WorkoutKit, ActivityKit, WidgetKit, VisionKit | Xcode 27, iOS/watchOS 27 deployment target |
 | Swift API client | Apple `swift-openapi-generator` from the API's OpenAPI spec | Regenerated in CI. Diff checked |
@@ -79,19 +79,20 @@ TS 7 ships the Go-based compiler but **not the full JS compiler API**. That affe
 
 | Tool | Problem | Plan |
 | --- | --- | --- |
-| NestJS DI (`emitDecoratorMetadata`) | Needs metadata emit | SWC (`@swc/core` directly or `nest build -b swc` **without** `--type-check`, because Nest's SWC type-check path runs its own TypeScript) emits metadata. `tsgo --noEmit` is the only type checker |
+| NestJS DI (`emitDecoratorMetadata`) | Needs metadata emit | **SWC directly** (`@swc/cli` + `@swc/core` with `legacyDecorator` and `decoratorMetadata`) emits metadata. **Not** via the Nest CLI (`nest build`/`nest start`), because the Nest CLI has a direct dependency on an older `typescript` package. Dev mode uses `swc --watch` + `node --watch`. TS 7 `tsc --noEmit` is the only type checker |
 | NestJS Swagger compiler plugin | Runs as a TS compiler plugin, which is unavailable with SWC + TS 7 | **Not used.** OpenAPI is generated from the Zod contracts in `packages/contracts` (e.g. `zod-openapi`), independently of Nest decorators and compiler plugins |
-| React / React Router | `.tsx` is plain TypeScript. React Router generates route types (`react-router typegen`) as `.ts` files | **No special checker needed:** `tsgo` type-checks components and the generated route types directly. Typegen runs before `tsgo` in CI. (SvelteKit was dropped because `svelte-check` needs TS 6 next to TS 7; former O10) |
+| React / React Router | `.tsx` is plain TypeScript. React Router generates route types (`react-router typegen`) as `.ts` files. `@react-router/dev` declares TypeScript 5/6 only as an **optional** peer dependency | **No special checker needed:** TS 7 `tsc` type-checks components and the generated route types directly. Typegen runs before `tsc` in CI. The optional TS 5/6 peer must stay uninstalled (lockfile audit). (SvelteKit was dropped because `svelte-check` needs TS 6 next to TS 7; former O10) |
 | typescript-eslint | Uses the JS API | Use oxlint with type-aware rules (`tsgolint`) instead |
 | drizzle-kit, vitest | Transpile via esbuild/oxc | Expected to work. Verify |
 
 **Spike 0.3 acceptance (all in CI, no TS 6 in the lockfile):**
 
 1. A representative Nest controller + service + guard with constructor injection boots and passes an e2e test (proves decorator metadata via SWC).
-2. `tsgo --noEmit` fails on an intentional type error in `apps/api`, `packages/*`, `apps/web` and `apps/landing`.
+2. TS 7 `tsc --noEmit` fails on an intentional type error in `apps/api`, `packages/*`, `apps/web` and `apps/landing`.
 3. A Zod contract → `openapi.json` → `swift-openapi-generator` client compiles for that route, and the web client types are generated from the same spec.
 4. In both React apps, a broken component prop and a broken route param/loader type (from `react-router typegen`) fail CI. Nothing in the toolchain pulls in TypeScript 6 (checked with `pnpm why typescript`).
-5. oxlint type-aware rules run on top of `tsgo`.
+5. oxlint type-aware rules run on top of the TS 7 compiler.
+6. **Pinned candidate stack** (exact versions in ADR-0001). `pnpm install --frozen-lockfile`, typegen, type-check and **production builds** of `api`, `web` and `landing` all pass, and a CI **lockfile audit** fails if the resolved lockfile contains any `typescript` below 7, any alias of it (`npm:typescript@…`), or any other pre-7 compiler package.
 
 If any criterion can't be met **without** TS 6, the spike stops, documents the gap in ADR-0001 and the owner decides (T1 says no TS 6). No silent fallback.
 
@@ -136,7 +137,7 @@ Swift code that runs on both iPhone and Watch (models, sync engine, HealthKit ma
 1. Clients sign in with Supabase Auth (email + password, magic link, Google OAuth, Sign in with Apple).
 2. Clients send the Supabase access token as `Authorization: Bearer` to the API.
 3. **Token verification:** the API verifies the JWT against Supabase's **JWKS** (asymmetric signing keys, cached with rotation support). It accepts only the asymmetric algorithm configured for the project (e.g. `ES256`) and never `HS256`/`none`. It requires the exact per-environment `iss` (`https://<project>.supabase.co/auth/v1`, local URL in dev), `aud = authenticated`, `role = authenticated`, and a valid `exp`/`iat` with small clock-skew tolerance. Only then is `sub` trusted as the user ID. Asymmetric signing keys are enabled in **local and hosted** environments, so the JWKS path is tested everywhere.
-4. **Account/session status:** a verified token can outlive logout, device revocation or account deletion (until `exp`). On **every** request (reads, writes, sync pulls, signed-URL creation) and before each **queued job** runs, the API checks that the profile is active (not deleted or locked) and that the token's `session_id` still exists and its device isn't revoked. This check is **synchronous and uncached**: an indexed lookup of profile, session and device status inside the request's own transaction, so once a revocation has committed, no later request is authorised. Only the JWKS keys are cached. Tests: reusing a deleted account's unexpired token → 401 everywhere. A revoked device's unexpired token → `401 device_revoked`, **also with a warmed authorization cache** (revoke right after a successful request).
+4. **Account/session status:** a verified token can outlive logout, device revocation or account deletion (until `exp`). On **every** request (reads, writes, sync pulls, file downloads, upload-URL creation) and before each **queued job** runs, the API checks that the profile is active (not deleted or locked) and that the token's `session_id` still exists and its device isn't revoked. This check is **synchronous and uncached**: an indexed lookup of profile, session and device status inside the request's own transaction, so once a revocation has committed, no later request is authorised. Only the JWKS keys are cached. Tests: reusing a deleted account's unexpired token → 401 everywhere. A revoked device's unexpired token → `401 device_revoked`, **also with a warmed authorization cache** (revoke right after a successful request).
 5. On the user's first request, the API creates their `profiles` row (or a DB trigger on `auth.users` does it).
 6. **Authorisation:** resource ownership checks in services. `role` (user/admin) and **entitlements** live in our DB, not in the JWT, so they can change without re-login.
 
@@ -148,6 +149,7 @@ RLS is only a safety net if the API actually runs **under** it, so:
 - **Transaction-local identity:** every request runs its queries in one transaction that first executes `set_config('request.jwt.claims', <verified claims>, true)` / `set local role`. Nothing is session-scoped, so this works with Supabase's **transaction pooler**. If the driver uses named prepared statements, they are disabled for the pooler.
 - **No Data API exposure:** API-only tables are not granted to `anon`/`authenticated`, and the API schema isn't exposed through PostgREST, because clients never query Supabase directly.
 - **Worker jobs** carry a `user_id`, and the worker sets the same transaction-local identity per job. Cross-user jobs (imports of global catalogs) use a dedicated catalog-writer role limited to catalog tables.
+- **Private file downloads** (exports, original activity files, meal photos, avatars, share-link media) are **never handed out as Supabase signed URLs**. Clients fetch them through API endpoints (`/v1/files/:id`, share endpoints) that run the full authorisation check on **each** request and stream the object from Storage server-side with `Cache-Control: no-store`. A revoked device or a revoked share link is therefore blocked immediately, also for downloads already started earlier. Uploads still use short-lived signed **upload** URLs, and the processing job re-checks authorisation and consent before using the file. Test: a download link obtained before revocation returns 401/404 afterwards.
 - **Tests:** an integration suite runs as user A against user B's data (parent and child tables, private custom foods/exercises, storage paths) **through the real pooler connection string**, and every query must return nothing or 404.
 
 ## Apple Health & sync
@@ -253,7 +255,8 @@ The food catalog is a **collective database of separately maintained datasets**.
 
 ## Internationalisation
 
-- Web + landing: Paraglide JS with message files in `packages/i18n/messages/{de,en}.json`. Locale from user setting → `Accept-Language` → `en`.
+- **Web app (SSR):** Paraglide JS with message files in `packages/i18n/messages/{de,en}.json`. Locale from user setting → `Accept-Language` → `en`, resolved per request.
+- **Landing (static):** no request-time negotiation. Every page is prerendered under **explicit locale paths** (`/de/…` and `/en/…`, including legal and data-sources pages) with the matching `<html lang>` and `hreflang` alternates. `/` is a static page that links to both and redirects client-side based on `navigator.language`. Task 0.10 verifies direct loads of `/de/…` and `/en/…` from the built static image.
 - Apple: String Catalogs (`Localizable.xcstrings`), and the same keys where it makes sense.
 - API: returns error **codes**, not prose. AI prompts carry the user's locale so model output is in the right language.
 - Data: `exercise_translations`, `food_translations` (locale, name, aliases).
