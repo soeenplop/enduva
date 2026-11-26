@@ -1,32 +1,49 @@
 # 04 — Roadmap
 
-Each line in the task tables is **one PR** (branch → worktree → review → merge). IDs are stable and used as issue titles (`[1.3] …`). Tasks marked ∥ can run in parallel with their siblings once their dependencies are merged.
+Each row in the task tables is **one PR** (branch → worktree → review → merge) with an **observable acceptance check**. A shared number with letter suffixes (`0.8a`, `0.8b`) groups the PRs of one parent topic. IDs are stable and used as issue titles (`[1.3] …`). Tasks marked ∥ can run in parallel with their siblings once their dependencies are merged.
 
 Once the owner approves the plan, phases become **GitHub milestones** and tasks become **issues**.
+
+**Gates** are checkpoints with explicit criteria. Work beyond a gate's scope may continue, but the gated action (e.g. accepting real user data) doesn't happen until the gate passes:
+
+| Gate | Blocks | Criteria |
+| --- | --- | --- |
+| **G1 — Real data** | Opening sign-up on **production** and storing real health data anywhere. Until then, staging uses **synthetic data only** | Legal basis documented (Art. 6(1)(b) for the service, Art. 9(2)(a) **explicit consent** for health data, separate purpose-specific consent for AI). DPIA screening done and, if required, a DPIA. Real privacy policy + imprint live on the landing page. Account deletion and data export work end to end, **including Storage objects and queued jobs**. The restore procedure re-applies deletions (deletion log) after a backup restore. AI provider terms + retention documented (see architecture). |
+| **G2 — External distribution** | External TestFlight and App Store | Guideline 4.8 met (Sign in with Apple or another qualifying login, see O2). Privacy nutrition labels. HealthKit usage strings. G1 passed. |
 
 ---
 
 ## Phase 0 — Foundations
 
-**Goal:** a deployed, empty-but-real system. You can sign up on staging (web + iOS) and see your profile. All tooling, CI and the review workflow are in place.
+**Goal:** a deployed, empty-but-real system. Sign-up works on **staging** (web + internal TestFlight) with synthetic accounts. Tooling, CI and the review workflow are in place.
 
-| ID | Type | Task | Depends on |
-| --- | --- | --- | --- |
-| 0.1 | docs | Project plan (this PR) | — |
-| 0.2 | chore | Repo hygiene: `AGENTS.md`/`CLAUDE.md` (agent rules), `CONTRIBUTING.md`, PR + issue templates, licence (O1), `.editorconfig`, commitlint + lefthook, repo settings (merge commits only, auto-delete branches), branch ruleset on `main` | 0.1 |
-| 0.3 | spike | **TypeScript 7 toolchain**: NestJS + SWC + `tsgo` type-check, SvelteKit type-checking (`.svelte`), oxlint type-aware, Vitest, drizzle-kit. Output: ADR-0001 + minimal working configs | 0.2 |
-| 0.4 | chore | Monorepo scaffold: pnpm workspaces, Turborepo, `packages/config` (tsconfig/oxlint/prettier/vitest presets), empty `contracts`, `domain`, `db`, `i18n`, `ui` | 0.3 |
-| 0.5 | ci | GitHub Actions: install/cache, lint, typecheck, test, build, commitlint (PR title + commits), gitleaks, CodeQL, Renovate config | 0.4 |
-| 0.6 | design ∥ | **Brand identity by GPT-6.2 Astra**: app icon (iOS/watchOS sizes, favicon, OG image), wordmark, colour + type tokens in `packages/ui/tokens` | 0.2 |
-| 0.7 | feat(db) ∥ | Supabase local (`supabase init`), Drizzle setup, migration flow (drizzle-kit → `supabase/migrations`), `profiles`, `user_settings`, `entitlements`, `ai_consents` + RLS, seed. ADR-0002 (DB access & RLS strategy) | 0.4 |
-| 0.8 | feat(api) | NestJS skeleton: config (Zod-validated env), pino logging, health check, problem+json errors, Supabase JWT guard (JWKS), `/v1/me` GET/PATCH, OpenAPI generation + CI drift check, throttling | 0.7 |
-| 0.9 | feat(web) ∥ | SvelteKit app: Paraglide (de/en), Tailwind + tokens, Supabase auth (email/password, magic link, Google), Turnstile on sign-up, app shell + navigation, profile/settings page | 0.8 |
-| 0.10 | feat(landing) ∥ | Landing page skeleton (de/en): hero, three pillars, AI section, CTA, imprint + privacy placeholders, OG tags, sitemap | 0.6 |
-| 0.11 | feat(apple) ∥ | Xcode project: iOS app + watchOS app + `EnduvaKit` package, SwiftLint/swift-format, String Catalogs, generated OpenAPI client, sign-in (email, Google), profile screen. Build script for CI/local | 0.8 |
-| 0.12 | build(deploy) | Dockerfiles (api/worker, web, landing), `deploy/compose.yaml`, GHCR images in CI, Supabase Cloud projects (staging + prod, EU), `supabase db push` in CI, Dokploy CLI deploy script, domains + TLS, release-please | 0.8, 0.9, 0.10 |
-| 0.13 | feat | GDPR basics: account deletion (API + web + iOS), data export job skeleton, consent screen (AI + Health), onboarding flow (body data + goals) | 0.9, 0.11 |
+| ID | Type | Task | Acceptance check | Depends on |
+| --- | --- | --- | --- | --- |
+| 0.1 | docs | Project plan (this PR) | Owner + reviewer approval | — |
+| 0.2 | chore | Repo hygiene: `AGENTS.md`/`CLAUDE.md`, `CONTRIBUTING.md`, PR + issue templates, licence (O1), `.editorconfig`, commitlint + lefthook, labels (`needs-arbiter`, …) | A bad commit message is rejected by the hook | 0.1 |
+| 0.3 | spike | **TypeScript 7 toolchain** (criteria in architecture). ADR-0001 | All five spike criteria pass in CI, or the blocker is documented for the owner (O10) | 0.2 |
+| 0.4 | chore | Monorepo scaffold: pnpm, Turborepo, `packages/config`, empty `contracts`, `domain`, `db`, `i18n`, `ui` | `pnpm turbo build typecheck lint test` green on an empty workspace | 0.3 |
+| 0.5 | ci | GitHub Actions (lint, typecheck, test, build, commitlint, gitleaks, CodeQL), Renovate. **Ruleset on `main`**: PRs required, required status checks, no force pushes | A PR with a type error is blocked from merging | 0.4 |
+| 0.6 | design ∥ | Brand identity: owner picks a concept (PR #2), then final icon set (iOS/watchOS/favicon/OG) + `packages/ui/tokens` | Tokens importable from `@enduva/ui/tokens`. Icon renders at 16–1024 px | 0.4 |
+| 0.7 | feat(db) ∥ | Supabase local, Drizzle, migration flow, roles (`enduva_api`, `enduva_worker`, owner), `profiles`, `user_settings`, `entitlements`, `consents`, `devices` + RLS. ADR-0002 | **Cross-tenant test suite** passes through the pooler. `supabase db reset` reproducible | 0.4 |
+| 0.8a | feat(api) | NestJS skeleton: Zod env config, pino, health, problem+json, throttling, transaction-per-request DB access with transaction-local identity | `/v1/health` e2e test. Boots under SWC. `tsgo` clean | 0.7 |
+| 0.8b | feat(api) | Auth: JWKS verification per the architecture rules, account/session status check, `/v1/me` GET/PATCH | Tests: wrong `iss`/`aud`/alg rejected. Deleted account with an unexpired token gets 401 on writes | 0.8a |
+| 0.8c | feat(contracts) | Zod → OpenAPI generation, CI drift check, generated TS web client + Swift client package | Changing a schema without regenerating fails CI. Swift client compiles | 0.8b |
+| 0.9a | feat(web) | SvelteKit app shell: Paraglide (de/en), Tailwind + tokens, layout, navigation, error pages | Language switch works. Playwright smoke test | 0.6, 0.8c |
+| 0.9b | feat(web) | Web auth: email/password, magic link, Google, Turnstile, profile/settings page | Playwright: sign up → confirm (Inbucket locally) → edit profile | 0.9a |
+| 0.10 | feat(landing) ∥ | Landing page skeleton (de/en): hero, pillars, AI section, CTA, **legal page placeholders**, OG tags, sitemap | Lighthouse ≥ 90 (perf/a11y/SEO) | 0.6 |
+| 0.11a | feat(apple) ∥ | Xcode project: iOS + watchOS + `EnduvaKit`, SwiftLint/swift-format, String Catalogs, build/test scripts | `xcodebuild test` green for both platforms in CI or locally | 0.6, 0.8c |
+| 0.11b | feat(apple) | iOS sign-in (email, Google), profile screen, generated client wired. **TestFlight internal upload path** pinned (Xcode/Transporter/`altool`) | Build appears in TestFlight internal and signs in against staging | 0.11a, 0.12c |
+| 0.12a | build(deploy) ∥ | Dockerfiles (api/worker, web, landing), image build + push to GHCR **by digest** | Images build in CI. Containers start locally with `compose.yaml` | 0.8a, 0.9a, 0.10 |
+| 0.12b | build(deploy) ∥ | Supabase Cloud bootstrap: staging + prod projects (EU), asymmetric JWT keys, auth config, roles, `supabase db push` job | Migrations apply to staging from CI. Cross-tenant suite passes against staging | 0.7 |
+| 0.12c | build(deploy) | Dokploy staging deploy: compose stack, domains/TLS, env, deploy script (CLI), per-environment concurrency lock, smoke tests | Merge to `main` → staging updated with the **same image digests** CI built. Smoke tests green | 0.12a, 0.12b |
+| 0.12d | build(deploy) | Release wiring: release-please + protected production deploy job that **promotes the staging-tested digests** | Dry-run release deploys the tested digests to prod (empty DB) | 0.12c |
+| 0.13a | feat | Onboarding (body data, goals) + consent screens (health data, AI), web + iOS | Consent versions stored. Revoking consent is effective immediately | 0.9b, 0.11b |
+| 0.13b | feat | **Account deletion** (DB rows, Storage objects, queued jobs cancelled, Auth user, device sessions) + deletion log for restores | Integration test: nothing of the user remains, and queued jobs don't run | 0.12c |
+| 0.13c | feat | **Data export** (JSON + original files as ZIP, expiring link) | Export contains every user-owned table + Storage objects | 0.13b |
+| 0.14 | feat | Sign in with Apple (if O2 = yes) on iOS + web | Works on device and web. Account linking with an existing email | 0.11b |
 
-**Exit criteria:** staging is live at the staging domains. Sign-up works via web and TestFlight internal build. CI is green. The review workflow has been exercised on all PRs above.
+**Exit criteria:** staging is live. Synthetic accounts can sign up via web and internal TestFlight. Deletion and export work. CI is green, `main` is protected, and the review workflow has run on every PR above.
 
 ---
 
@@ -34,21 +51,25 @@ Once the owner approves the plan, phases become **GitHub milestones** and tasks 
 
 **Goal:** all Apple Workouts (run, ride, hike, swim) show up in Enduva automatically with map, charts and an AI analysis. Files from other devices can be imported.
 
-| ID | Type | Task | Depends on |
-| --- | --- | --- | --- |
-| 1.1 | feat(db,api) | Activities model (+ laps, streams storage per ADR-0003), idempotent ingest endpoint, list/detail/update/delete endpoints | 0.12 |
-| 1.2 | feat(domain) ∥ | Pure functions: splits per km, moving time, elevation smoothing, pace/speed, HR zones (if O5), stream downsampling (LTTB), polyline encoding. Unit-tested | 0.4 |
-| 1.3 | feat(apple) | HealthKit permissions + workout import (anchored query, routes, HR, splits, swim laps), background delivery, upload via sync engine v1 | 1.1 |
-| 1.4 | feat(api) ∥ | File import: upload to Storage via signed URL → pg-boss job → FIT/GPX/TCX parsing → activity | 1.1 |
-| 1.5 | feat(web) ∥ | Activity list (filters by sport), calendar, weekly/monthly totals | 1.1 |
-| 1.6 | feat(web) | Activity detail: MapLibre map, synced charts (elevation, pace/speed, HR, cadence), splits table, edit metadata, file-upload UI | 1.2, 1.5 |
-| 1.7 | feat(apple) ∥ | Activity list + detail (MapKit, Swift Charts), edit metadata | 1.3 |
-| 1.8 | feat(api) | AI foundation: AI module, model registry, consent guard, usage + quotas, prompt versioning, test fixtures with recorded responses | 0.13 |
-| 1.9 | feat(ai) | Post-activity AI analysis (worker job after ingest, shown on web + iOS, regenerate on demand) | 1.8, 1.6, 1.7 |
-| 1.10 | feat ∥ | Public share links for activities (read-only page on the web app) | 1.6 |
-| 1.11 | feat | Simple personal records + HR zone distribution (pending O5) | 1.2 |
+| ID | Type | Task | Acceptance check | Depends on |
+| --- | --- | --- | --- | --- |
+| 1.0a | feat(api) | **Sync protocol** (ADR-0004): `sync_state`, push/pull, base-version conflicts, tombstones, cursor expiry | Test suite from the architecture (parallel transactions, duplicates, stale-after-delete, expiry) green against real Postgres | 0.8c |
+| 1.0b | feat(apple) | `EnduvaKit` sync engine: SwiftData store, outbox, push/pull, conflict notices, full resync | Offline create/edit/delete → reconnect → server state matches. Tests with a mocked API | 1.0a, 0.11b |
+| 1.1 | feat(db,api) | Activities model (+ laps, streams storage per ADR-0003), ingest via sync, list/detail/update/delete | API tests incl. cross-tenant access | 1.0a |
+| 1.2 | feat(domain) ∥ | Splits, moving time, elevation smoothing, pace/speed, HR zones (if O5), LTTB downsampling, polyline encoding | Unit tests with fixture streams | 0.4 |
+| 1.3a | feat(apple) | HealthKit permissions + anchored-query import (workouts, routes, HR, splits, swim laps), **foreground catch-up**, handling of late-arriving routes/samples (re-import updates the activity) | Synthetic HealthKit data on a simulator imports correctly. A route added later updates the activity | 1.0b, 1.1 |
+| 1.3b | feat(apple) | **Background delivery**: entitlement, observer queries, completion handling, retry | **Real-device check:** a new workout is imported in the background at the system's discretion. Opening the app always catches up fully | 1.3a |
+| 1.4a | feat(api) ∥ | File import backend: signed upload, pg-boss job, FIT/GPX/TCX parsing | Fixture files from Garmin, Wahoo and Coros parse into correct activities | 1.1 |
+| 1.4b | feat(web) | File upload UI with progress + parse status | Playwright: upload a FIT file → activity appears | 1.4a, 1.5 |
+| 1.5 | feat(web) ∥ | Activity list (filters), calendar, weekly/monthly totals | Playwright with seeded data | 1.1 |
+| 1.6 | feat(web) | Activity detail: MapLibre map, charts, splits, edit metadata | Playwright + visual check on a fixture activity | 1.2, 1.5 |
+| 1.7 | feat(apple) ∥ | Activity list + detail (MapKit, Swift Charts), edit metadata | UI test on fixture data | 1.3a |
+| 1.8 | feat(api) | AI foundation: AI module, model registry, consent + account re-check before provider egress, usage + quotas, prompt versioning, recorded fixtures | A job queued before consent revocation is not sent. Quota exceeded → 429 | 0.13a |
+| 1.9 | feat(ai) | Post-activity AI analysis (worker job, shown on web + iOS, regenerate) | Fixture-based tests. Output in the user's language | 1.8, 1.6, 1.7 |
+| 1.10 | feat ∥ | **Public share links**: explicit opt-in per activity, response **field allowlist** (no private notes, no HR unless opted in, no device info), route privacy (hide map, or trim the first/last 500 m), revocation, `Cache-Control: no-store` / short CDN TTL | Tests: revoked link → 404 at once and no cached copy. Private fields never in the response | 1.6 |
+| 1.11 | feat | Simple personal records + HR zone distribution (pending O5) | Unit + UI tests | 1.2 |
 
-**Exit criteria:** the owner's last 12 months of Apple Workouts are imported correctly (spot-checked against the Fitness app). New workouts appear within minutes without opening the app.
+**Exit criteria:** with a **synthetic** 12-month HealthKit dataset (and, once G1 has passed, the owner's real data), imports match the source (spot-checked against the Fitness app). Background delivery works on a real device. Foreground catch-up is complete.
 
 ---
 
@@ -56,67 +77,77 @@ Once the owner approves the plan, phases become **GitHub milestones** and tasks 
 
 **Goal:** Enduva replaces Hevy for the owner, including full logging on the Apple Watch.
 
-| ID | Type | Task | Depends on |
-| --- | --- | --- | --- |
-| 2.1 | feat(db) | Exercise library: schema, translations, import from the open dataset (licence check in PR), custom exercises API | 0.12 |
-| 2.2 | feat(api) | Routines + folders CRUD, workouts + sets model and API, sync support | 2.1 |
-| 2.3 | feat(domain) ∥ | 1RM estimation (Epley/Brzycki), PR detection, volume aggregation, "previous values" lookup logic | 0.4 |
-| 2.4 | feat(web) ∥ | Exercise browser, routine editor (drag & drop, supersets), workout history | 2.2 |
-| 2.5 | feat(apple) | iPhone workout logging: start from routine/empty, set types, RPE/RIR, rest timer, previous values, finish summary. SwiftData + outbox sync for workouts | 2.2 |
-| 2.6 | feat(apple) | Live Activity + Dynamic Island for the active workout | 2.5 |
-| 2.7 | feat(apple) | **watchOS standalone logging**: `HKWorkoutSession`, routine picker, set logging (Digital Crown for weight/reps), rest timer + haptics, HR. Sync via WatchConnectivity / direct | 2.5 |
-| 2.8 | feat(apple) | Mirrored workout session (Watch ↔ iPhone), save HKWorkout to Health with Enduva metadata, import-dedupe | 2.7 |
-| 2.9 | feat ∥ | Progress: PRs, est. 1RM and volume charts per exercise/muscle group (web + iOS) | 2.3, 2.4, 2.5 |
-| 2.10 | feat(ai) | AI routine generation + progression suggestions | 1.8, 2.2 |
+| ID | Type | Task | Acceptance check | Depends on |
+| --- | --- | --- | --- | --- |
+| 2.1 | feat(db) | Exercise library: schema, translations, import from the open dataset (licence check in PR), custom exercises API | Seeded library searchable in de/en. Custom exercises are private (cross-tenant test) | 0.12c |
+| 2.2 | feat(api) | Routines + folders CRUD, workouts + sets model and API, sync support | API + sync tests | 2.1, 1.0a |
+| 2.3 | feat(domain) ∥ | 1RM (Epley/Brzycki), PR detection, volume, "previous values" | Unit tests | 0.4 |
+| 2.4 | feat(web) ∥ | Exercise browser, routine editor (drag & drop, supersets), workout history | Playwright | 2.2 |
+| 2.5 | feat(web) | **Web workout logging** (start from routine/empty, log sets, rest timer, finish) | Playwright: log a full workout in the browser → it appears on iOS after sync | 2.4 |
+| 2.6 | feat(apple) | iPhone workout logging: set types, RPE/RIR, rest timer, previous values, summary, offline via outbox | Offline workout → reconnect → synced. UI test | 2.2, 1.0b |
+| 2.7 | feat(apple) | Live Activity + Dynamic Island | Shown on device during a workout | 2.6 |
+| 2.8a | feat(apple) | **Watch device session** (ADR-0005): link code, own session, refresh, revocation | Real paired device: works with the phone off. Sign-out on the phone wipes the Watch | 0.11b, 0.8b |
+| 2.8b | feat(watch) | **watchOS standalone logging**: `HKWorkoutSession`, routine picker, Digital Crown input, rest timer + haptics, HR, sync via WatchConnectivity / direct | Real device: complete a workout with the phone off → synced later without duplicates | 2.6, 2.8a |
+| 2.9 | feat(apple) | Mirrored sessions per the recording-mode table, single HealthKit save authority, start from iPhone wakes the Watch, disconnect handling | Real devices: mirrored, Watch-only and phone-only modes each produce **exactly one** HKWorkout and one Enduva workout | 2.8b |
+| 2.10 | feat ∥ | Progress: PRs, est. 1RM, volume charts (web + iOS) | UI tests on fixture data | 2.3, 2.4, 2.6 |
+| 2.11 | feat(ai) | AI routine generation + progression suggestions | Generated routines pass validation (volume limits). Fixture tests | 1.8, 2.2 |
 
-**Exit criteria:** the owner logs four consecutive weeks of strength training only in Enduva (Watch + iPhone) without data loss.
+**Exit criteria:** four consecutive weeks of strength training logged only in Enduva (Watch + iPhone + one web session) without data loss or duplicates. Real data only after G1.
 
 ---
 
 ## Phase 3 — Nutrition
 
-**Goal:** a daily nutrition diary with European products, barcode scanning, AI photo/text logging and a dynamic calorie goal.
+**Goal:** a daily nutrition diary with European products, barcode scanning, AI photo/text logging and a dynamic calorie goal. Works fully offline on iOS.
 
-| ID | Type | Task | Depends on |
-| --- | --- | --- | --- |
-| 3.1 | feat(db) | Foods schema, translations, servings, search (tsvector de/en + trigram), BLS 4.0 importer (licence terms documented) | 0.12 |
-| 3.2 | feat(api) ∥ | Open Food Facts: barcode lookup + cache, optional DACH subset importer as worker job (pending O4), attribution | 3.1 |
-| 3.3 | feat(api) | Diary API: entries, meals, quick-add, water, favourites/recents, custom foods, nutrient snapshots | 3.1 |
-| 3.4 | feat(domain) ∥ | BMR/TDEE, goal pace → kcal, macro split, **dynamic target from training energy**, daily target computation | 0.4 |
-| 3.5 | feat(api) | Goals API + daily targets (uses activities/workouts energy) | 3.3, 3.4 |
-| 3.6 | feat(web) ∥ | Diary UI, food search, custom foods, goals settings, weight chart | 3.3, 3.5 |
-| 3.7 | feat(apple) | Diary UI, food search, **barcode scanner** (VisionKit), water, weight. HealthKit write (nutrition, water, weight) + weight read | 3.3, 3.5 |
-| 3.8 | feat(ai) | **AI recognition** (photo + text): items + grams + clarifying questions, answer round-trip, DB matching, confirm UI (web + iOS) | 1.8, 3.2, 3.6, 3.7 |
-| 3.9 | feat ∥ | Recipes (private): ingredients, portions, log recipe | 3.3 |
-| 3.10 | feat(apple) | Widgets: today's calories/macros, water | 3.7 |
+| ID | Type | Task | Acceptance check | Depends on |
+| --- | --- | --- | --- | --- |
+| 3.1 | feat(db) | Food catalog schema (**separate datasets per source**, see architecture), translations, servings, composable search, **BLS 4.0 importer** (CC BY 4.0 attribution) | Search "Vollkornbrot" / "whole grain bread" returns BLS items. Attribution is visible | 0.12c |
+| 3.2 | feat(api) ∥ | **Open Food Facts dataset**: barcode lookup + cache in the OFF dataset, optional DACH importer job (O4), ODbL attribution + share-alike offer page | Barcode lookup works. OFF data lives only in OFF tables. The attribution page is linked from the apps | 3.1 |
+| 3.3 | feat(api) | Diary API: entries, meals, quick-add, water, favourites/recents, custom foods, nutrient snapshots, sync support | API + sync tests. Custom foods private (cross-tenant test) | 3.1, 1.0a |
+| 3.4 | feat(domain) ∥ | BMR/TDEE, goal pace → kcal, macro split, dynamic target from training energy | Unit tests | 0.4 |
+| 3.5 | feat(api) | Goals API + daily targets (pulls energy from activities **and** workouts) | Targets change after a logged activity/workout | 3.3, 3.4, 1.1, 2.2 |
+| 3.6 | feat(web) ∥ | Diary UI, food search, custom foods, goals, weight chart | Playwright | 3.3, 3.5 |
+| 3.7a | feat(apple) | **iOS diary with offline CRUD**: food search (cached recents/favourites offline), entries, water, weight, outbox sync | **Offline:** add, edit and delete entries → reconnect → server matches, including editing/deleting an entry created offline | 3.3, 3.5, 1.0b |
+| 3.7b | feat(apple) | Barcode scanner (VisionKit) + HealthKit write (nutrition, water, weight) + weight read, deduped | Scan → entry. Health shows the samples once. Deleting removes them from Health | 3.7a, 3.2 |
+| 3.8a | feat(ai) | Recognition storage + API: photo upload, `ai_recognitions`, model call, items + grams + clarifying questions, answer round-trip | Fixture tests: "Auflauf" → asks about cheese. Answers refine the grams | 1.8, 3.3 |
+| 3.8b | feat(ai) | Matching of recognised items to the catalog (BLS/OFF/custom), "AI estimate" fallback | ≥ 80 % top-3 match rate on a fixture set of 30 meals | 3.8a, 3.2 |
+| 3.8c | feat(web) ∥ | Recognition UI on the web (upload/text, questions, confirm) | Playwright with a mocked AI | 3.8b, 3.6 |
+| 3.8d | feat(apple) ∥ | Recognition UI on iOS (camera/text, questions, confirm, offline queueing of the request) | UI test with a mocked AI | 3.8b, 3.7a |
+| 3.9 | feat ∥ | Recipes (private) | API + UI tests | 3.3 |
+| 3.10 | feat(apple) | Widgets: today's calories/macros, water | Visible on device. Updates after logging | 3.7a |
 
-**Exit criteria:** the owner logs two weeks of food only in Enduva. The AI recognises ≥ 80 % of everyday meals with acceptable corrections, judged subjectively plus with a fixture set of 30 meal photos.
+**Exit criteria:** two weeks of food logged only in Enduva (once G1 has passed), including at least one offline day. AI recognition meets the 3.8b fixture threshold.
 
 ---
 
 ## Phase 4 — AI coach & training plans
 
-| ID | Type | Task | Depends on |
-| --- | --- | --- | --- |
-| 4.1 | feat(api) | Plans model + API (plans, planned sessions, completion matching to activities/workouts) | Phase 1–2 |
-| 4.2 | feat(ai) | Goal-based plan generation (endurance / strength / hybrid) with server-side validation | 4.1 |
-| 4.3 | feat ∥ | Plan calendar UI (web + iOS), move/skip sessions | 4.1 |
-| 4.4 | feat(apple) | WorkoutKit: schedule planned endurance sessions as custom workouts on the Watch | 4.3 |
-| 4.5 | feat(ai) | Weekly plan adaptation job (completed vs. planned, RPE, missed sessions) | 4.2 |
-| 4.6 | feat(ai) | Chat coach with read-only tools, conversation history, delete (web + iOS) | 1.8 |
-| 4.7 | feat ∥ | Weekly summary (training + nutrition), optional push notification | 4.5 |
+| ID | Type | Task | Acceptance check | Depends on |
+| --- | --- | --- | --- | --- |
+| 4.1 | feat(api) | Plans model + API (plans, planned sessions, completion matching) | Completing an activity marks the matching session done | 1.1, 2.2 |
+| 4.2 | feat(ai) | Goal-based plan generation (endurance / strength / hybrid) with server-side validation | Generated plans pass validation (progression, rest days). Fixture tests | 4.1, 1.8 |
+| 4.3 | feat ∥ | Plan calendar UI (web + iOS), move/skip sessions | Playwright + UI test | 4.1 |
+| 4.4 | feat(apple) | **WorkoutKit**: request authorization, check supported activity/device, schedule planned endurance sessions, **reschedule or remove** when a session moves or is skipped | Real device: a scheduled workout appears in the Workout app. Moving it updates it, skipping removes it. Denied permission shows a clear state | 4.3 |
+| 4.5 | feat(ai) | Weekly plan adaptation job | Fixture scenarios (missed week, high RPE) produce sensible adjustments | 4.2 |
+| 4.6 | feat(ai) | Chat coach with read-only tools (activities, workouts, diary, body, plan), history, delete | Tools are scoped to the current user (cross-tenant test). Deleting the history removes it | 1.8, 1.1, 2.2, 3.3, 4.1 |
+| 4.7 | feat ∥ | Weekly summary (training + nutrition), optional push | Summary generated for a fixture week | 4.5 |
+
+**Exit criteria (install/smoke gate):** a fresh TestFlight install → onboarding → generate a 4-week hybrid plan → sessions appear in the calendar and the endurance ones in the Watch's Workout app → complete one → the plan adapts → the coach answers a question citing the user's data correctly.
 
 ---
 
 ## Phase 5 — Public beta
 
-| ID | Type | Task |
-| --- | --- | --- |
-| 5.1 | feat(landing) | Final landing page: screenshots, feature tour, FAQ, TestFlight / App Store links, real legal texts |
-| 5.2 | chore | Production hardening: backups (O4), monitoring/alerts, rate-limit review, load test of hot endpoints |
-| 5.3 | feat | Admin area: users, quotas, entitlements, feature flags |
-| 5.4 | chore(apple) | App Store submission: privacy nutrition labels, HealthKit usage strings, review notes, Sign in with Apple (O2) |
-| 5.5 | docs | User docs / help pages (de/en) |
+| ID | Type | Task | Acceptance check |
+| --- | --- | --- | --- |
+| 5.1 | feat(landing) | Final landing page: screenshots, feature tour, FAQ, TestFlight / App Store links | Lighthouse ≥ 90. de/en complete |
+| 5.2 | chore | Production hardening: backups incl. Storage objects (see deployment), **restore drill**, monitoring/alerts, rate-limit review, load test of hot endpoints | Restore drill documented and successful. p95 targets met under load |
+| 5.3 | feat | Admin area: users, quotas, entitlements, feature flags (incl. AI kill switch) | Admin-only (authorisation tests) |
+| 5.4 | chore(apple) | **G2** checklist + App Store submission | G2 criteria met. Build accepted for external testing |
+| 5.5 | docs | User docs / help pages (de/en) | Linked from the apps and landing |
+
+**Exit criteria (install/smoke gate):** G1 and G2 passed. A new external tester can install via public TestFlight link, sign up, connect Health, log a workout, a meal and an activity, export their data and delete their account, with no manual intervention by the owner.
 
 ## Later (backlog, not scheduled)
 
