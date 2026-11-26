@@ -11,9 +11,13 @@
     "generate": "pnpm -r --workspace-concurrency=1 run generate",
     "db:generate": "pnpm --filter @spike/api run db:generate",
     "typecheck": "pnpm -r run typecheck",
+    "test:negative": "node scripts/negative-tests.mjs",
+    "audit:lockfile": "node scripts/audit-lockfile.mjs --self-test && node scripts/audit-lockfile.mjs pnpm-lock.yaml ../../pnpm-lock.yaml",
     "lint": "oxlint --type-aware --deny-warnings",
     "test": "pnpm -r run test",
     "build": "pnpm -r run build",
+    "smoke": "node scripts/smoke.mjs",
+    "check:prerender": "node scripts/check-prerender.mjs landing/dist/client",
     "swift:openapi": "cp contracts/openapi.json swift-client/Sources/SpikeAPIClient/openapi.json"
   },
   "devDependencies": {
