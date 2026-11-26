@@ -79,12 +79,21 @@ TS 7 ships the Go-based compiler but **not the full JS compiler API**. That affe
 
 | Tool | Problem | Plan |
 | --- | --- | --- |
-| NestJS DI (`emitDecoratorMetadata`) | Needs metadata emit | SWC emits metadata. `tsgo --noEmit` only type-checks |
-| `svelte-check` | Uses the TS language service via the JS API | Check the current status. If not usable: run `tsgo` on `.ts` files + `svelte-check`-style checks for `.svelte` via the Svelte language tools' TS 7 support. Record the result in an ADR |
-| typescript-eslint | Uses the JS API | Use oxlint with type-aware rules instead |
+| NestJS DI (`emitDecoratorMetadata`) | Needs metadata emit | SWC (`@swc/core` directly or `nest build -b swc` **without** `--type-check`, because Nest's SWC type-check path runs its own TypeScript) emits metadata. `tsgo --noEmit` is the only type checker |
+| NestJS Swagger compiler plugin | Runs as a TS compiler plugin, which is unavailable with SWC + TS 7 | **Not used.** OpenAPI is generated from the Zod contracts in `packages/contracts` (e.g. `zod-openapi`), independently of Nest decorators and compiler plugins |
+| `svelte-check` | Uses the TS language service via the JS API. The documented `--tsgo` / `--tsgo-experimental-api` modes currently **require TS 6 to be installed next to TS 7** | **Likely blocker for T1. Owner decision needed (O10).** The spike pins a candidate stack, audits which compiler actually runs, and is only "green" if CI fails on deliberately broken `.svelte` props/templates and SvelteKit route types in both `web` and `landing` **without** TS 6 installed |
+| typescript-eslint | Uses the JS API | Use oxlint with type-aware rules (`tsgolint`) instead |
 | drizzle-kit, vitest | Transpile via esbuild/oxc | Expected to work. Verify |
 
-If one of these turns out to be unworkable **without** TS 6, the spike stops and the owner decides (T1 says no TS 6).
+**Spike 0.3 acceptance (all in CI, no TS 6 in the lockfile):**
+
+1. A representative Nest controller + service + guard with constructor injection boots and passes an e2e test (proves decorator metadata via SWC).
+2. `tsgo --noEmit` fails on an intentional type error in `apps/api`, `packages/*` and plain `.ts` files of the SvelteKit apps.
+3. A Zod contract → `openapi.json` → `swift-openapi-generator` client compiles for that route, and the web client types are generated from the same spec.
+4. `.svelte` type errors and SvelteKit route-type errors fail CI (see the `svelte-check` row).
+5. oxlint type-aware rules run on top of `tsgo`.
+
+If any criterion can't be met **without** TS 6, the spike stops, documents the gap in ADR-0001 and the owner decides (T1 says no TS 6). No silent fallback.
 
 ## Repository layout
 

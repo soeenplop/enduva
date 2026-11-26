@@ -2,7 +2,7 @@
 
 | # | Risk | Likelihood | Impact | Mitigation |
 | --- | --- | --- | --- | --- |
-| R1 | **TypeScript 7 tooling gaps.** No JS compiler API in TS 7.0, so decorator metadata emit, `svelte-check` and typescript-eslint may not work | High | High | Spike 0.3 before any feature work: SWC for NestJS emit, `tsgo` for type-checking, oxlint instead of typescript-eslint. If a blocker remains, the owner decides (no silent TS 6 fallback) |
+| R1 | **TypeScript 7 tooling gaps.** No JS compiler API in TS 7.0, so decorator metadata emit, `svelte-check` and typescript-eslint may not work | High | High | Spike 0.3 before any feature work, with hard CI acceptance criteria (see architecture): SWC for NestJS emit, `tsgo` for type-checking, Zod-based OpenAPI (no Nest compiler plugin), oxlint instead of typescript-eslint. `svelte-check` currently needs TS 6 next to TS 7, so the owner decides O10. No silent TS 6 fallback |
 | R2 | **App Store rejection** for Google login without Sign in with Apple (Guideline 4.8) | High (for App Store / external TestFlight) | Medium | Decide O2 early. Supabase supports Apple login, so adding it is cheap |
 | R3 | **HealthKit limitations**: data only on device, background delivery is throttled, route/stream data is heavy | Medium | Medium | Anchored queries + background delivery + catch-up on app launch. Compressed stream upload. Resumable sync |
 | R4 | **AI nutrition accuracy** (portion sizes from photos are hard) | High | Medium | Clarifying questions, editable gram amounts, matching to real DB entries, "AI estimate" badge, nothing logged without confirmation, fixture set to track quality over time |
