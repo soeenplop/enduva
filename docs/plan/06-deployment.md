@@ -31,19 +31,25 @@ Staging domains are a proposal (O8). Wildcard DNS already points to the Dokploy 
 flowchart LR
   PR[PR] --> CI[CI: lint · typecheck · test · build]
   CI --> MERGE[merge to main]
-  MERGE --> IMG[Build + push images<br/>tag sha-xxxx]
-  IMG --> MIG_S[supabase db push → staging]
-  MIG_S --> DEP_S[dokploy compose deploy → staging]
-  DEP_S --> SMOKE[Smoke tests]
-  MERGE --> RP[release-please PR]
-  RP -- merged --> REL[release-please job<br/>creates tag + release]
-  REL -- same workflow run<br/>release_created == true --> APPROVE{protected environment<br/>production: manual approval}
-  APPROVE --> MIG_P[supabase db push → prod]
-  MIG_P --> DEP_P[dokploy deploy → prod<br/>staging-tested digests]
+  subgraph RUN["one workflow run per push to main"]
+    IMG[Build + push images<br/>by digest] --> MIG_S[supabase db push → staging]
+    MIG_S --> DEP_S[deploy digests → staging]
+    DEP_S --> SMOKE[Smoke tests]
+    SMOKE -- pass --> RECEIPT[Staging receipt<br/>SHA + digests]
+    RECEIPT --> RP[release-please<br/>via GitHub App token]
+    RP -- release_created --> APPROVE{production environment<br/>manual approval}
+    APPROVE --> MIG_P[supabase db push → prod]
+    MIG_P --> DEP_P[deploy same digests → prod]
+  end
+  MERGE --> RUN
 ```
 
-- **Release trigger:** tags created by release-please with the default `GITHUB_TOKEN` do **not** trigger other workflows. So the production deploy is a **job in the same workflow run** as release-please, gated on its `release_created` output and on the protected `production` GitHub Environment (manual approval). Alternative if separate workflows are needed: a GitHub App token for release-please.
-- **Promote, don't rebuild:** every image is referenced **by digest** (`…@sha256:…`). The staging deploy records the digests per commit (as a deployment artifact). Production deploys exactly the digests that passed the staging smoke tests for the release commit, and refuses if none exist. 0.12c/0.12d prove that the Dokploy CLI deploys a pinned digest (compose file rendered with digests, then `dokploy compose` deploy).
+- **Strict ordering in one run:** every push to `main` runs build → staging migrations → staging deploy → smoke tests → **staging receipt** → release-please → (only if a release was created) production. A release can therefore never be created before its commit passed staging. The receipt (release SHA + image digests + smoke result) is stored durably as a GitHub deployment status + artifact.
+- **Production requires a receipt:** the production job (protected `production` environment, manual approval) looks up the receipt for the **exact release SHA**. It refuses to run migrations or deploy if the receipt is missing or failed.
+- **Recovery:** if anything fails after the release was created (e.g. a flaky smoke test), the fix is to **re-run the failed jobs** of that run, or to start a `workflow_dispatch` "promote release" workflow with the tag. It re-uses an existing receipt, or redeploys that SHA to staging and smoke-tests it first. No manual tagging.
+- **Release PR checks:** release-please authenticates with a **GitHub App token** ("Enduva Release" app, installed only on this repo with contents + pull-requests write), not `GITHUB_TOKEN`. Its release PRs therefore trigger the required checks normally, and the PR can be merged under the ruleset like any other PR.
+- **Promote, don't rebuild:** every image is referenced **by digest** (`…@sha256:…`). Production deploys exactly the digests from the receipt. 0.12c/0.12d prove that the Dokploy CLI deploys a pinned digest (compose file rendered with digests, then `dokploy compose` deploy).
+- **0.12d acceptance:** run the whole chain from a generated release PR (required checks start automatically) through merge to the production deploy, including once with **deliberately slow staging** (production waits) and once with a **failing smoke test** (no release, no prod deploy, recovery via re-run).
 - **Serialisation:** GitHub Actions `concurrency` groups per environment (`deploy-staging`, `deploy-production`) so migrations and deploys never overlap. Migrations always run before the deploy in the same job.
 
 - Deploy commands go through the **Dokploy CLI** (`dokploy compose …`, installed v0.30.x), scripted in `deploy/scripts/deploy.sh` so they run the same way locally and in GitHub Actions. The exact commands are fixed in task 0.12 (`dokploy compose --help`).
@@ -79,5 +85,6 @@ flowchart LR
   - *Database:* Supabase Pro daily backups (prod). PITR is a **paid add-on on top of Pro** and only added if the data volume justifies it (budget: decided with O4). Plus a nightly encrypted `pg_dump` to S3-compatible storage (GitHub Actions cron) for the owner's own retention (30 days).
   - *Storage objects:* database backups only contain Storage **metadata**, not the files. Buckets with irreplaceable data (`activity-files` originals, `avatars`) are synced nightly to encrypted object storage (e.g. `rclone` with server-side encryption), with 30-day retention. `meal-photos` (deleted after recognition per retention policy) and `exports` (temporary) are **not** backed up.
   - *Deletions vs. restores:* account deletions are recorded in a deletion log. After any restore, the log is replayed so deleted users stay deleted (GDPR).
-  - *Restore drill:* restore DB + objects into a scratch project and verify (task 5.2, then at least twice a year).
+  - *Restore drill:* restore DB + objects into a scratch project in maintenance mode, replay the deletion log, verify, then serve (task G1.4 before real data, again on production backups in 5.2, then at least twice a year).
+  - *Deletion log* lives **outside the rollback boundary** (versioned object storage or a separate database, task G1.3), so a database restore can't roll it back.
 - **Runbooks** in `docs/runbooks/`: deploy rollback (redeploy previous tag), restore from backup, rotate keys, AI quota emergency stop (feature flag).
