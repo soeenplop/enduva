@@ -1,4 +1,4 @@
-// @expect TS2345
+// @expect TS2345 at 5:93
 import { ActivitiesService } from '../src/activities/activities.service.js';
 
 // 'feet' is not in the contract's unit enum.

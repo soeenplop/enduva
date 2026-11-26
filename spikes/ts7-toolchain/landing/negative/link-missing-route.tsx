@@ -1,4 +1,4 @@
-// @expect TS2322
+// @expect TS2322 at 5:27
 import { Link } from '@tanstack/react-router';
 
 // The landing app has no /pricing route.

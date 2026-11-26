@@ -1,4 +1,4 @@
-// @expect TS2551
+// @expect TS2551 at 8:32
 import { getRouteApi } from '@tanstack/react-router';
 
 const route = getRouteApi('/activities/$activityId');

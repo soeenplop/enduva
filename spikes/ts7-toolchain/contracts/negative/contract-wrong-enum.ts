@@ -1,4 +1,4 @@
-// @expect TS2322
+// @expect TS2322 at 7:3
 import type { Activity } from '../src/index.js';
 
 // The inferred contract type rejects a sport that is not in the enum.

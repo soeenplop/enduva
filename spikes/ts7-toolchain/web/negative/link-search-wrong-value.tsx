@@ -1,4 +1,4 @@
-// @expect TS2322
+// @expect TS2322 at 6:77
 import { Link } from '@tanstack/react-router';
 
 // `units` must be 'metric' | 'imperial' (from the Zod contract used as validateSearch).
