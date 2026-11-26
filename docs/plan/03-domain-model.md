@@ -54,7 +54,7 @@ erDiagram
 | Entity | Key fields |
 | --- | --- |
 | `activities` | sport (`run`/`ride`/`hike`/`swim_pool`/`swim_open_water`), sub_type (indoor/trail/…), started_at, time_zone, duration_s, moving_time_s, distance_m, elevation_gain_m, avg/max HR, avg pace/speed, avg cadence, energy_kcal, rpe, title, description, private_notes, source (`healthkit`/`fit`/`gpx`/`tcx`/`manual`), external_id, device, visibility (`private`/`link`) |
-| `activity_load` | activity_id, load_value, method (`trimp`/`hrtss`/`rtss`/`stss`/`srpe`), thresholds_version, is_estimate |
+| `activity_load` | activity_id, load_value, method (`hrtss`/`rtss`/`stss`/`srpe_if`), all on the TSS-equivalent scale, thresholds_version, is_estimate |
 | `user_thresholds` | hr_max, hr_rest, lthr, threshold_pace, css (swim), source (`auto`/`user`/`healthkit`), valid_from |
 | `daily_training_load` | user_id, date (local), load, ctl, atl, tsb (derived, recomputed by job) |
 | `activity_laps` | index, kind (`auto_km`/`device_lap`/`pool_length`), start offset, duration, distance, avg HR, avg pace |

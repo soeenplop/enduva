@@ -58,7 +58,7 @@ Key points:
 | --- | --- | --- |
 | Language (TS) | TypeScript 7 (`typescript@7`, native CLI `tsc`) | Type checking only. Emit is done by SWC / Vite / esbuild (see below) |
 | Package manager / build | pnpm workspaces + Turborepo | Remote caching optional |
-| API framework | NestJS 11+ | Built with `@swc/core` (`legacyDecorator`, `decoratorMetadata`). `nest start -b swc` in dev |
+| API framework | NestJS 11+ (runtime packages only, no Nest CLI) | Built with `@swc/cli` + `@swc/core` directly (`legacyDecorator`, `decoratorMetadata`). Dev: `swc --watch` + `node --watch` |
 | Validation & contracts | Zod 4 schemas in `packages/contracts` | Shared by API + web. OpenAPI generated from them |
 | ORM / migrations | Drizzle ORM + drizzle-kit | drizzle-kit generates SQL into `supabase/migrations/`. RLS policies in SQL |
 | Jobs | pg-boss | Runs on Supabase Postgres (session pooler / direct connection) |
@@ -149,7 +149,7 @@ RLS is only a safety net if the API actually runs **under** it, so:
 - **Transaction-local identity:** every request runs its queries in one transaction that first executes `set_config('request.jwt.claims', <verified claims>, true)` / `set local role`. Nothing is session-scoped, so this works with Supabase's **transaction pooler**. If the driver uses named prepared statements, they are disabled for the pooler.
 - **No Data API exposure:** API-only tables are not granted to `anon`/`authenticated`, and the API schema isn't exposed through PostgREST, because clients never query Supabase directly.
 - **Worker jobs** carry a `user_id`, and the worker sets the same transaction-local identity per job. Cross-user jobs (imports of global catalogs) use a dedicated catalog-writer role limited to catalog tables.
-- **Private file downloads** (exports, original activity files, meal photos, avatars, share-link media) are **never handed out as Supabase signed URLs**. Clients fetch them through API endpoints (`/v1/files/:id`, share endpoints) that run the full authorisation check on **each** request and stream the object from Storage server-side with `Cache-Control: no-store`. A revoked device or a revoked share link is therefore blocked immediately, also for downloads already started earlier. Uploads still use short-lived signed **upload** URLs, and the processing job re-checks authorisation and consent before using the file. Test: a download link obtained before revocation returns 401/404 afterwards.
+- **Private file downloads** (exports, original activity files, meal photos, avatars, share-link media) are **never handed out as Supabase signed URLs**. Clients fetch them through API endpoints (`/v1/files/:id`, share endpoints) that run the full authorisation check on **each** request and stream the object from Storage server-side with `Cache-Control: no-store`. **All buckets are private**, with no Storage policies for `anon`/`authenticated`, so clients can't read objects directly. Only the API's server role can. A revoked device or a revoked share link is therefore blocked for **every request started after the revocation**. Streams already in flight at that moment are not cut off. They are short (bounded file sizes, no resumable downloads), which is accepted. Tests: direct Storage reads with a user JWT are denied for every bucket. Uploads still use short-lived signed **upload** URLs, and the processing job re-checks authorisation and consent before using the file. Test: a download link obtained before revocation returns 401/404 afterwards.
 - **Tests:** an integration suite runs as user A against user B's data (parent and child tables, private custom foods/exercises, storage paths) **through the real pooler connection string**, and every query must return nothing or 404.
 
 ## Apple Health & sync
@@ -232,6 +232,7 @@ apps/api/src/ai/
 - **Training:** plan generation produces a typed plan (weeks → sessions with structured intervals or strength prescriptions). The server validates it (volume sanity limits, rest days) before saving.
 - **Coach:** the chat model gets read-only tools (`getActivities`, `getWorkouts`, `getDiarySummary`, `getBodyTrend`, `getCurrentPlan`) scoped to the current user. Conversations are stored and can be deleted.
 - **Cost control:** every call is logged in `ai_usage` (tokens, model, feature, cost estimate). Quotas per entitlement tier and day/month. Long-running calls run in the worker and are streamed or polled.
+- **Health-data consent at every processing step:** besides ingestion (0.13a), any ordinary processing of stored or derived health data (analysis, recomputation of load series, stats jobs, AI calls) requires an **active health-data consent**. **AI egress requires both** the AI consent and the health-data consent. After withdrawal, the account is in a *consent withdrawn* state: no ingestion, no processing, no AI. **Export and deletion stay available.** The user is told that their health data will be deleted after a 30-day grace period (for export) unless they give consent again. The exact handling is confirmed in the legal review (G1.5).
 - **Privacy & data processing:**
   - Only feature-relevant data is sent (data-minimised payloads per feature, documented in `docs/privacy/ai-data-flows.md`: which endpoint receives which fields).
   - Consent is purpose-specific (AI nutrition, AI training/coach), stored with timestamp and version, and revocable.
@@ -260,7 +261,14 @@ The food catalog is a **collective database of separately maintained datasets**.
 - Apple: String Catalogs (`Localizable.xcstrings`), and the same keys where it makes sense.
 - API: returns error **codes**, not prose. AI prompts carry the user's locale so model output is in the right language.
 - Data: `exercise_translations`, `food_translations` (locale, name, aliases).
-- Formatting: always metric. Locale-aware number/date formatting (`de-DE` uses decimal commas).
+- Formatting: always metric.
+
+## Maps & tile privacy
+
+- Web maps use MapLibre GL with **OpenFreeMap** vector tiles, but **never directly from the browser**. A first-party **tile proxy** (`tiles.enduva.soeenplop.dev`, a caching reverse proxy in the compose stack) fetches the tiles. It strips cookies, `Referer`, user agents and any user identifiers, and caches aggressively. OpenFreeMap therefore only ever sees our server's IP and cached-tile misses, never which user views which area. The style URL is configurable (Protomaps/MapTiler later).
+- iOS uses MapKit (Apple's maps, covered by Apple's privacy terms and the App Store privacy label).
+- **Public share pages:** the viewport and all tile requests are derived **only from the redacted route** (privacy zones removed), also in the publishing preview. Hidden routes load no map tiles at all.
+- Verified with a browser network check (Playwright): no requests to third-party tile hosts, no `Referer`, and on share pages no tiles for areas inside privacy zones. Locale-aware number/date formatting (`de-DE` uses decimal commas).
 
 ## Security baseline
 
