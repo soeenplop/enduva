@@ -16,7 +16,7 @@
     "lint": "oxlint --type-aware --deny-warnings",
     "test": "pnpm -r run test",
     "build": "pnpm -r run build",
-    "smoke": "node scripts/smoke.mjs",
+    "smoke": "node scripts/smoke.mjs && node scripts/ssr-isolation.mjs",
     "check:prerender": "node scripts/check-prerender.mjs landing/dist/client",
     "swift:openapi": "cp contracts/openapi.json swift-client/Sources/SpikeAPIClient/openapi.json"
   },
