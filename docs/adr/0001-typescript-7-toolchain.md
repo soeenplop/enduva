@@ -41,7 +41,7 @@ Neither is a workaround: no TS < 7, no alias, no compatibility shim, and no patc
 | Lint | `oxlint` / `oxlint-tsgolint` | 1.95.0 / 7.0.2009 | tsgolint is built on typescript-go and targets TS 7 |
 | Tests | `vitest` / `unplugin-swc` / `supertest` | 5.1.2 / 2.0.0 / 7.3.2 | |
 | DB | `drizzle-orm` / `drizzle-kit` | 0.45.4 / 0.31.11 | Latest stable. 1.0 is at `rc.6`; decide in 0.7 |
-| Types | `@types/node` / `@types/react` / `@types/react-dom` / `@types/express` / `@types/supertest` | 26.6.11 / 19.3.3 / 19.3.0 / 5.0.6 / 7.2.1 | |
+| Types | `@types/node` / `@types/react` / `@types/react-dom` / `@types/express` / `@types/supertest` | 24.19.2 / 19.3.3 / 19.3.0 / 5.0.6 / 7.2.1 | `@types/node` matches the minimum supported Node major (`engines: >=24`, CI). A workspace `overrides` entry keeps transitive `@types/*` (`@types/node: '*'`) on the same version, so `tsc` cannot accept a Node 26-only API |
 | Swift client | `swift-openapi-generator` / `-runtime` / `-urlsession` | 1.14.4 / 1.13.4 / 1.4.0 | `exact:` pins plus a committed `Package.resolved` |
 | Swift toolchain | Xcode | 26.6 on `macos-26` CI runner. 27.2 (Swift 6.4.2) locally | `swift-tools-version: 6.0` |
 
@@ -106,7 +106,7 @@ Also checked in CI:
 
 ## Consequences
 
-- 0.4 can scaffold the monorepo with the stack above. Copy `tsconfig.base.json`, `.swcrc`, `.oxlintrc.json`, `tsr.config.json` (with the footer) and both audit/negative scripts into `packages/config` / CI. Use Node 24 in CI.
+- 0.4 can scaffold the monorepo with the stack above. Copy `tsconfig.base.json`, `.swcrc`, `.oxlintrc.json`, `tsr.config.json` (with the footer) and both audit/negative scripts into `packages/config` / CI. Use Node 24 in CI and pin `@types/node` (plus an `overrides` entry) to the same major as the minimum supported or deployed Node.
 - 0.5 should make the lockfile audit and `pnpm why typescript` required checks, and keep `typescript-eslint`, `@nestjs/cli`, `ts-morph` and every `@typescript/native-preview*` on the banned list.
 - 0.8c uses **Orval** (fetch client + mutator), not openapi-typescript or hey-api, unless they ship a TS 7-compatible release (re-check on dependency updates; the audit and a codegen step in CI would catch a regression).
 - Any new tool that imports `typescript` at runtime has to be checked first. Its peer range is not enough evidence (see hey-api).

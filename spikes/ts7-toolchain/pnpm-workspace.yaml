@@ -6,6 +6,11 @@ packages:
   - web
   - landing
 
+# One @types/node for the whole graph, matching the minimum supported Node major (engines, CI).
+# Transitive @types/* packages ask for `@types/node: '*'`, which would otherwise pull the latest major.
+overrides:
+  '@types/node': 24.19.2
+
 # Dependency build scripts are denied unless listed here with `true`.
 allowBuilds:
   '@nestjs/core': false
@@ -19,7 +24,6 @@ minimumReleaseAgeExclude:
   - '@oxlint-tsgolint/linux-x64@7.0.2009'
   - '@oxlint-tsgolint/win32-arm64@7.0.2009'
   - '@oxlint-tsgolint/win32-x64@7.0.2009'
-  - '@types/node@26.6.11'
   - oxlint-tsgolint@7.0.2009
   - '@nestjs/common@12.6.3'
   - '@nestjs/core@12.6.3'
