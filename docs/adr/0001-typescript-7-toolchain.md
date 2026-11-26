@@ -102,6 +102,11 @@ Also checked in CI:
 
 - The web app's Node server preset (0.12a). The smoke test calls the SSR bundle's `fetch` handler directly.
 - The OpenAPI drift check in CI and committing `openapi.json` (0.8c). The spike generates it and the client in CI and git-ignores them.
+- **Runtime behaviour of the generated clients (0.8c).** Criterion 3 is a compile-time check: the Swift client is generated from the spec and compiles, but no Swift code calls the API. Two gaps remain for the handoff:
+  - **Auth:** [`ActivityLoader`](../../spikes/ts7-toolchain/swift-client/Sources/SpikeAPIClient/ActivityLoader.swift) builds the `Client` without a middleware that sets `Authorization: Bearer …`, so every call to the real API would get 401. The spec declares the `bearer` scheme, but the generator does not apply it.
+  - **Error bodies:** the spec documents 400/401/404 as `application/problem+json` with the required `Problem` fields `type`, `title`, `status` and `code`. The Nest exceptions actually answer with `application/json` bodies such as `{"code":"invalid_token"}` (400 adds `issues`). Decoding the documented problem body would fail (wrong content type, missing required fields), so `LoaderError.problem` is never reached. The web query's `res.data.code` only works because `code` happens to be present.
+
+  0.8c adds a `ClientMiddleware` for the bearer token and a Nest exception filter that emits the documented problem bodies, and verifies authenticated requests and error-body decoding at runtime (Swift and web) before the generated client becomes a production dependency.
 - Turborepo (0.4), Playwright (0.9a), Xcode project and SwiftLint (0.11a). Xcode 27 on CI runners is still in public preview.
 
 ## Consequences
