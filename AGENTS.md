@@ -33,15 +33,17 @@ Rules for coding agents working on Enduva. The full workflow is in [`docs/plan/0
 
 All agents share the owner's GitHub account, so every comment starts with an author prefix:
 
-- **`[Sol]`**: reviewer (GPT-6.2 Sol). Each comment has a severity: `blocker`, `major`, `minor`, `nit`, `question`. The summary ends with `Verdict: changes requested` or `Verdict: LGTM @ <full-head-sha>`.
+- **`[Sol]`**: reviewer (GPT-6.2 Sol). Each comment has a severity: `blocker`, `major`, `minor`, `nit`, `question`. The summary ends with `Verdict: changes requested @ <full-head-sha>` or `Verdict: LGTM @ <full-head-sha>`.
 - **`[Claude]`**: implementer / lead. Answer **every** review comment in its thread: `Fixed in <sha>` or a reasoned disagreement.
 - **`[Astra]`**: designer (GPT-6.2 Astra).
+
+The lead starts a **new** Sol run for every PR and for each re-check. A re-check receives the prior findings and replies, resolves fixed threads, answers disagreements and respects recorded owner rulings.
 
 A verdict is bound to a head SHA. **Any push invalidates it** and needs a new reviewer run (at least a delta review). After two exchanges without agreement on a thread, the lead adds `needs-arbiter` and posts `[Claude] arbiter request`. The owner's `Ruling: …` is final; apply it, reply `[Claude] ruling applied in <sha>`, resolve the thread, remove the label.
 
 ## Merging
 
-Only the lead merges, and only when all of these hold **for the current head SHA**:
+The lead's merge procedure: merge only when all of these hold **for the current head SHA**:
 
 - `Verdict: LGTM @ <head-sha>`; open nits are turned into follow-up issues.
 - All `blocker`/`major` threads resolved, no `needs-arbiter` label.
@@ -54,7 +56,7 @@ Merge commits only, with a head guard:
 gh pr merge <n> --merge --match-head-commit <head-sha> --delete-branch
 ```
 
-Never squash or rebase-merge. Never push to `main` directly.
+Never squash or rebase-merge. Never push to `main` directly. The owner can always merge or veto manually ([`05-workflow.md` → Merging](docs/plan/05-workflow.md#merging)).
 
 ## Definition of done
 
