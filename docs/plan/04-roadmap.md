@@ -9,7 +9,7 @@ Once the owner approves the plan, phases become **GitHub milestones** and tasks 
 | Gate | Blocks | Criteria |
 | --- | --- | --- |
 | **G1 — Real data** | Opening sign-up on **production** and storing real health data anywhere. Until then, staging uses **synthetic data only**, and production sign-up is **disabled in Supabase Auth** (not just hidden in the UI) | Legal basis documented (Art. 6(1)(b) for the service, Art. 9(2)(a) **explicit consent** for health data, separate purpose-specific consent for AI). DPIA screening done and, if required, a DPIA. Tasks **G1.1–G1.4** merged and verified: real privacy policy + imprint live, data-sources page live, deletion-aware restore drill passed, sign-up lock verified. Account deletion and data export work end to end, **including Storage objects and queued jobs**. AI provider terms + retention documented (see architecture). |
-| **G2 — External distribution** | External TestFlight and App Store | Guideline 4.8 met (Sign in with Apple or another qualifying login, see O2). Privacy nutrition labels. HealthKit usage strings. G1 passed. |
+| **G2 — External distribution** | External TestFlight and App Store | Guideline 4.8 met (Sign in with Apple, task 0.14). Privacy nutrition labels. HealthKit usage strings. G1 passed. |
 
 ---
 
@@ -20,16 +20,16 @@ Once the owner approves the plan, phases become **GitHub milestones** and tasks 
 | ID | Type | Task | Acceptance check | Depends on |
 | --- | --- | --- | --- | --- |
 | 0.1 | docs | Project plan (this PR) | Owner + reviewer approval | — |
-| 0.2 | chore | Repo hygiene: `AGENTS.md`/`CLAUDE.md`, `CONTRIBUTING.md`, PR + issue templates, licence (O1), `.editorconfig`, commitlint + lefthook, labels (`needs-arbiter`, …) | A bad commit message is rejected by the hook | 0.1 |
-| 0.3 | spike | **TypeScript 7 toolchain** (criteria in architecture). ADR-0001 | All five spike criteria pass in CI, or the blocker is documented for the owner (O10) | 0.2 |
+| 0.2 | chore | Repo hygiene: `AGENTS.md`/`CLAUDE.md`, `CONTRIBUTING.md`, PR + issue templates, CLA bot for external contributions (ELv2 `LICENSE` already added in 0.1), `.editorconfig`, commitlint + lefthook, labels (`needs-arbiter`, …) | A bad commit message is rejected by the hook | 0.1 |
+| 0.3 | spike | **TypeScript 7 toolchain** (criteria in architecture). ADR-0001 | All five spike criteria pass in CI, or the blocker is documented for the owner | 0.2 |
 | 0.4 | chore | Monorepo scaffold: pnpm, Turborepo, `packages/config`, empty `contracts`, `domain`, `db`, `i18n`, `ui` | `pnpm turbo build typecheck lint test` green on an empty workspace | 0.3 |
 | 0.5 | ci | GitHub Actions (lint, typecheck, test, build, commitlint, gitleaks, CodeQL), Renovate. **Ruleset on `main`**: PRs required, required status checks, no force pushes | A PR with a type error is blocked from merging | 0.4 |
-| 0.6 | design ∥ | Brand identity: owner picks a concept (PR #2), then final icon set (iOS/watchOS/favicon/OG) + `packages/ui/tokens` | Tokens importable from `@enduva/ui/tokens`. Icon renders at 16–1024 px | 0.4 |
+| 0.6 | design ∥ | Brand identity: final production assets for the chosen **concept B "Daybreak"** (Icon Composer layers, iOS dark/tinted, watchOS 1088 px, favicon, OG image) + `packages/ui/tokens` | Tokens importable from `@enduva/ui/tokens`. Icon renders at 16–1024 px | 0.4 |
 | 0.7 | feat(db) ∥ | Supabase local, Drizzle, migration flow, roles (`enduva_api`, `enduva_worker`, owner), `profiles`, `user_settings`, `entitlements`, `consents`, `devices` + RLS. ADR-0002 | **Cross-tenant test suite** passes through the pooler. `supabase db reset` reproducible | 0.4 |
 | 0.8a | feat(api) | NestJS skeleton: Zod env config, pino, health, problem+json, throttling, transaction-per-request DB access with transaction-local identity | `/v1/health` e2e test. Boots under SWC. `tsgo` clean | 0.7 |
 | 0.8b | feat(api) | Auth: JWKS verification per the architecture rules, account/session status check, `/v1/me` GET/PATCH | Tests: wrong `iss`/`aud`/alg rejected. Deleted account with an unexpired token gets 401 on writes | 0.8a |
 | 0.8c | feat(contracts) | Zod → OpenAPI generation, CI drift check, generated TS web client + Swift client package | Changing a schema without regenerating fails CI. Swift client compiles | 0.8b |
-| 0.9a | feat(web) | SvelteKit app shell: Paraglide (de/en), Tailwind + tokens, layout, navigation, error pages | Language switch works. Playwright smoke test | 0.6, 0.8c |
+| 0.9a | feat(web) | React Router app shell: Paraglide (de/en), Tailwind + tokens, layout, navigation, error boundaries | Language switch works. Playwright smoke test | 0.6, 0.8c |
 | 0.9b | feat(web) | Web auth: email/password, magic link, Google, Turnstile, profile/settings page | Playwright: sign up → confirm (Inbucket locally) → edit profile | 0.9a |
 | 0.10 | feat(landing) ∥ | Landing page skeleton (de/en): hero, pillars, AI section, CTA, **legal page placeholders**, OG tags, sitemap | Lighthouse ≥ 90 (perf/a11y/SEO) | 0.6 |
 | 0.11a | feat(apple) ∥ | Xcode project: iOS + watchOS + `EnduvaKit`, SwiftLint/swift-format, String Catalogs, build/test scripts | `xcodebuild test` green for both platforms in CI or locally | 0.6, 0.8c |
@@ -37,11 +37,12 @@ Once the owner approves the plan, phases become **GitHub milestones** and tasks 
 | 0.12a | build(deploy) ∥ | Dockerfiles (api/worker, web, landing), image build + push to GHCR **by digest** | Images build in CI. Containers start locally with `compose.yaml` | 0.8a, 0.9a, 0.10 |
 | 0.12b | build(deploy) ∥ | Supabase Cloud bootstrap: staging + prod projects (EU), asymmetric JWT keys, auth config, roles, `supabase db push` job | Migrations apply to staging from CI. Cross-tenant suite passes against staging | 0.7 |
 | 0.12c | build(deploy) | Dokploy staging deploy: compose stack, domains/TLS, env, deploy script (CLI), per-environment concurrency lock, smoke tests | Merge to `main` → staging updated with the **same image digests** CI built. Smoke tests green | 0.12a, 0.12b |
-| 0.12d | build(deploy) | Release wiring: release-please + protected production deploy job that **promotes the staging-tested digests** | Dry-run release deploys the tested digests to prod (empty DB). Includes the deployment-doc cases: slow staging, failing smoke test, an **overlapping push + release-PR merge** (no untested SHA is ever released), and a **cancelled queued release run** (the pending release is completed by the next run) | 0.12c |
+| 0.12d | build(deploy) | Release wiring: "Enduva Release" GitHub App (created by the owner), release-please + protected production deploy job that **promotes the staging-tested digests** | Dry-run release deploys the tested digests to prod (empty DB). Includes the deployment-doc cases: slow staging, failing smoke test, an **overlapping push + release-PR merge** (no untested SHA is ever released), and a **cancelled queued release run** (the pending release is completed by the next run) | 0.12c |
+| 0.12e | build(deploy) ∥ | **GlitchTip** on Dokploy (own compose stack with its Postgres + Valkey) at `errors.enduva.soeenplop.dev`, projects for api/worker/web/landing/iOS, DSNs in env | A test exception from the API appears in GlitchTip | 0.12c |
 | 0.13a | feat | Onboarding (body data, goals) + consent screens (health data, AI), web + iOS | Consent versions stored. Revoking consent is effective immediately | 0.9b, 0.11b |
 | 0.13b | feat | **Account deletion** (DB rows, Storage objects, queued jobs cancelled, Auth user, device sessions) + deletion log for restores | Integration test: nothing of the user remains, and queued jobs don't run | 0.12c |
 | 0.13c | feat | **Data export** (JSON + original files as ZIP, expiring link) | Export contains every user-owned table + Storage objects | 0.13b |
-| 0.14 | feat | Sign in with Apple (if O2 = yes) on iOS + web | Works on device and web. Account linking with an existing email | 0.11b |
+| 0.14 | feat | Sign in with Apple on iOS + web | Works on device and web. Account linking with an existing email | 0.11b |
 
 **Exit criteria:** staging is live. Synthetic accounts can sign up via web and internal TestFlight. Deletion and export work. CI is green, `main` is protected, and the review workflow has run on every PR above.
 
@@ -69,7 +70,7 @@ These can run in parallel with Phase 1. G1 passes only when all are merged and v
 | 1.0a | feat(api) | **Sync protocol** (ADR-0004): `sync_state`, push/pull, base-version conflicts, tombstones, cursor expiry | Test suite from the architecture (parallel transactions, duplicates, stale-after-delete, expiry) green against real Postgres | 0.8c |
 | 1.0b | feat(apple) | `EnduvaKit` sync engine: SwiftData store, outbox, push/pull, conflict notices, full resync | Offline create/edit/delete → reconnect → server state matches. Tests with a mocked API | 1.0a, 0.11b |
 | 1.1 | feat(db,api) | Activities model (+ laps, streams storage per ADR-0003), ingest via sync, list/detail/update/delete | API tests incl. cross-tenant access | 1.0a |
-| 1.2 | feat(domain) ∥ | Splits, moving time, elevation smoothing, pace/speed, HR zones (if O5), LTTB downsampling, polyline encoding | Unit tests with fixture streams | 0.4 |
+| 1.2 | feat(domain) ∥ | Splits, moving time, elevation smoothing, pace/speed, HR zones (pending O5), LTTB downsampling, polyline encoding | Unit tests with fixture streams | 0.4 |
 | 1.3a | feat(apple) | HealthKit permissions + anchored-query import (workouts, routes, HR, splits, swim laps), **foreground catch-up**, handling of late-arriving routes/samples (re-import updates the activity) | Synthetic HealthKit data on a simulator imports correctly. A route added later updates the activity | 1.0b, 1.1 |
 | 1.3b | feat(apple) | **Background delivery**: entitlement, observer queries, completion handling, retry | **Real-device check:** a new workout is imported in the background at the system's discretion. Opening the app always catches up fully | 1.3a |
 | 1.4a | feat(api) ∥ | File import backend: signed upload, pg-boss job, FIT/GPX/TCX parsing | Fixture files from Garmin, Wahoo and Coros parse into correct activities | 1.1 |
@@ -116,7 +117,7 @@ These can run in parallel with Phase 1. G1 passes only when all are merged and v
 | ID | Type | Task | Acceptance check | Depends on |
 | --- | --- | --- | --- | --- |
 | 3.1 | feat(db) | Food catalog schema (**separate datasets per source**, see architecture), translations, servings, composable search, **BLS 4.0 importer** (CC BY 4.0 attribution) | Search "Vollkornbrot" / "whole grain bread" returns BLS items. Attribution is visible | 0.12c |
-| 3.2 | feat(api) ∥ | **Open Food Facts dataset**: barcode lookup + cache in the OFF dataset, optional DACH importer job (O4), ODbL attribution + share-alike offer page | Barcode lookup works. OFF data lives only in OFF tables. The attribution page is linked from the apps | 3.1 |
+| 3.2 | feat(api) ∥ | **Open Food Facts dataset**: barcode lookup + cache in the OFF dataset, optional DACH importer job (sized to the Supabase plan), ODbL attribution + share-alike offer page | Barcode lookup works. OFF data lives only in OFF tables. The attribution page is linked from the apps | 3.1 |
 | 3.3 | feat(api) | Diary API: entries, meals, quick-add, water, favourites/recents, custom foods, nutrient snapshots, sync support | API + sync tests. Custom foods private (cross-tenant test) | 3.1, 1.0a |
 | 3.3b | feat(api) ∥ | **Body metrics API**: weight, body fat, measurements, trend (smoothed), HealthKit-sourced samples via sync | API + sync tests. Trend endpoint returns a smoothed series | 3.3, 1.0a |
 | 3.4 | feat(domain) ∥ | BMR/TDEE, goal pace → kcal, macro split, dynamic target from training energy | Unit tests | 0.4 |

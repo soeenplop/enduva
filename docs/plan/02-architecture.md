@@ -5,8 +5,8 @@
 ```mermaid
 flowchart LR
   subgraph Clients
-    LP[Landing page<br/>SvelteKit static]
-    WEB[Web app<br/>SvelteKit]
+    LP[Landing page<br/>React Router, prerendered]
+    WEB[Web app<br/>React Router SSR]
     IOS[iPhone app<br/>SwiftUI]
     WATCH[Watch app<br/>SwiftUI]
   end
@@ -63,15 +63,15 @@ Key points:
 | ORM / migrations | Drizzle ORM + drizzle-kit | drizzle-kit generates SQL into `supabase/migrations/`. RLS policies in SQL |
 | Jobs | pg-boss | Runs on Supabase Postgres (session pooler / direct connection) |
 | AI | Vercel AI SDK (`ai`) with OpenAI provider | Structured output via Zod, tool calling for the coach. Model IDs via env |
-| Web | SvelteKit 2, Svelte 5, `adapter-node` | Paraglide JS (i18n), Tailwind CSS 4, MapLibre GL, LayerChart/ECharts |
-| Landing | SvelteKit, prerendered | Same design tokens package as the web app |
-| Lint / format | oxlint (type-aware via `tsgolint`, which builds on `tsgo`) + Prettier (`prettier-plugin-svelte`) | typescript-eslint relies on the TS JS API that TS 7 lacks |
+| Web | React 19 + React Router 7 (framework mode, Vite, SSR via `@react-router/node`) | Paraglide JS (i18n), Tailwind CSS 4, Radix-based components (shadcn/ui pattern), MapLibre GL (`react-map-gl`), Recharts/ECharts, TanStack Query for the generated API client |
+| Landing | React Router 7 with full prerendering (static files) | Same design tokens and UI package as the web app |
+| Lint / format | oxlint (type-aware via `tsgolint`, which builds on `tsgo`) + Prettier | typescript-eslint relies on the TS JS API that TS 7 lacks |
 | Tests (TS) | Vitest (+ `unplugin-swc` for Nest), Playwright E2E, Testcontainers or Supabase local for integration | |
 | iOS / watchOS | Swift 6.4, SwiftUI, SwiftData, HealthKit, WorkoutKit, ActivityKit, WidgetKit, VisionKit | Xcode 27, iOS/watchOS 27 deployment target |
 | Swift API client | Apple `swift-openapi-generator` from the API's OpenAPI spec | Regenerated in CI. Diff checked |
 | Swift auth | `supabase-swift` (Auth only) | |
 | Swift lint / format | SwiftLint + `swift-format` | |
-| Error tracking | Sentry (or GlitchTip) | SDKs for Node, SvelteKit, Swift |
+| Error tracking | Self-hosted GlitchTip (Sentry protocol) | Sentry SDKs for Node, React, Swift |
 
 ### TypeScript 7 toolchain (needs validation in spike 0.3)
 
@@ -81,16 +81,16 @@ TS 7 ships the Go-based compiler but **not the full JS compiler API**. That affe
 | --- | --- | --- |
 | NestJS DI (`emitDecoratorMetadata`) | Needs metadata emit | SWC (`@swc/core` directly or `nest build -b swc` **without** `--type-check`, because Nest's SWC type-check path runs its own TypeScript) emits metadata. `tsgo --noEmit` is the only type checker |
 | NestJS Swagger compiler plugin | Runs as a TS compiler plugin, which is unavailable with SWC + TS 7 | **Not used.** OpenAPI is generated from the Zod contracts in `packages/contracts` (e.g. `zod-openapi`), independently of Nest decorators and compiler plugins |
-| `svelte-check` | Uses the TS language service via the JS API. The documented `--tsgo` / `--tsgo-experimental-api` modes currently **require TS 6 to be installed next to TS 7** | **Likely blocker for T1. Owner decision needed (O10).** The spike pins a candidate stack, audits which compiler actually runs, and is only "green" if CI fails on deliberately broken `.svelte` props/templates and SvelteKit route types in both `web` and `landing` **without** TS 6 installed |
+| React / React Router | `.tsx` is plain TypeScript. React Router generates route types (`react-router typegen`) as `.ts` files | **No special checker needed:** `tsgo` type-checks components and the generated route types directly. Typegen runs before `tsgo` in CI. (SvelteKit was dropped because `svelte-check` needs TS 6 next to TS 7; former O10) |
 | typescript-eslint | Uses the JS API | Use oxlint with type-aware rules (`tsgolint`) instead |
 | drizzle-kit, vitest | Transpile via esbuild/oxc | Expected to work. Verify |
 
 **Spike 0.3 acceptance (all in CI, no TS 6 in the lockfile):**
 
 1. A representative Nest controller + service + guard with constructor injection boots and passes an e2e test (proves decorator metadata via SWC).
-2. `tsgo --noEmit` fails on an intentional type error in `apps/api`, `packages/*` and plain `.ts` files of the SvelteKit apps.
+2. `tsgo --noEmit` fails on an intentional type error in `apps/api`, `packages/*`, `apps/web` and `apps/landing`.
 3. A Zod contract → `openapi.json` → `swift-openapi-generator` client compiles for that route, and the web client types are generated from the same spec.
-4. `.svelte` type errors and SvelteKit route-type errors fail CI (see the `svelte-check` row).
+4. In both React apps, a broken component prop and a broken route param/loader type (from `react-router typegen`) fail CI. Nothing in the toolchain pulls in TypeScript 6 (checked with `pnpm why typescript`).
 5. oxlint type-aware rules run on top of `tsgo`.
 
 If any criterion can't be met **without** TS 6, the spike stops, documents the gap in ADR-0001 and the owner decides (T1 says no TS 6). No silent fallback.
@@ -101,15 +101,15 @@ If any criterion can't be met **without** TS 6, the spike stops, documents the g
 enduva/
 ├─ apps/
 │  ├─ api/                 NestJS API + worker entrypoint
-│  ├─ web/                 SvelteKit web app (app.enduva…)
-│  ├─ landing/             SvelteKit landing page (enduva…)
+│  ├─ web/                 React Router web app (app.enduva…)
+│  ├─ landing/             React Router landing page, prerendered (enduva…)
 │  └─ apple/               Xcode project: Enduva (iOS), EnduvaWatch (watchOS), widgets, shared Swift packages
 ├─ packages/
 │  ├─ contracts/           Zod schemas, DTO types, OpenAPI generation
 │  ├─ domain/              Pure TS domain logic (calorie goals, 1RM, splits, units) — no I/O
 │  ├─ db/                  Drizzle schema, queries, seed scripts
 │  ├─ i18n/                Shared message catalogs (de, en) for web + landing
-│  ├─ ui/                  Shared Svelte components + design tokens
+│  ├─ ui/                  Shared React components + design tokens
 │  └─ config/              Shared tsconfig, oxlint, prettier, vitest presets
 ├─ supabase/               Supabase CLI config, migrations, seed.sql
 ├─ deploy/                 compose.yaml, Dockerfiles, Dokploy scripts
@@ -133,7 +133,7 @@ Swift code that runs on both iPhone and Watch (models, sync engine, HealthKit ma
 
 ## Authentication & authorisation
 
-1. Clients sign in with Supabase Auth (email + password, magic link, Google OAuth. Apple if O2 is accepted).
+1. Clients sign in with Supabase Auth (email + password, magic link, Google OAuth, Sign in with Apple).
 2. Clients send the Supabase access token as `Authorization: Bearer` to the API.
 3. **Token verification:** the API verifies the JWT against Supabase's **JWKS** (asymmetric signing keys, cached with rotation support). It accepts only the asymmetric algorithm configured for the project (e.g. `ES256`) and never `HS256`/`none`. It requires the exact per-environment `iss` (`https://<project>.supabase.co/auth/v1`, local URL in dev), `aud = authenticated`, `role = authenticated`, and a valid `exp`/`iat` with small clock-skew tolerance. Only then is `sub` trusted as the user ID. Asymmetric signing keys are enabled in **local and hosted** environments, so the JWKS path is tested everywhere.
 4. **Account/session status:** a verified token can outlive logout, device revocation or account deletion (until `exp`). On **every** request (reads, writes, sync pulls, signed-URL creation) and before each **queued job** runs, the API checks that the profile is active (not deleted or locked) and that the token's `session_id` still exists and its device isn't revoked. This check is **synchronous and uncached**: an indexed lookup of profile, session and device status inside the request's own transaction, so once a revocation has committed, no later request is authorised. Only the JWKS keys are cached. Tests: reusing a deleted account's unexpired token → 401 everywhere. A revoked device's unexpired token → `401 device_revoked`, **also with a warmed authorization cache** (revoke right after a successful request).
@@ -244,7 +244,7 @@ The food catalog is a **collective database of separately maintained datasets**.
 | Dataset | Tables | Licence & obligations | Import |
 | --- | --- | --- | --- |
 | **BLS 4.0** (Max Rubner-Institut) | `bls_foods`, `bls_nutrients` | **CC BY 4.0** (per the blsdb.de download terms; the exact version is pinned in the importer PR): attribution "Bundeslebensmittelschlüssel (BLS) 4.0, Max Rubner-Institut" with licence link, in the food detail view and on the landing page's data-sources page. Changes are indicated | One-time import + update script (`packages/db/seed/bls`), keeping the BLS codes |
-| **Open Food Facts** | `off_products`, `off_nutrients` | **ODbL 1.0** (database) / DbCL (contents): attribution "© Open Food Facts contributors, ODbL" in every view showing OFF data and on the data-sources page. The OFF tables stay an **independent dataset**: no mixing with BLS or user data. If we publicly use an adapted OFF dataset (normalisation, corrections), we **offer it under ODbL** (downloadable dump of the OFF-derived tables + transformation scripts, linked from the data-sources page) | (a) On-demand barcode lookup via OFF API → cached in `off_products`. (b) Optional DACH subset from the OFF dump (O4), refreshed weekly. Respect API rate limits and a proper User-Agent |
+| **Open Food Facts** | `off_products`, `off_nutrients` | **ODbL 1.0** (database) / DbCL (contents): attribution "© Open Food Facts contributors, ODbL" in every view showing OFF data and on the data-sources page. The OFF tables stay an **independent dataset**: no mixing with BLS or user data. If we publicly use an adapted OFF dataset (normalisation, corrections), we **offer it under ODbL** (downloadable dump of the OFF-derived tables + transformation scripts, linked from the data-sources page) | (a) On-demand barcode lookup via OFF API → cached in `off_products`. (b) Optional DACH subset from the OFF dump (sized to fit the Supabase plan, see T13a), refreshed weekly. Respect API rate limits and a proper User-Agent |
 | **Custom foods** | `custom_foods` | Private per user (RLS), never merged into the OFF/BLS datasets, never exported in the ODbL offer | User-created, or "save AI estimate as food" |
 
 - **Composable search:** a search function queries each dataset separately (Postgres `tsvector` de/en + `pg_trgm`) and merges the results ranked by match quality, source quality, completeness and per-user popularity (recents/favourites). `pgvector` embeddings can be added later.

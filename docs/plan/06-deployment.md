@@ -5,10 +5,10 @@
 | Env | Landing | Web app | API | Database | Trigger |
 | --- | --- | --- | --- | --- | --- |
 | **local** | `localhost:5174` | `localhost:5173` | `localhost:3000` | Supabase CLI (`supabase start`, Docker) | `pnpm dev` |
-| **staging** | `staging.enduva.soeenplop.dev` | `app-staging.enduva.soeenplop.dev` | `api-staging.enduva.soeenplop.dev` | Supabase Cloud project `enduva-staging` (EU) | Merge to `main` |
+| **staging** | `staging.enduva.soeenplop.dev` | `app.staging.enduva.soeenplop.dev` | `api.staging.enduva.soeenplop.dev` | Supabase Cloud project `enduva-staging` (EU) | Merge to `main` |
 | **production** | `enduva.soeenplop.dev` | `app.enduva.soeenplop.dev` | `api.enduva.soeenplop.dev` | Supabase Cloud project `enduva-prod` (EU, Frankfurt) | Release tag + manual approval |
 
-Staging domains are a proposal (O8). Wildcard DNS already points to the Dokploy server. Traefik in Dokploy issues Let's Encrypt certificates per host.
+All of these names (and `errors.enduva.soeenplop.dev` for GlitchTip) already resolve to the Dokploy server via the wildcard DNS record (checked). Traefik in Dokploy issues Let's Encrypt certificates per host.
 
 ## Docker Compose
 
@@ -18,7 +18,7 @@ Staging domains are a proposal (O8). Wildcard DNS already points to the Dokploy 
 | --- | --- | --- | --- |
 | `api` | `ghcr.io/soeenplop/enduva-api:<tag>` | `node dist/main.js` | Port 3000, health check `/v1/health` |
 | `worker` | same image as `api` | `node dist/worker.js` | pg-boss consumers. Scale independently |
-| `web` | `ghcr.io/soeenplop/enduva-web:<tag>` | `node build` | SvelteKit `adapter-node` |
+| `web` | `ghcr.io/soeenplop/enduva-web:<tag>` | `react-router-serve ./build/server/index.js` | React Router SSR |
 | `landing` | `ghcr.io/soeenplop/enduva-landing:<tag>` | static server (Caddy/nginx) | Prerendered |
 
 - There is no database in the compose file: Supabase Cloud is used for staging and production.
@@ -66,15 +66,15 @@ flowchart LR
 - **Connections:** the API uses the **transaction pooler** (transaction-local identity, no named prepared statements). The worker uses pg-boss in its default **polling** mode (no `LISTEN/NOTIFY`) over the **session pooler**, so it is independent of IPv6 support for direct connections. Task 0.12b tests enqueue and consume against the real staging connection strings.
 - **Connection budget:** API pool ≈ 10 per replica, worker ≈ 5 per replica (pg-boss maintenance included). The total stays below the plan's pooler/client limits with headroom for migrations and admin. Documented in `deploy/README.md` and revisited when scaling replicas.
 - **Storage buckets:** `avatars` (public-read via signed URLs), `activity-files`, `meal-photos` (private, retention policy), `exports` (private, 7-day expiry).
-- **Plan:** free tier for staging. Production on Pro once real users exist (backups/PITR, no pausing, 8 GB DB). See O4.
+- **Plan:** Free for staging, and for production until G1 (no real data before then). Production moves to **Pro** when G1 passes (daily backups, no pausing, 8 GB DB). PITR is optional. See T13a.
 
 ## Secrets & configuration
 
 | Where | What |
 | --- | --- |
-| 1Password Environments | Local `.env` files (Supabase local keys, OpenAI key, MapTiler key, Google OAuth) mounted per developer |
+| 1Password Environments | Local `.env` files (Supabase local keys, OpenAI key, map-tile key if a keyed provider is chosen (O6), Google + Apple OAuth) mounted per developer |
 | GitHub Actions secrets (per environment) | `DOKPLOY_URL`, `DOKPLOY_TOKEN`, `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`, project refs, `GHCR` (via `GITHUB_TOKEN`), Apple signing (later) |
-| Dokploy environment | Runtime env for `api`, `worker` and `web` (DB URLs, Supabase URL + publishable key, OpenAI key, Sentry DSN, …) |
+| Dokploy environment | Runtime env for `api`, `worker` and `web` (DB URLs, Supabase URL + publishable key, OpenAI key, GlitchTip DSN, …) |
 
 - `.env.example` per app documents every variable. The API validates env at boot with Zod and refuses to start if something is missing.
 - Gitleaks in CI. The repo is public, so **never** commit real values.
@@ -82,10 +82,10 @@ flowchart LR
 ## Observability & operations
 
 - **Logs:** pino JSON → Dokploy log viewer. Request IDs propagated to clients in the `x-request-id` header.
-- **Errors:** Sentry (or GlitchTip, O7) for API, worker, web and iOS.
+- **Errors:** self-hosted **GlitchTip** (separate Dokploy compose stack with its own Postgres + Valkey, at `errors.enduva.soeenplop.dev`, task 0.12e) for API, worker, web, landing and iOS, via the Sentry SDKs. Its database is included in the nightly dumps. Alerts go out by email.
 - **Uptime:** health checks in Dokploy plus an external uptime monitor (e.g. Uptime Kuma on Dokploy) for landing, app and API.
 - **Backups:**
-  - *Database:* Supabase Pro daily backups (prod). PITR is a **paid add-on on top of Pro** and only added if the data volume justifies it (budget: decided with O4). Plus a nightly encrypted `pg_dump` to S3-compatible storage (GitHub Actions cron) for the owner's own retention (30 days).
+  - *Database:* Supabase Pro daily backups (prod). PITR is a **paid add-on on top of Pro** and only added if the data volume justifies it (budget decision with T13a). Plus a nightly encrypted `pg_dump` to S3-compatible storage (GitHub Actions cron) for the owner's own retention (30 days).
   - *Storage objects:* database backups only contain Storage **metadata**, not the files. Buckets with irreplaceable data (`activity-files` originals, `avatars`) are synced nightly to encrypted object storage (e.g. `rclone` with server-side encryption), with 30-day retention. `meal-photos` (deleted after recognition per retention policy) and `exports` (temporary) are **not** backed up.
   - *Deletions vs. restores:* account deletions are recorded in a deletion log. After any restore, the log is replayed so deleted users stay deleted (GDPR).
   - *Restore drill:* restore DB + objects into a scratch project in maintenance mode, replay the deletion log, verify, then serve (task G1.4 before real data, again on production backups in 5.2, then at least twice a year).

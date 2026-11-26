@@ -24,14 +24,14 @@ The scope uses MoSCoW: **M**ust (v1), **S**hould (v1 if time allows), **C**ould 
 
 | Feature | Priority |
 | --- | --- |
-| Sign up / sign in (email + password, magic link, Google) | M |
+| Sign up / sign in (email + password, magic link, Google, Apple) | M |
 | Profile (name, birth date, sex, height, avatar), preferences (language, theme) | M |
 | Onboarding (goals, body data, AI consent, Health permissions) | M |
 | GDPR: data export (JSON/ZIP), account deletion | M |
 | AI consent management + usage overview | M |
 | Entitlements model (free / premium) without payment | M |
 | Abuse protection: email confirmation, CAPTCHA (Turnstile), rate limits | M |
-| Sign in with Apple | S (see O2) |
+| Sign in with Apple (required alongside Google, Guideline 4.8) | M |
 | Admin area (users, quotas, feature flags) | S |
 | Subscriptions (StoreKit 2 + web payments) | C |
 | Social feed, follows, kudos, comments | C |

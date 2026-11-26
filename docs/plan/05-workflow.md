@@ -45,7 +45,7 @@ flowchart TD
   - breaking changes: `feat(api)!: …` + a `BREAKING CHANGE:` footer
 - Several small, logical commits per PR. Each commit should build. Since we don't squash, **commit history is part of the review**: no "wip" / "fix typo" noise. Fix-ups are folded in with `git commit --fixup` + `git rebase --autosquash` before the final review round.
 - Enforced by commitlint (local hook via lefthook + CI on all PR commits and the PR title).
-- Commits are signed (SSH, 1Password agent).
+- Commits are signed with the dedicated SSH signing key (`~/.ssh/enduva_signing_ed25519`, no 1Password, configured repo-locally, registered on GitHub as a signing key; see W9). Agents never disable signing. If signing fails, they stop and report.
 - Agent commits carry a `Co-Authored-By:` trailer naming the model.
 
 ## Pull requests
