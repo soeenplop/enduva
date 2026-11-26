@@ -44,6 +44,8 @@ flowchart LR
   MERGE --> RUN
 ```
 
+- **Serialised pipeline:** the `main` pipeline runs in one `concurrency` group (`main-pipeline`, `cancel-in-progress: false`), so runs never overlap: a later push waits until the earlier run has finished.
+- **Release candidate = tested SHA:** release-please runs in two steps. `release-pr` (open/update the release PR) runs on every push. `github-release` (create tag + release) runs **only in the run whose own push SHA is the merge commit of the release PR**, and only after checking that a successful staging receipt exists for exactly that SHA. A run for any other SHA never tags. Release-please therefore can't tag a newer, untested merge.
 - **Strict ordering in one run:** every push to `main` runs build → staging migrations → staging deploy → smoke tests → **staging receipt** → release-please → (only if a release was created) production. A release can therefore never be created before its commit passed staging. The receipt (release SHA + image digests + smoke result) is stored durably as a GitHub deployment status + artifact.
 - **Production requires a receipt:** the production job (protected `production` environment, manual approval) looks up the receipt for the **exact release SHA**. It refuses to run migrations or deploy if the receipt is missing or failed.
 - **Recovery:** if anything fails after the release was created (e.g. a flaky smoke test), the fix is to **re-run the failed jobs** of that run, or to start a `workflow_dispatch` "promote release" workflow with the tag. It re-uses an existing receipt, or redeploys that SHA to staging and smoke-tests it first. No manual tagging.
