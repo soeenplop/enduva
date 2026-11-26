@@ -19,6 +19,7 @@
     "**/src/paraglide/**",
     "web/src/api/generated.ts",
     "**/negative/**",
+    "scripts/fixtures/**",
     "swift-client/**"
   ],
   "overrides": [

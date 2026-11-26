@@ -1,0 +1,23 @@
+{
+  "$comment": "TypeScript < 7 compiler code that third-party tools bundle purely for parsing or formatting, tolerated by the T1 clarification (owner ruling on PR #97). Checked by scripts/audit-bundled-typescript.mjs: any unlisted copy, and any change of package version, bundled TypeScript version or files, fails until this list is updated on purpose. Never add a copy that type-checks, provides a language service or emits/transpiles. See ADR-0001.",
+  "entries": [
+    {
+      "package": "prettier",
+      "version": "3.10.1",
+      "bundledTypeScript": "6.0.3",
+      "files": ["plugins/typescript.js", "plugins/typescript.mjs"],
+      "usedBy": "@tanstack/router-generator@1.168.0 (hard dependency; via @tanstack/router-cli and @tanstack/router-plugin). The same copy satisfies Orval's optional `prettier` peer, which Orval only uses with `output.formatter: 'prettier'` (not set).",
+      "usage": "Prettier's `typescript` parser formats the generated route trees (`routeTree.gen.ts`) in `tsr generate` and in the TanStack Start Vite build.",
+      "reason": "TanStack Router's generator depends on Prettier and formats with `parser: 'typescript'`. TanStack stays (owner ruling on PR #97). Parsing and printing only: no type checking, language service or emit."
+    },
+    {
+      "package": "oxfmt",
+      "version": "0.80.0",
+      "bundledTypeScript": "6.0.3",
+      "files": ["dist/typescript-DQUs9PXr.js"],
+      "usedBy": "oxfmt, our formatter (`pnpm format` / `pnpm format:check`).",
+      "usage": "oxfmt bundles Prettier 3.10.1 (including its `typescript` parser plugin) for the languages it delegates to Prettier and for its Tailwind class sorter. The plugin is lazy-loaded. JS/TS/JSON are formatted by oxfmt's native (Rust) formatter: `format:check` on the spike passes with this file removed, so our check does not load it.",
+      "reason": "Ships inside every current oxfmt release; it cannot be dropped as a dependency. Parsing and printing only: no type checking, language service or emit."
+    }
+  ]
+}

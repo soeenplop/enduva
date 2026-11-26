@@ -57,6 +57,11 @@ jobs:
         run: pnpm audit:lockfile
       - name: pnpm why typescript
         run: pnpm why typescript
+      - name: Install root workspace (scanned by the bundled-TypeScript audit)
+        working-directory: .
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Bundled-TypeScript audit (installed files; allowlist ts-bundled-allowlist.json)
+        run: pnpm audit:bundled-ts
 
       - name: Generate (openapi.json, web client, Paraglide, route trees)
         run: pnpm generate
