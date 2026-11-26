@@ -8,7 +8,7 @@ Endurance training, strength training and nutrition tracking in one app — for 
 
 ## Contributing
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md). External contributions require signing the [Contributor License Agreement](CLA.md).
+See [`CONTRIBUTING.md`](CONTRIBUTING.md). External contributions require signing the [Contributor License Agreement](CLA.md). The CLA is still a draft, and its automated check arrives with roadmap task 0.5, so external pull requests can't be merged yet.
 
 ## License
 

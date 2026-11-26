@@ -8,15 +8,8 @@ Enduva is **source-available** under the [Elastic License 2.0](LICENSE) (ELv2). 
 
 Because ELv2 alone wouldn't let the maintainer run contributed code as the hosted Enduva service or relicense it, **every external contributor must sign the [Contributor License Agreement](CLA.md)** before a pull request can be merged. The CLA lets the maintainer use, relicense (including commercially) and host your contributions; you keep the copyright.
 
-When you open your first pull request, the CLA bot comments on it. To sign, reply with exactly:
-
-```text
-I have read the CLA Document and I hereby sign the CLA
-```
-
-The `CLA` check turns green once all commit authors of the PR have signed. Comment `recheck` to re-run it. Your commit email must be linked to your GitHub account so the bot can identify you. The maintainer account `soeenplop` and the bots `dependabot[bot]`, `renovate[bot]` and `github-actions[bot]` are allowlisted.
-
-> The CLA text is still a draft awaiting the maintainer's approval. Until it is approved, external pull requests can't be merged.
+> [!IMPORTANT]
+> **External contributions can't be merged yet.** The CLA is still a draft awaiting legal review and the maintainer's approval, and there is no CLA check yet. Automated enforcement (signing on the pull request, verified per GitHub account and bound to the CLA version) arrives with roadmap task 0.5. Until then, please don't sign anything; you're welcome to open issues.
 
 ## Before you start
 
@@ -35,6 +28,8 @@ pnpm install   # also installs the git hooks (lefthook)
 
 ## Commits
 
+**Every commit must be signed** (SSH, GPG or S/MIME) with **your own key**, registered on your GitHub account, so GitHub shows it as *Verified*. See GitHub's guide on [signing commits](https://docs.github.com/en/authentication/managing-commit-signature-verification/signing-commits). The dedicated SSH key `~/.ssh/enduva_signing_ed25519` named in `AGENTS.md` and the workflow docs is the maintainer's key for the maintainer's own agent commits; it doesn't apply to contributors.
+
 We use [Conventional Commits](https://www.conventionalcommits.org/), checked by commitlint in a `commit-msg` hook:
 
 ```text
@@ -52,5 +47,5 @@ Pull requests are merged with merge commits (no squash), so keep commits small a
 1. Fork the repository and create a branch, e.g. `fix/web-login-redirect`.
 2. Make your change, with tests where it makes sense. User-facing strings need German and English versions.
 3. Open a pull request against `main`. Its title must be a Conventional Commit. Fill in the template and link the issue (`Closes #123`).
-4. Sign the CLA if the bot asks you to.
+4. Sign the CLA once signing is enabled (see [Licence and CLA](#licence-and-cla)).
 5. Address review comments. Every PR is reviewed before merge, and all required checks must pass on the latest commit.
