@@ -1,4 +1,6 @@
 import * as z from 'zod';
+// The OpenAPI fields of `.meta()` (`override`), declared by zod-openapi.
+import type {} from 'zod-openapi';
 
 /** IANA tzdb names: an area and a location, or `UTC`. Keeps out ICU-only IDs (`SystemV/EST5`, `PST`) and offsets. */
 const ianaZone =
@@ -31,6 +33,14 @@ const timeZone = z
     if (resolved !== undefined && ianaZone.test(resolved) && isCanonical(resolved)) return resolved;
     context.addIssue({ code: 'custom', message: 'unknown time zone' });
     return z.NEVER;
+  })
+  .meta({
+    description: "IANA time zone (`Area/Location` in any letter case, or `UTC`); stored as ICU's canonical ID",
+    example: 'Europe/Berlin',
+    // JSON Schema patterns have no flags: the case-sensitive one Zod would emit refuses valid input.
+    override: ({ jsonSchema }) => {
+      delete jsonSchema.pattern;
+    },
   });
 
 /** No control characters (PostgreSQL can't store NUL in text) and no unpaired surrogates. */
@@ -43,27 +53,48 @@ function isBirthDate(value: string): boolean {
   return value >= '1900-01-01' && date.getTime() <= Date.now();
 }
 
+const displayName = z.string().trim().min(1).max(100);
+const birthDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const sex = z.enum(['female', 'male']);
+const heightCm = z.number().min(50).max(300);
+const locale = z.enum(['de', 'en']);
+
+/** The signed-in user's profile (`GET`/`PATCH /v1/me`). `role` is read-only for clients (ADR-0002). */
+export const Me = z
+  .object({
+    id: z.uuid(),
+    displayName: displayName.nullable(),
+    birthDate: birthDate.nullable().meta({ format: 'date' }),
+    sex: sex.nullable(),
+    heightCm: heightCm.nullable(),
+    locale,
+    timeZone: z.string().meta({ description: "IANA time zone, as ICU's canonical ID" }),
+    role: z.enum(['user', 'admin']),
+    onboardingCompletedAt: z.iso.datetime().nullable(),
+    /** Bumped on every write; the `ETag` is derived from it. */
+    version: z.int().positive(),
+  })
+  .meta({ id: 'Me' });
+
+export type Me = z.output<typeof Me>;
+
 /**
  * Body of `PATCH /v1/me`: a partial update of the user-editable profile fields (JSON merge semantics: a missing field
- * stays, `null` clears it). Unknown fields, including `role`, `id` and `version`, are refused. Request schemas move
- * to `@enduva/contracts` with the OpenAPI generation (0.8c).
+ * stays, `null` clears it). Unknown fields, including `role`, `id` and `version`, are refused.
  */
-export const meUpdateSchema = z
+export const MeUpdate = z
   .strictObject({
-    displayName: z.string().trim().min(1).max(100).refine(isPrintable).nullable(),
-    birthDate: z
-      .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/)
-      .refine(isBirthDate)
-      .nullable(),
-    sex: z.enum(['female', 'male']).nullable(),
-    heightCm: z.number().min(50).max(300).nullable(),
-    locale: z.enum(['de', 'en']),
+    displayName: displayName.refine(isPrintable).nullable(),
+    birthDate: birthDate.refine(isBirthDate).nullable().meta({ format: 'date' }),
+    sex: sex.nullable(),
+    heightCm: heightCm.nullable(),
+    locale,
     timeZone,
     /** Marks onboarding as done; the server stamps the time once and never clears it. */
     onboardingCompleted: z.literal(true),
   })
   .partial()
-  .refine((update) => Object.keys(update).length > 0);
+  .refine((update) => Object.keys(update).length > 0)
+  .meta({ id: 'MeUpdate', override: { minProperties: 1 } });
 
-export type MeUpdate = z.output<typeof meUpdateSchema>;
+export type MeUpdate = z.output<typeof MeUpdate>;

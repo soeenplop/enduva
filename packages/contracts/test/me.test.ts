@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { meUpdateSchema } from '../src/me/me.schema.js';
+import { MeUpdate } from '../src/index.js';
 
-const parse = (body: unknown) => meUpdateSchema.safeParse(body);
+const parse = (body: unknown) => MeUpdate.safeParse(body);
 
 describe('PATCH /v1/me body', () => {
   it('accepts a partial update, trims names and clears fields with null', () => {

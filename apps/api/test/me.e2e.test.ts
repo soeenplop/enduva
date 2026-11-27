@@ -1,3 +1,4 @@
+import { Me, PROBLEM_CONTENT_TYPE, Problem } from '@enduva/contracts';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -67,6 +68,8 @@ describe.skipIf(auth === undefined)(`/v1/me (e2e, local Supabase${auth ? '' : ':
     const after = await get(user);
     expect(after.body).toEqual(res.body);
     expect(after.headers.etag).toBe(res.headers.etag);
+    // Both bodies are exactly what the OpenAPI contract describes, no field more.
+    for (const body of [before.body, res.body]) expect(Me.strict().parse(body)).toEqual(body);
   });
 
   it('keeps the first onboarding time and clears fields with null', async () => {
@@ -94,7 +97,8 @@ describe.skipIf(auth === undefined)(`/v1/me (e2e, local Supabase${auth ? '' : ':
     ] as const) {
       const res = await patch(user, { displayName: 'Lost update' }, ifMatch);
       expect(res.status).toBe(status);
-      expect(res.body).toMatchObject({ code });
+      expect(res.headers['content-type']).toContain(PROBLEM_CONTENT_TYPE);
+      expect(Problem.strict().parse(res.body)).toMatchObject({ code });
     }
     expect((await get(user)).body).toEqual(current.body);
   });

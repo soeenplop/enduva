@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import type { HealthStatus } from '@enduva/contracts';
 import type { Database } from '@enduva/db';
 
 import { API_LOGIN } from '../config/env.js';
@@ -8,10 +9,6 @@ import { ProblemException } from '../problem/problem.js';
 /** Bound of the readiness response, and of the readiness query (node-postgres `query_timeout`). */
 export const READINESS_TIMEOUT_MS = 2_000;
 
-export interface Status {
-  readonly status: 'ok';
-}
-
 @Injectable()
 export class HealthService {
   private readonly logger = new Logger(HealthService.name);
@@ -19,7 +16,7 @@ export class HealthService {
   constructor(@Inject(DATABASE) private readonly db: Database) {}
 
   /** Liveness: the process serves requests. Touches nothing else, so a database outage doesn't restart it. */
-  live(): Status {
+  live(): HealthStatus {
     return { status: 'ok' };
   }
 
@@ -35,7 +32,7 @@ export class HealthService {
    * always ends and gives its client back: the pool's `connectionTimeoutMillis` ends a stalled checkout and the
    * query's `query_timeout` a stalled query, whose client is then destroyed rather than returned to the pool.
    */
-  async ready(): Promise<Status> {
+  async ready(): Promise<HealthStatus> {
     this.probe ??= this.currentLogin().finally(() => {
       this.probe = undefined;
     });

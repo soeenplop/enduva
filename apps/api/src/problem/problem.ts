@@ -1,42 +1,18 @@
 import { STATUS_CODES } from 'node:http';
 
+import { type Problem as ProblemBody, type ProblemCode, problemStatus } from '@enduva/contracts';
+
+// The codes and the wire schema live in the contracts (OpenAPI); this module builds the bodies.
+export { isProblemCode, PROBLEM_CONTENT_TYPE, type ProblemCode, problemStatus } from '@enduva/contracts';
+
 /**
- * Stable error codes and their HTTP status. Clients translate the code, so a code is never renamed or reused
- * (02-architecture → API design). Add new codes here.
+ * RFC 9457 problem details, as the contract's `Problem` schema describes them. `type` stays `about:blank`, so `title`
+ * is the status phrase; `code` tells errors apart.
  */
-export const problemStatus = {
-  bad_request: 400,
-  unauthorized: 401,
-  /** The token's device was revoked: the client wipes its local account data (02-architecture → Watch). */
-  device_revoked: 401,
-  forbidden: 403,
-  not_found: 404,
-  method_not_allowed: 405,
-  /** `If-Match` names an outdated version: reload, then retry. */
-  precondition_failed: 412,
-  payload_too_large: 413,
-  unsupported_media_type: 415,
-  /** The write needs `If-Match` with the resource's ETag. */
-  precondition_required: 428,
-  rate_limited: 429,
-  internal_error: 500,
-  database_unavailable: 503,
-  /** The signing keys (JWKS) can't be fetched, so no token can be verified. */
-  auth_unavailable: 503,
-} as const satisfies Record<string, number>;
-
-export type ProblemCode = keyof typeof problemStatus;
-
-/** RFC 9457 problem details. `type` stays `about:blank`, so `title` is the status phrase; `code` tells errors apart. */
-export interface Problem {
+export interface Problem extends Readonly<ProblemBody> {
   readonly type: 'about:blank';
-  readonly title: string;
-  readonly status: number;
   readonly code: ProblemCode;
-  readonly detail?: string;
 }
-
-export const PROBLEM_CONTENT_TYPE = 'application/problem+json';
 
 export function problem(code: ProblemCode, status: number = problemStatus[code], detail?: string): Problem {
   const title = STATUS_CODES[status] ?? 'Error';

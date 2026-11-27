@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Header, Headers, Patch, Req, Res } from '@nestjs/common';
+import { type Me, MeUpdate } from '@enduva/contracts';
 import { profiles, type Transaction } from '@enduva/db';
 import { and, eq, sql } from 'drizzle-orm';
 import type { Response } from 'express';
@@ -6,21 +7,6 @@ import type { Response } from 'express';
 import { type IdentifiedRequest, RequestTx } from '../db/request-transaction.js';
 import { ProblemException } from '../problem/problem.js';
 import { etag, ifMatchVersion } from './etag.js';
-import { meUpdateSchema } from './me.schema.js';
-
-/** The signed-in user's profile. `role` is read-only for clients: it is changed only by an operator (ADR-0002). */
-export interface Me {
-  readonly id: string;
-  readonly displayName: string | null;
-  readonly birthDate: string | null;
-  readonly sex: 'female' | 'male' | null;
-  readonly heightCm: number | null;
-  readonly locale: 'de' | 'en';
-  readonly timeZone: string;
-  readonly role: 'user' | 'admin';
-  readonly onboardingCompletedAt: Date | null;
-  readonly version: number;
-}
 
 const meColumns = {
   id: profiles.userId,
@@ -37,6 +23,11 @@ const meColumns = {
 
 const ownProfile = eq(profiles.userId, sql`app.current_user_id()`);
 
+/** The response body, as the contract's `Me` schema describes it. `role` is changed only by an operator (ADR-0002). */
+function toMe(row: Omit<Me, 'onboardingCompletedAt'> & { onboardingCompletedAt: Date | null }): Me {
+  return { ...row, onboardingCompletedAt: row.onboardingCompletedAt?.toISOString() ?? null };
+}
+
 @Controller('me')
 export class MeController {
   /** The profile of the token's user. The request transaction has already checked the session and created it. */
@@ -47,7 +38,7 @@ export class MeController {
     // RLS shows only the user's own row, which the account check created: missing means it was deleted meanwhile.
     if (me === undefined) throw new ProblemException('unauthorized');
     response.setHeader('ETag', etag(me.id, me.version));
-    return me;
+    return toMe(me);
   }
 
   /**
@@ -65,7 +56,7 @@ export class MeController {
     @Res({ passthrough: true }) response: Response,
   ): Promise<Me> {
     if (ifMatch === undefined) throw new ProblemException('precondition_required');
-    const parsed = meUpdateSchema.safeParse(body);
+    const parsed = MeUpdate.safeParse(body);
     if (!parsed.success) throw new ProblemException('bad_request');
     const userId = request.claims?.sub;
     const version = userId === undefined ? undefined : ifMatchVersion(ifMatch, userId);
@@ -83,6 +74,6 @@ export class MeController {
       .returning(meColumns);
     if (me === undefined) throw new ProblemException('precondition_failed');
     response.setHeader('ETag', etag(me.id, me.version));
-    return me;
+    return toMe(me);
   }
 }

@@ -3,10 +3,10 @@ import type { Response } from 'express';
 
 import {
   codeForStatus,
+  isProblemCode,
   problem,
   PROBLEM_CONTENT_TYPE,
   type Problem,
-  type ProblemCode,
   ProblemException,
   problemStatus,
 } from './problem.js';
@@ -22,9 +22,6 @@ function exposedClientStatus(error: unknown): number | undefined {
 function isClientStatus(status: unknown): status is number {
   return Number.isInteger(status) && (status as number) >= 400 && (status as number) < 500;
 }
-
-const isProblemCode = (code: unknown): code is ProblemCode =>
-  typeof code === 'string' && Object.hasOwn(problemStatus, code);
 
 /**
  * Answers every error with RFC 9457 problem details (`application/problem+json`) and a stable `code`. Messages of

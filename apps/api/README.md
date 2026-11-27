@@ -108,8 +108,8 @@ Never point a local process at a hosted project.
 - **`/v1/me`:** `GET` returns the user's profile with a strong `ETag` bound to the user and version
   (`"<version>-<digest>"`, the digest an opaque hash of both), so two accounts at the same version never share a tag:
   a tag left over from an account switch gets neither a `304` nor a write. `PATCH` updates the user-editable fields
-  (JSON merge semantics: a missing field stays, `null` clears it), validated by a Zod schema
-  ([`src/me/me.schema.ts`](src/me/me.schema.ts); request schemas move to `@enduva/contracts` in 0.8c). Unknown
+  (JSON merge semantics: a missing field stays, `null` clears it), validated by the contract's `MeUpdate` schema
+  ([`packages/contracts/src/me.ts`](../../packages/contracts/src/me.ts)). Unknown
   fields, `role` among them, are refused; names may not contain control characters; time zones must have the IANA
   area form (`Area/Location`, any case) or be `UTC`, and are stored as ICU's canonical ID for them (`Europe/berlin` →
   `Europe/Berlin`, `Asia/Kolkata` → `Asia/Calcutta`); links outside the areas (`US/Eastern`) and ICU-only IDs
@@ -143,5 +143,5 @@ Never point a local process at a hosted project.
   foreign issuer, and the unexpired tokens of signed-out, deleted, soft-deleted and banned accounts (reads and
   writes) and of a revoked device right after a successful request. Skipped without a running stack, like the
   database tests. `test/me.e2e.test.ts` covers `PATCH /v1/me` there (ETags, 428/412 without writing, another account's tag in a
-  conditional GET and `If-Match`, invalid bodies; each test with its own users),
-  and `test/me-schema.test.ts` the body schema.
+  conditional GET and `If-Match`, invalid bodies; each test with its own users) and checks the bodies against the
+  contract's `Me` and `Problem` schemas. The body schema's own tests are in `@enduva/contracts`.
