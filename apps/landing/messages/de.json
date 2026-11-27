@@ -1,0 +1,22 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "language_name": "Deutsch",
+  "skip_to_content": "Zum Inhalt springen",
+  "home_link_label": "Enduva Startseite",
+  "language_switch_label": "Sprache wählen",
+  "meta_home_title": "Enduva: Ausdauer, Kraft und Ernährung in einer App",
+  "meta_home_description": "Enduva vereint Ausdauertraining, Krafttraining und Ernährung in einer App für iPhone, Apple Watch und das Web. Derzeit in Entwicklung.",
+  "picker_title": "Enduva: Sprache wählen",
+  "picker_heading": "Sprache wählen",
+  "hero_title": "Ausdauer, Kraft und Ernährung in einer App",
+  "footer_legal_label": "Rechtliches",
+  "page_imprint": "Impressum",
+  "page_privacy": "Datenschutzerklärung",
+  "page_terms": "Nutzungsbedingungen",
+  "page_disclaimer": "KI- und Medizin-Hinweis",
+  "page_data_sources": "Datenquellen",
+  "placeholder_notice": "Platzhalter, der endgültige Text folgt in {task}.",
+  "placeholder_body": "Diese Seite ist ein Platzhalter. Enduva ist in Entwicklung, und eine Registrierung ist noch nicht möglich.",
+  "placeholder_description": "{page} von Enduva. Platzhalter, der endgültige Text folgt in {task}.",
+  "back_home": "Zurück zur Startseite"
+}
