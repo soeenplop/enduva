@@ -34,6 +34,18 @@ describe('databaseErrorFields', () => {
     );
   });
 
+  it('keeps table and constraint names only if the schema declares them', () => {
+    // Identifier-shaped, so a shape check would pass them, but they could be personal data.
+    expect(databaseErrorFields(serverError({ table: 'jane_doe', constraint: 'jane_doe_diabetes' }))).toEqual({
+      sqlState: '23505',
+    });
+    expect(databaseErrorFields(serverError({ table: 'profiles', constraint: 'profiles_height_cm_check' }))).toEqual({
+      sqlState: '23505',
+      table: 'profiles',
+      constraint: 'profiles_height_cm_check',
+    });
+  });
+
   it('logs a query error by its cause, without the query, parameters or a stack', () => {
     // A multiline parameter can produce lines that look like stack frames in Drizzle's message and stack.
     const params = ['secret-72\n    at fake (/secret/frame.js:1:1)'];
