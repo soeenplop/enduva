@@ -33,7 +33,7 @@ process with exit code 1 and a list of the offending variable names (never their
 | `NODE_ENV` | `development` | `development`, `test` or `production` |
 | `HOST` / `PORT` | `0.0.0.0` / `3000` | |
 | `LOG_LEVEL` | `info` | pino level, or `silent` |
-| `TRUST_PROXY` | empty | Comma-separated IPs/CIDRs of the ingress (Traefik in Dokploy, e.g. the CIDR of its Docker network). `X-Forwarded-For` is honoured only from these peers; empty trusts none. No hop counts |
+| `TRUST_PROXY` | empty | Comma-separated IPs/CIDRs of the ingress peers whose `X-Forwarded-For` is honoured: Traefik's own address(es), or a subnet that only trusted proxies can join. **Not** the subnet of Dokploy's `dokploy-network`, `uniquelocal` or `linklocal` (see Client IPs). Empty trusts none. No hop counts |
 | `THROTTLE_LIMIT` / `THROTTLE_TTL_SECONDS` | `100` / `60` | Requests per client IP **and endpoint** per window (see Throttling) |
 
 Locally, start the database with `pnpm --filter @enduva/db db:start` and `db:reset` ([`packages/db`](../db/README.md)).
@@ -51,17 +51,20 @@ Never point a local process at a hosted project.
 - **Errors:** every error is RFC 9457 problem details (`application/problem+json`) with `type: about:blank`, the
   status phrase as `title`, `status` and a stable `code` from [`src/problem/problem.ts`](src/problem/problem.ts).
   Throw `ProblemException(code)` for expected errors. Messages of Nest and Express exceptions are not passed on.
-  Unexpected errors become `500` `internal_error` and are logged with the request ID and their class only: the
+  Unexpected errors become `500` `internal_error` and are logged with the request ID and their category only: the
   `err` serializer ([`src/logging/safe-error.ts`](src/logging/safe-error.ts)) never logs messages, causes, stacks
-  or other properties, since those can carry request input.
+  or other properties, since those can carry request input. The category comes from an allowlist of known error
+  classes checked with `instanceof` (e.g. `DatabaseError`, `HttpException`, `TypeError`, then `Error`), never from
+  the thrown value's `constructor` or `name`; anything else is `Unknown`. Neither the serializer nor the filter
+  throws, whatever is thrown.
 - **Logging:** pino JSON on stdout. The request logger is the first middleware, ahead of the body parser, so every
   request gets a server-generated ID, echoed in the `x-request-id` response header. An incoming `x-request-id` is
   ignored: it is client-controlled. Request logs hold only ID, method, the matched route template (e.g.
   `/v1/items/:id`; `(unmatched)` when the request ended before routing), status and duration: no raw paths or query
   strings, headers, tokens, bodies, client IPs or health data. Nest's own logs go through the same logger
   (nestjs-pino).
-  Database errors add only their SQLSTATE, table and constraint, each checked against a strict pattern
-  ([`src/db/errors.ts`](src/db/errors.ts)): never the query text, parameters, Drizzle's message or stack, or
+  Database errors add only their SQLSTATE (in full if known, otherwise only its class) and their table and constraint, only if the schema declares
+  that name ([`src/db/errors.ts`](src/db/errors.ts); new tables go into its `schemaTables` list): never the query text, parameters, Drizzle's message or stack, or
   Postgres' message, detail, hint or where. This holds for every database log path (request errors, readiness,
   idle client errors).
 - **Throttling:** `@nestjs/throttler` as a global guard, in memory per process. Each matched endpoint (controller and
@@ -69,6 +72,14 @@ Never point a local process at a hosted project.
   guard runs after the body parser and routing: requests to unmatched routes and requests whose body is rejected are
   never counted. Over the limit: `429` `rate_limited` with `Retry-After`. Per-user limits follow with auth (0.8b);
   an overall request limit belongs to the ingress.
+- **Client IPs:** the throttler keys on Express' `req.ip`, which takes `X-Forwarded-For` only from a peer in
+  `TRUST_PROXY`. Every peer listed there can choose the client IP it forwards, so list only the ingress. In Dokploy,
+  every deployed service joins the shared `dokploy-network` by default, and so can reach every other one
+  ([Dokploy networks](https://docs.dokploy.com/docs/core/networks)): trusting that network's subnet, or a named range
+  such as `uniquelocal` that covers Docker's subnets, lets any service on the server spoof client IPs. Trust
+  Traefik's address(es) on the network it shares with the API, pinned so a recreated container keeps them, or a
+  dedicated subnet that only Traefik is attached to besides the API. The production value is set with the deploy
+  (0.12c).
 - **Database:** one pg pool on `DATABASE_URL` ([ADR-0002](../../docs/adr/0002-db-access-and-rls.md)). It connects
   lazily, so the API starts and stays live while the database is down. A request whose `claims` were set by the
   auth guard (0.8b) runs its handler in **one** `withUserTx` transaction as `enduva_api`, with the claims set
@@ -79,10 +90,11 @@ Never point a local process at a hosted project.
 
 ## Tests
 
-- Unit tests for the env schema, the problem mapping, query-error redaction and the transaction interceptor.
+- Unit tests for the env schema, the problem mapping, error categories and query-error redaction (including hostile
+  thrown values: shadowed or throwing `constructor`, proxies, primitives) and the transaction interceptor.
 - `test/health.e2e.test.ts` boots the real `AppModule` under SWC: DI through decorator metadata, liveness,
   readiness without a database, request IDs, problem bodies (404 inside and outside `/v1`, malformed body,
-  unexpected error), log redaction and throttling.
+  unexpected and hostile errors), log redaction and throttling.
 - `test/dist.e2e.test.ts` runs the SWC build with plain `node`: it boots, serves `/v1/health`, and refuses to boot
   with an invalid environment. The worker entrypoint runs and exits.
 - `test/database.e2e.test.ts` runs against the **local** Supabase stack through the transaction pooler: readiness, a

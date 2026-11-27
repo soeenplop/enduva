@@ -1,14 +1,30 @@
 import { type ArgumentsHost, Catch, type ExceptionFilter, HttpException, Logger } from '@nestjs/common';
 import type { Response } from 'express';
 
-import { codeForStatus, problem, PROBLEM_CONTENT_TYPE, type Problem, ProblemException } from './problem.js';
+import {
+  codeForStatus,
+  problem,
+  PROBLEM_CONTENT_TYPE,
+  type Problem,
+  type ProblemCode,
+  ProblemException,
+  problemStatus,
+} from './problem.js';
 
 /** Errors from Express middleware such as the body parser (`http-errors`): a 4xx status that is safe to expose. */
 function exposedClientStatus(error: unknown): number | undefined {
   if (typeof error !== 'object' || error === null) return undefined;
   const { status, expose } = error as { status?: unknown; expose?: unknown };
-  return expose === true && typeof status === 'number' && status >= 400 && status < 500 ? status : undefined;
+  return expose === true && isClientStatus(status) ? status : undefined;
 }
+
+/** An integer 4xx status: anything else (fractions, `NaN`, out of range) would make Express throw or lie. */
+function isClientStatus(status: unknown): status is number {
+  return Number.isInteger(status) && (status as number) >= 400 && (status as number) < 500;
+}
+
+const isProblemCode = (code: unknown): code is ProblemCode =>
+  typeof code === 'string' && Object.hasOwn(problemStatus, code);
 
 /**
  * Answers every error with RFC 9457 problem details (`application/problem+json`) and a stable `code`. Messages of
@@ -31,10 +47,23 @@ export class ProblemFilter implements ExceptionFilter {
     response.status(body.status).type(PROBLEM_CONTENT_TYPE).send(JSON.stringify(body));
   }
 
+  /**
+   * Never throws, and always returns a plain body built here from validated values: a thrown value whose prototype
+   * lookup or fields throw (a proxy, a getter), or whose status or code is malformed, is an internal error.
+   */
   private toProblem(exception: unknown): Problem {
-    if (exception instanceof ProblemException) return exception.toProblem();
-    const status = exception instanceof HttpException ? exception.getStatus() : exposedClientStatus(exception);
-    if (status === undefined || status >= 500) return problem('internal_error');
-    return problem(codeForStatus(status), status);
+    try {
+      if (exception instanceof ProblemException) {
+        const { code, detail } = exception;
+        if (!isProblemCode(code) || (detail !== undefined && typeof detail !== 'string'))
+          return problem('internal_error');
+        return problem(code, problemStatus[code], detail);
+      }
+      const status: unknown =
+        exception instanceof HttpException ? exception.getStatus() : exposedClientStatus(exception);
+      return isClientStatus(status) ? problem(codeForStatus(status), status) : problem('internal_error');
+    } catch {
+      return problem('internal_error');
+    }
   }
 }
