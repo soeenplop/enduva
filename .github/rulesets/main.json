@@ -34,7 +34,8 @@
           { "context": "ts7-audits", "integration_id": 15368 },
           { "context": "negative-tests", "integration_id": 15368 },
           { "context": "gitleaks", "integration_id": 15368 },
-          { "context": "commitlint", "integration_id": 15368 }
+          { "context": "commitlint", "integration_id": 15368 },
+          { "context": "cla", "integration_id": 15368 }
         ]
       }
     }
