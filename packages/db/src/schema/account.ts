@@ -109,7 +109,10 @@ export const entitlements = app.table(
   ],
 );
 
-/** Purpose-specific, versioned consent. Revoking sets `revoked_at`; granting again inserts a new row. */
+/**
+ * Purpose-specific, versioned consent. Revoking sets `revoked_at`, which the database stamps and never lets change
+ * again; granting again inserts a new row.
+ */
 export const consents = app.table(
   'consents',
   {
@@ -131,7 +134,10 @@ export const consents = app.table(
   ],
 );
 
-/** A signed-in client. Its auth session is checked on every request; revoked devices stay for the device list. */
+/**
+ * A signed-in client. Its auth session is checked on every request. Revocation is one-way, like for consents, and
+ * revoked devices stay for the device list.
+ */
 export const devices = app.table(
   'devices',
   {

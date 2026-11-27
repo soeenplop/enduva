@@ -55,8 +55,30 @@ begin
 end
 $$;
 
+-- Revocation is one-way, for every role: once `revoked_at` is set it never changes again, so a stale or replayed
+-- write can't make withdrawn consent or a revoked device active again, or move the revocation time. The database
+-- stamps the revocation time itself. Granting consent again inserts a new row; the revoked rows stay until the
+-- account is deleted (the cascade from `profiles` is the only way they go, see the grants below).
+create function app.keep_revocation() returns trigger
+  language plpgsql
+  set search_path = ''
+  as $$
+begin
+  if old.revoked_at is not null then
+    if new.revoked_at is distinct from old.revoked_at then
+      raise exception 'A revoked row in %.% stays revoked', tg_table_schema, tg_table_name
+        using errcode = 'check_violation', hint = 'Insert a new row instead.';
+    end if;
+  elsif new.revoked_at is not null then
+    new.revoked_at := now();
+  end if;
+  return new;
+end
+$$;
+
 revoke all on function app.set_updated_at() from public;
 revoke all on function app.bump_version() from public;
+revoke all on function app.keep_revocation() from public;
 
 reset role;
 
@@ -66,6 +88,8 @@ create trigger set_updated_at before update on app.user_settings for each row ex
 create trigger bump_version before update on app.user_settings for each row execute function app.bump_version();
 create trigger set_updated_at before update on app.entitlements for each row execute function app.set_updated_at();
 create trigger set_updated_at before update on app.devices for each row execute function app.set_updated_at();
+create trigger keep_revocation before update on app.consents for each row execute function app.keep_revocation();
+create trigger keep_revocation before update on app.devices for each row execute function app.keep_revocation();
 
 -- Ownership and RLS -----------------------------------------------------------------------------------------------
 
