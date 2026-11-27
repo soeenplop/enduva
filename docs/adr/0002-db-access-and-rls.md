@@ -103,13 +103,25 @@ may read `auth.sessions` and `auth.users` but holds `USAGE` on `auth` without gr
 [`app.auth_session_active()`](../../supabase/migrations/20261127182543_auth_session_check.sql) is a `SECURITY DEFINER`
 function **owned by `postgres`**, the only function in `app` not owned by `enduva_owner`:
 
-- It takes no arguments and reads the user and `session_id` from the transaction's claims, so a caller learns only
-  whether its own identity is valid. It returns true if the session exists for that user and hasn't passed
-  `not_after`, and the user isn't soft-deleted or banned. Missing claims return false.
-- `search_path = ''`, `stable`, EXECUTE for `enduva_api` only (PUBLIC revoked). The catalog test pins all of that.
-- Account deletion (0.13b) must disable or delete the auth user **before** it deletes the profile: the API creates a
-  missing profile on a user's first request, and only the failing session check stops a deleted account from getting
-  a new one.
+- It takes no arguments and returns a boolean for the user and `session_id` in the transaction's claims: true if
+  that session exists for that user and hasn't passed `not_after`, and the user isn't soft-deleted or banned.
+  Missing claims return false. The database doesn't verify the claims: the API sets them from a token it verified
+  against the JWKS, which binds the answer to the token's owner at the HTTP boundary, but anyone with the API's
+  database login can set any claims. That is the same trusted-caller boundary as `withUserTx` (Trust boundary).
+- `stable`, EXECUTE for `enduva_api` only (PUBLIC revoked), and `search_path = pg_catalog, pg_temp`. An empty search
+  path would still look up **types** in the caller's temporary schema first, so a temporary domain named `uuid` or
+  `jsonb` could take over a cast and run its check with `postgres`' rights. With `pg_temp` listed last (functions and
+  operators are never looked up there) and every type, function and operator schema-qualified, it can't. The helper
+  `app.current_user_id()` on the same call path gets the same treatment. The catalog test pins owner, path and
+  grants, and that temporary domains don't change the result.
+- **Profile creation and account deletion.** The API creates a missing profile and settings on a user's first
+  request, in a statement that inserts only while `app.auth_session_active()` still holds. A request that passed the
+  check before its account was disabled therefore creates nothing afterwards. One overlap is left: an insert made just
+  before the account was disabled and not yet committed when the purge runs, which the purge can't see. Account
+  deletion (0.13b) must therefore **disable the auth user first** (ban or soft delete, so no new request passes) and
+  **end by hard-deleting the auth user**: the cascade from `auth.users` to `profiles` waits for such an insert (its
+  foreign-key check holds a key-share lock on the `auth.users` row) and then removes it. 0.13b's acceptance includes
+  that case: a first request whose transaction is still open across the disable and the purge leaves no row behind.
 - Hosted projects grant `postgres` the same rights on `auth`; this is **unverified** until 0.12b applies the migration
   there.
 

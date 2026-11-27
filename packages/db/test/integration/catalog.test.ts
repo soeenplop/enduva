@@ -4,8 +4,8 @@
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import type { Database } from '../../src/index.js';
-import { adminUrl, apiUrl, openDatabase, rolledBack, workerUrl } from './support.js';
+import { type Database, withUserTx } from '../../src/index.js';
+import { adminUrl, apiUrl, claimsFor, openDatabase, rolledBack, USER_A, USER_B, workerUrl } from './support.js';
 
 let admin: Database;
 beforeAll(() => {
@@ -124,11 +124,47 @@ describe('schema app', () => {
       {
         function: 'app.auth_session_active()',
         owner: 'postgres',
-        config: ['search_path=""'],
+        config: ['search_path=pg_catalog, pg_temp'],
         volatility: 's',
         execute: ['enduva_api'],
       },
     ]);
+  });
+
+  it('runs the session check and its helper with pg_temp last on the search path', async () => {
+    const rows = await query(
+      sql`select p.proname::text as function, p.proconfig as config from pg_proc p
+          where p.oid in ('app.auth_session_active()'::regprocedure, 'app.current_user_id()'::regprocedure) order by 1`,
+    );
+    expect(rows).toEqual([
+      { function: 'auth_session_active', config: ['search_path=pg_catalog, pg_temp'] },
+      { function: 'current_user_id', config: ['search_path=pg_catalog, pg_temp'] },
+    ]);
+  });
+
+  // Temporary types come first on an empty search path; a caller's domain must not take over the casts that run with
+  // postgres' rights in the session check.
+  it("can't have its casts shadowed by the caller's temporary types", async () => {
+    const api = openDatabase(apiUrl('direct'));
+    try {
+      const result = await rolledBack(
+        (fn) => withUserTx(api, claimsFor(USER_A), fn),
+        async (tx) => {
+          for (const type of ['uuid', 'jsonb', 'bool', 'text'])
+            await tx.execute(sql.raw(`create domain pg_temp.${type} as pg_catalog.text check (false)`));
+          await tx.execute(
+            sql`select set_config('request.jwt.claims', ${JSON.stringify({ ...claimsFor(USER_A), session_id: USER_B })}, true)`,
+          );
+          const { rows } = await tx.execute<{ active: boolean; user_id: string }>(
+            sql`select app.auth_session_active() as active, app.current_user_id() as user_id`,
+          );
+          return rows;
+        },
+      );
+      expect(result).toEqual([{ active: false, user_id: USER_A }]);
+    } finally {
+      await api.$client.end();
+    }
   });
 
   it.each(DATA_API_ROLES)('is unreachable for %s', async (role) => {
