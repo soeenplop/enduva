@@ -1,31 +1,52 @@
 // Smoke test of the production build in Chromium (`vite preview` serves dist/). The API is deliberately unreachable,
 // so /status must render "down" instead of failing.
 import { type ChildProcess, spawn } from 'node:child_process';
+import { once } from 'node:events';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
 import { type Browser, chromium, type Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-const origin = 'http://127.0.0.1:4310';
+let origin = '';
 let preview: ChildProcess;
 let browser: Browser;
 
+/** A port that was free a moment ago, so no other server (another build, another run) answers on it. */
+async function freePort() {
+  const probe = createServer().listen(0, '127.0.0.1');
+  await once(probe, 'listening');
+  const { port } = probe.address() as AddressInfo;
+  probe.close();
+  await once(probe, 'close');
+  return port;
+}
+
 beforeAll(async () => {
-  preview = spawn('node_modules/.bin/vite', ['preview', '--host', '127.0.0.1', '--port', '4310', '--strictPort'], {
-    cwd: new URL('..', import.meta.url),
-    // Port 9 (discard) refuses connections: the API is down.
-    env: { ...process.env, ENDUVA_API_URL: 'http://127.0.0.1:9' },
-    stdio: 'inherit',
-  });
-  for (
-    let i = 0;
-    i < 50 &&
-    !(await fetch(origin).then(
+  const port = await freePort();
+  origin = `http://127.0.0.1:${port}`;
+  preview = spawn(
+    'node_modules/.bin/vite',
+    ['preview', '--host', '127.0.0.1', '--port', String(port), '--strictPort'],
+    {
+      cwd: new URL('..', import.meta.url),
+      // Port 9 (discard) refuses connections: the API is down.
+      env: { ...process.env, ENDUVA_API_URL: 'http://127.0.0.1:9' },
+      stdio: 'inherit',
+    },
+  );
+  let exit: number | null | undefined;
+  preview.on('exit', (code) => (exit = code));
+  for (let attempt = 0, ready = false; !ready; attempt++) {
+    // Fail instead of testing whatever else might answer if our server died (for example, port taken after all).
+    if (exit !== undefined) throw new Error(`vite preview exited with code ${String(exit)}`);
+    if (attempt === 150) throw new Error(`vite preview did not answer on ${origin} within 30 s`);
+    ready = await fetch(origin).then(
       (r) => r.ok,
       () => false,
-    ));
-    i++
-  )
-    await delay(200);
+    );
+    if (!ready) await delay(200);
+  }
   browser = await chromium.launch();
 });
 
@@ -72,10 +93,20 @@ describe('web app shell', () => {
   it('navigates to the status page in the browser', async () => {
     const { page, errors, close } = await open();
     await page.goto(origin);
+    // Hydrated, so the router handles the click.
+    await page.waitForLoadState('networkidle');
+    // A full page load would drop this marker and request a new document; the client router does neither.
+    await page.evaluate(() => Object.assign(window, { enduvaMarker: true }));
+    const documents: string[] = [];
+    page.on('request', (req) => {
+      if (req.isNavigationRequest()) documents.push(req.url());
+    });
     await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Status' }).click();
-    // Client-side navigation: the loader calls the server function, then the page renders.
+    // The loader calls the server function, then the page renders.
     await page.getByRole('heading', { name: 'Service status' }).waitFor();
     expect(page.url()).toBe(`${origin}/status`);
+    expect(await page.evaluate(() => 'enduvaMarker' in window)).toBe(true);
+    expect(documents).toEqual([]);
     expect(await page.locator('#status-api').getAttribute('data-state')).toBe('down');
     expect(await page.getByRole('link', { name: 'Status' }).getAttribute('aria-current')).toBe('page');
     expect(await page.getByRole('link', { name: 'Home', exact: true }).getAttribute('aria-current')).toBeNull();
