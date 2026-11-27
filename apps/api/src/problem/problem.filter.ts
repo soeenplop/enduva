@@ -1,7 +1,6 @@
 import { type ArgumentsHost, Catch, type ExceptionFilter, HttpException, Logger } from '@nestjs/common';
 import type { Response } from 'express';
 
-import { loggableError } from '../db/errors.js';
 import { codeForStatus, problem, PROBLEM_CONTENT_TYPE, type Problem, ProblemException } from './problem.js';
 
 /** Errors from Express middleware such as the body parser (`http-errors`): a 4xx status that is safe to expose. */
@@ -14,7 +13,8 @@ function exposedClientStatus(error: unknown): number | undefined {
 /**
  * Answers every error with RFC 9457 problem details (`application/problem+json`) and a stable `code`. Messages of
  * Nest and Express exceptions are not passed on: they can echo request input. Unexpected errors become a bare 500
- * and are logged with the request ID (query parameters redacted), never sent to the client.
+ * and are logged with the request ID and their class only (the `err` serializer, `safeError`), never sent to the
+ * client.
  */
 @Catch()
 export class ProblemFilter implements ExceptionFilter {
@@ -23,7 +23,7 @@ export class ProblemFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost): void {
     const response = host.switchToHttp().getResponse<Response>();
     const body = this.toProblem(exception);
-    if (body.code === 'internal_error') this.logger.error({ err: loggableError(exception) }, 'unexpected error');
+    if (body.code === 'internal_error') this.logger.error({ err: exception, code: body.code }, 'unexpected error');
     if (response.headersSent) {
       response.end();
       return;

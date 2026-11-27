@@ -13,18 +13,30 @@ describe('loadEnv', () => {
       LOG_LEVEL: 'info',
       DATABASE_URL: url,
       DATABASE_POOL_MAX: 10,
-      TRUST_PROXY: 0,
+      TRUST_PROXY: [],
       THROTTLE_LIMIT: 100,
       THROTTLE_TTL_SECONDS: 60,
     });
   });
 
   it('coerces numbers', () => {
-    expect(loadEnv({ DATABASE_URL: url, PORT: '8080', THROTTLE_LIMIT: '5', TRUST_PROXY: '1' })).toMatchObject({
+    expect(loadEnv({ DATABASE_URL: url, PORT: '8080', THROTTLE_LIMIT: '5' })).toMatchObject({
       PORT: 8080,
       THROTTLE_LIMIT: 5,
-      TRUST_PROXY: 1,
     });
+  });
+
+  it('reads trusted proxies as a list of addresses, CIDRs and named ranges', () => {
+    expect(
+      loadEnv({ DATABASE_URL: url, TRUST_PROXY: ' 10.0.1.5, 172.16.0.0/12,fd00::/8 ,uniquelocal,' }),
+    ).toMatchObject({
+      TRUST_PROXY: ['10.0.1.5', '172.16.0.0/12', 'fd00::/8', 'uniquelocal'],
+    });
+    expect(loadEnv({ DATABASE_URL: url, TRUST_PROXY: '' })).toMatchObject({ TRUST_PROXY: [] });
+  });
+
+  it('keeps an explicit PORT=0 for an ephemeral port', () => {
+    expect(loadEnv({ DATABASE_URL: url, PORT: '0' })).toMatchObject({ PORT: 0 });
   });
 
   it('refuses a missing DATABASE_URL', () => {
@@ -32,12 +44,23 @@ describe('loadEnv', () => {
   });
 
   it.each([
+    ['PORT', ''],
+    ['PORT', '   '],
+    ['PORT', ' 8080'],
+    ['PORT', '-1'],
+    ['PORT', '80.5'],
     ['PORT', 'http'],
     ['PORT', '70000'],
     ['NODE_ENV', 'staging'],
     ['HOST', ''],
     ['LOG_LEVEL', 'verbose'],
     ['TRUST_PROXY', 'true'],
+    ['TRUST_PROXY', '1'],
+    ['TRUST_PROXY', '0.0.0.0/0'],
+    ['TRUST_PROXY', '10.0.0.0/33'],
+    ['TRUST_PROXY', '10.0.0.0/8/1'],
+    ['TRUST_PROXY', '10.0.0.0/255.0.0.0'],
+    ['TRUST_PROXY', 'traefik'],
     ['THROTTLE_LIMIT', '-1'],
     ['THROTTLE_TTL_SECONDS', '0'],
     ['DATABASE_POOL_MAX', '0'],

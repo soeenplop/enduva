@@ -10,11 +10,19 @@ import { createTestApp, http, logCapture, testEnv } from './support.js';
 
 const problemType = /^application\/problem\+json/;
 
+const reqId = (line: Record<string, unknown>): unknown => (line.req as { id?: unknown } | undefined)?.id;
+
 @Controller('boom')
 class BoomController {
   @Get()
   fail(): never {
-    throw new Error('internal detail');
+    const cause = Object.assign(new Error('cause-secret'), { password: 'cause-prop-secret' });
+    throw Object.assign(new Error('message-secret', { cause }), { token: 'prop-secret' });
+  }
+
+  @Get('items/:id')
+  item(): { readonly ok: true } {
+    return { ok: true };
   }
 
   @Post()
@@ -65,15 +73,12 @@ describe('GET /v1/health (e2e, SWC)', () => {
     expect((await http(app).get('/v1/health')).status).toBe(200);
   });
 
-  it('echoes a safe x-request-id and replaces an unsafe one', async () => {
-    const kept = await http(app).get('/v1/health').set('x-request-id', 'trace-abc.123');
-    expect(kept.headers['x-request-id']).toBe('trace-abc.123');
-
-    for (const unsafe of ['a b {"level":60}', 'x'.repeat(129)]) {
-      const replaced = await http(app).get('/v1/health').set('x-request-id', unsafe);
-      expect(replaced.headers['x-request-id']).toMatch(/^[0-9a-f-]{36}$/);
+  it('generates every x-request-id and ignores the client one', async () => {
+    for (const incoming of ['trace-abc.123', '8f14e45f-ceea-467f-a0e6-0b5b6f3a3c1d', 'a b {"level":60}']) {
+      const res = await http(app).get('/v1/health').set('x-request-id', incoming);
+      expect(res.headers['x-request-id']).toMatch(/^[0-9a-f-]{36}$/);
+      expect(res.headers['x-request-id']).not.toBe(incoming);
     }
-
     const generated = await http(app).get('/v1/health');
     expect(generated.headers['x-request-id']).toMatch(/^[0-9a-f-]{36}$/);
   });
@@ -96,8 +101,8 @@ describe('GET /v1/health (e2e, SWC)', () => {
     expect(res.headers['x-request-id']).toBeDefined();
   });
 
-  it('hides unexpected errors behind internal_error and logs them with the request ID', async () => {
-    const res = await http(app).get('/v1/boom').set('x-request-id', 'boom-check');
+  it('hides unexpected errors behind internal_error and logs only their class and the request ID', async () => {
+    const res = await http(app).get('/v1/boom');
     expect(res.status).toBe(500);
     expect(res.body).toEqual({
       type: 'about:blank',
@@ -105,32 +110,47 @@ describe('GET /v1/health (e2e, SWC)', () => {
       status: 500,
       code: 'internal_error',
     });
-    expect(res.text).not.toContain('internal detail');
-    expect(logs.lines()).toContainEqual(
-      expect.objectContaining({
-        level: 50,
-        context: 'ProblemFilter',
-        req: expect.objectContaining({ id: 'boom-check' }) as unknown,
-        err: expect.objectContaining({ message: 'internal detail' }) as unknown,
-      }),
-    );
+    expect(res.text).not.toContain('secret');
+    const id = res.headers['x-request-id'];
+    const filterLine = logs.lines().find((l) => l.context === 'ProblemFilter' && reqId(l) === id);
+    expect(filterLine).toMatchObject({ level: 50, code: 'internal_error', err: { type: 'Error' } });
+    expect(filterLine?.err).toEqual({ type: 'Error' });
+    const completion = logs.lines().find((l) => l.res !== undefined && reqId(l) === id);
+    expect(completion?.err).toEqual({ type: 'Error' });
+    expect(logs.text()).not.toMatch(/message-secret|cause-secret|cause-prop-secret|prop-secret|"stack"/);
   });
 
-  it('logs requests with their ID but without headers, query strings or bodies', async () => {
-    await http(app)
+  it('logs requests with their ID and route template but without paths, headers, query strings or bodies', async () => {
+    const res = await http(app)
       .post('/v1/boom?token=query-secret')
-      .set('x-request-id', 'log-check')
       .set('authorization', 'Bearer header-secret')
       .set('cookie', 'sb=cookie-secret')
       .send({ heartRate: 'body-secret' });
+    const item = await http(app).get('/v1/boom/items/path-secret');
+    const missing = await http(app).get('/v1/users/unmatched-secret');
+    const malformed = await http(app)
+      .post('/v1/boom/malformed-secret')
+      .set('content-type', 'application/json')
+      .send('{"oops');
 
-    const line = logs.lines().find((l) => (l.req as { id?: string } | undefined)?.id === 'log-check');
-    expect(line).toMatchObject({
-      req: { id: 'log-check', method: 'POST', path: '/v1/boom' },
+    const completion = (id: unknown) => logs.lines().find((l) => l.res !== undefined && reqId(l) === id);
+    expect(completion(res.headers['x-request-id'])).toMatchObject({
+      req: { id: res.headers['x-request-id'], method: 'POST' },
       res: { statusCode: 201 },
+      route: '/v1/boom',
     });
-    expect(Object.keys(line?.req ?? {})).toEqual(['id', 'method', 'path']);
-    expect(logs.text()).not.toMatch(/query-secret|header-secret|cookie-secret|body-secret/);
+    expect(Object.keys(completion(res.headers['x-request-id'])?.req ?? {})).toEqual(['id', 'method']);
+    expect(completion(item.headers['x-request-id'])).toMatchObject({ route: '/v1/boom/items/:id' });
+    // Nest answers unknown paths from its own catch-all route.
+    expect(completion(missing.headers['x-request-id'])).toMatchObject({ route: '/{*splat}', res: { statusCode: 404 } });
+    // The body parser rejects before routing.
+    expect(completion(malformed.headers['x-request-id'])).toMatchObject({
+      route: '(unmatched)',
+      res: { statusCode: 400 },
+    });
+    expect(logs.text()).not.toMatch(
+      /query-secret|header-secret|cookie-secret|body-secret|path-secret|unmatched-secret|malformed-secret/,
+    );
   });
 });
 
@@ -156,21 +176,42 @@ describe('throttling (e2e)', () => {
   });
 });
 
-describe('throttling behind a trusted proxy (e2e)', () => {
-  let app: NestExpressApplication;
-
-  beforeAll(async () => {
-    app = await createTestApp(testEnv({ THROTTLE_LIMIT: '1', TRUST_PROXY: '1' }));
-  });
+describe('client IPs for throttling (e2e)', () => {
+  const apps: NestExpressApplication[] = [];
+  const boot = async (trustProxy: string) => {
+    const app = await createTestApp(testEnv({ THROTTLE_LIMIT: '1', TRUST_PROXY: trustProxy }));
+    apps.push(app);
+    return (ip: string) => http(app).get('/v1/health').set('x-forwarded-for', ip);
+  };
 
   afterAll(async () => {
-    await app.close();
+    await Promise.all(apps.map((app) => app.close()));
   });
 
-  it('counts each forwarded client IP separately', async () => {
-    const from = (ip: string) => http(app).get('/v1/health').set('x-forwarded-for', ip);
+  // supertest connects from loopback, so loopback plays the ingress here.
+  it('counts each forwarded client IP separately when the peer is a trusted proxy', async () => {
+    const from = await boot('127.0.0.1, ::1');
     expect((await from('203.0.113.1')).status).toBe(200);
     expect((await from('203.0.113.1')).status).toBe(429);
     expect((await from('203.0.113.2')).status).toBe(200);
+  });
+
+  it('ignores X-Forwarded-For from a peer that is not a trusted proxy', async () => {
+    const from = await boot('10.0.0.0/8');
+    expect((await from('203.0.113.1')).status).toBe(200);
+    expect((await from('203.0.113.2')).status).toBe(429);
+  });
+
+  it('ignores X-Forwarded-For when no proxy is configured', async () => {
+    const from = await boot('');
+    expect((await from('203.0.113.1')).status).toBe(200);
+    expect((await from('203.0.113.2')).status).toBe(429);
+  });
+
+  it('stops at the first untrusted hop in a forwarded chain', async () => {
+    const from = await boot('127.0.0.1, ::1, 10.0.0.0/8');
+    // The client spoofs a leftmost entry; the trusted chain ends at 198.51.100.7, the IP the ingress saw.
+    expect((await from('203.0.113.1, 198.51.100.7, 10.0.0.2')).status).toBe(200);
+    expect((await from('203.0.113.9, 198.51.100.7, 10.0.0.2')).status).toBe(429);
   });
 });

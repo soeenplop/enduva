@@ -32,8 +32,8 @@ process with exit code 1 and a list of the offending variable names (never their
 | `NODE_ENV` | `development` | `development`, `test` or `production` |
 | `HOST` / `PORT` | `0.0.0.0` / `3000` | |
 | `LOG_LEVEL` | `info` | pino level, or `silent` |
-| `TRUST_PROXY` | `0` | Number of trusted reverse proxies (Traefik: `1`), so throttling sees the client IP |
-| `THROTTLE_LIMIT` / `THROTTLE_TTL_SECONDS` | `100` / `60` | Requests per client IP and window |
+| `TRUST_PROXY` | empty | Comma-separated IPs/CIDRs of the ingress (Traefik in Dokploy, e.g. the CIDR of its Docker network). `X-Forwarded-For` is honoured only from these peers; empty trusts none. No hop counts |
+| `THROTTLE_LIMIT` / `THROTTLE_TTL_SECONDS` | `100` / `60` | Requests per client IP **and endpoint** per window (see Throttling) |
 
 Locally, start the database with `pnpm --filter @enduva/db db:start` and `db:reset` ([`packages/db`](../db/README.md)).
 Never point a local process at a hosted project.
@@ -47,15 +47,22 @@ Never point a local process at a hosted project.
 - **Errors:** every error is RFC 9457 problem details (`application/problem+json`) with `type: about:blank`, the
   status phrase as `title`, `status` and a stable `code` from [`src/problem/problem.ts`](src/problem/problem.ts).
   Throw `ProblemException(code)` for expected errors. Messages of Nest and Express exceptions are not passed on.
-  Unexpected errors become `500` `internal_error`; their message is logged, never sent.
+  Unexpected errors become `500` `internal_error` and are logged with the request ID and their class only: the
+  `err` serializer ([`src/logging/safe-error.ts`](src/logging/safe-error.ts)) never logs messages, causes, stacks
+  or other properties, since those can carry request input.
 - **Logging:** pino JSON on stdout. The request logger is the first middleware, ahead of the body parser, so every
-  request gets an ID: a safe incoming `x-request-id` is reused, otherwise one is generated, and it is echoed in the
-  `x-request-id` response header. Request logs hold only ID, method, path (no query string), status and duration:
-  no headers, tokens, bodies, client IPs or health data. Nest's own logs go through the same logger (nestjs-pino).
+  request gets a server-generated ID, echoed in the `x-request-id` response header. An incoming `x-request-id` is
+  ignored: it is client-controlled. Request logs hold only ID, method, the matched route template (e.g.
+  `/v1/items/:id`; `(unmatched)` when the request ended before routing), status and duration: no raw paths or query
+  strings, headers, tokens, bodies, client IPs or health data. Nest's own logs go through the same logger
+  (nestjs-pino).
   For failed queries only the SQL text (placeholders), SQLSTATE, table and constraint are logged, never the
   parameters or Postgres' message ([`src/db/errors.ts`](src/db/errors.ts)).
-- **Throttling:** `@nestjs/throttler`, per client IP on every route, in memory per process. Over the limit: `429`
-  `rate_limited` with `Retry-After`. Per-user limits follow with auth (0.8b).
+- **Throttling:** `@nestjs/throttler` as a global guard, in memory per process. Each matched endpoint (controller and
+  handler) has its own bucket per client IP, so the limit is not an API-wide or ingress-wide request limit. The
+  guard runs after the body parser and routing: requests to unmatched routes and requests whose body is rejected are
+  never counted. Over the limit: `429` `rate_limited` with `Retry-After`. Per-user limits follow with auth (0.8b);
+  an overall request limit belongs to the ingress.
 - **Database:** one pg pool on `DATABASE_URL` ([ADR-0002](../../docs/adr/0002-db-access-and-rls.md)). It connects
   lazily, so the API starts and stays live while the database is down. A request whose `claims` were set by the
   auth guard (0.8b) runs its handler in **one** `withUserTx` transaction as `enduva_api`, with the claims set

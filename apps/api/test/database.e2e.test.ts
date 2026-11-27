@@ -104,17 +104,13 @@ describe.skipIf(!available)(`database (e2e, local Supabase${available ? '' : ': 
   });
 
   it('logs a failed query without its parameters', async () => {
-    const res = await http(app).get('/v1/probe/bad-query').set('x-test-user', USER_A).set('x-request-id', 'bad-query');
+    const res = await http(app).get('/v1/probe/bad-query').set('x-test-user', USER_A);
     expect(res.status).toBe(500);
     expect(logs.lines()).toContainEqual(
       expect.objectContaining({
         context: 'ProblemFilter',
-        req: expect.objectContaining({ id: 'bad-query' }) as unknown,
-        err: expect.objectContaining({
-          type: 'DrizzleQueryError',
-          sqlState: '22P02',
-          query: 'select $1::uuid',
-        }) as unknown,
+        req: expect.objectContaining({ id: res.headers['x-request-id'] }) as unknown,
+        err: { type: 'DrizzleQueryError' },
       }),
     );
     expect(logs.text()).not.toContain('heart-rate-72');
