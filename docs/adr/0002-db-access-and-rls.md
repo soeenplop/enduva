@@ -114,10 +114,13 @@ revoked.
 - **`role` is in no grant.** Profiles start as `user`; only an operator (the migration role) makes an admin.
   `role` and entitlements are authorisation inputs (architecture → Authentication), so the request path can write
   neither. Entitlement changes from store notifications are worker jobs.
-- **Revocation is one-way, for every role.** A trigger (`app.keep_revocation`) stamps `revoked_at` with the
-  transaction time when a consent or device is revoked and rejects any later change to it (`23514`). A stale or
-  replayed write can't make withdrawn consent or a revoked device active again. Granting consent again inserts a new
-  row.
+- **Revocation is one-way, for every role.** A trigger (`app.keep_revocation`) stamps `revoked_at` when a consent
+  or device is revoked and rejects any later change to it (`23514`). A stale or replayed write can't make withdrawn
+  consent or a revoked device active again. Granting consent again inserts a new row.
+- **The stamp is the time of the revoking UPDATE.** It is `clock_timestamp()`, kept at or after `granted_at`
+  (consents) or `created_at` (devices) with `greatest()`. It is not `now()`, the transaction start: under READ
+  COMMITTED a transaction can revoke a consent granted after it began, and `now()` would then fail the
+  `revoked_at >= granted_at` check and leave the consent active. So a revocation never fails on ordering.
 - **History stays until the account goes.** Neither role may delete consents or devices. The worker deletes an
   account by deleting its profile, and the foreign-key cascade removes every account row with it.
 - The API deletes nothing and can never change `user_id`, `role`, `version` or timestamps. Triggers maintain
