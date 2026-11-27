@@ -7,22 +7,16 @@ on:
       - 'spikes/**'
       - 'docs/adr/**'
       - '.github/workflows/spike-ts7.yml'
-      # The lockfile audit also checks the root lockfile; the root audits run here until 0.5.
+      # The spike's lockfile audit also checks the root lockfile. The root audits run in ci.yml.
       - 'pnpm-lock.yaml'
-      - 'package.json'
-      - 'pnpm-workspace.yaml'
-      - 'tools/**'
   push:
     branches: [main]
     paths:
       - 'spikes/**'
       - 'docs/adr/**'
       - '.github/workflows/spike-ts7.yml'
-      # The lockfile audit also checks the root lockfile; the root audits run here until 0.5.
+      # The spike's lockfile audit also checks the root lockfile. The root audits run in ci.yml.
       - 'pnpm-lock.yaml'
-      - 'package.json'
-      - 'pnpm-workspace.yaml'
-      - 'tools/**'
 
 permissions:
   contents: read
@@ -61,14 +55,6 @@ jobs:
         run: pnpm why typescript
       - name: Bundled-TypeScript audit (installed files; allowlist ts-bundled-allowlist.json)
         run: pnpm audit:bundled-ts
-      # The root workspace has its own allowlist (tools/ts-bundled-allowlist.json). Task 0.5 moves
-      # these checks into the main CI, and then this workflow is deleted with the spike.
-      - name: Install root workspace
-        working-directory: .
-        run: pnpm install --frozen-lockfile --ignore-scripts
-      - name: Root audits (lockfile + bundled TypeScript, tools/)
-        working-directory: .
-        run: pnpm audit:ts
 
       - name: Generate (openapi.json, web client, Paraglide, route trees)
         run: pnpm generate
