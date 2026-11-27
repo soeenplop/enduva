@@ -2,16 +2,35 @@ import { isIP } from 'node:net';
 
 import * as z from 'zod';
 
-const API_LOGIN = 'enduva_api_login';
+export const API_LOGIN = 'enduva_api_login';
 
-/** Postgres URL of the API's login role. `<role>.<tenant>` is the user name format of Supabase's pooler. */
-const databaseUrl = z.url({ protocol: /^postgres(ql)?$/, error: 'must be a postgres:// or postgresql:// URL' }).refine(
-  (value) => {
-    const user = decodeURIComponent(URL.parse(value)?.username ?? '');
-    return user === API_LOGIN || user.startsWith(`${API_LOGIN}.`);
-  },
-  { error: `must connect as ${API_LOGIN} (ADR-0002), never as postgres or service_role` },
-);
+/**
+ * Query parameters a `DATABASE_URL` may carry: TLS settings only. node-postgres (pg-connection-string) lets query
+ * parameters override the URL, e.g. `?user=postgres` replaces the login and `?options=-c role=…` sets session
+ * settings, so every other parameter is refused.
+ */
+const allowedDatabaseParams = new Set(['sslmode', 'sslrootcert', 'uselibpqcompat']);
+
+/** The login node-postgres will use: the URL's user name, with no override. `<role>.<tenant>` is Supabase's pooler. */
+function connectsAsApiLogin(value: string): boolean {
+  const url = URL.parse(value);
+  if (url === null) return false;
+  if ([...url.searchParams.keys()].some((key) => !allowedDatabaseParams.has(key))) return false;
+  let user: string;
+  try {
+    user = decodeURIComponent(url.username);
+  } catch {
+    return false;
+  }
+  return user === API_LOGIN || user.startsWith(`${API_LOGIN}.`);
+}
+
+/** Postgres URL of the API's login role (ADR-0002). */
+const databaseUrl = z
+  .url({ protocol: /^postgres(ql)?$/, error: 'must be a postgres:// or postgresql:// URL' })
+  .refine(connectsAsApiLogin, {
+    error: `must connect as ${API_LOGIN} (ADR-0002), never as postgres or service_role, with no query parameters but sslmode, sslrootcert and uselibpqcompat`,
+  });
 
 /**
  * A decimal port number. Blank or whitespace-only values are rejected instead of coerced to 0, which would silently

@@ -80,6 +80,22 @@ describe('loadEnv', () => {
     },
   );
 
+  it.each([
+    ['a user parameter', `${url}?user=postgres`],
+    ['a user parameter after TLS settings', `${url}?sslmode=require&user=service_role`],
+    ['session options', `${url}?options=-c%20role%3Dpostgres`],
+    ['a host override', `${url}?host=10.0.0.9`],
+    ['a malformed escape in the user name', url.replace('enduva_api_login.pooler-dev', 'enduva_api_login.%E0%A4%A')],
+  ])('refuses a DATABASE_URL with %s, without echoing it', (_case, value) => {
+    expect(() => loadEnv({ DATABASE_URL: value })).toThrow('DATABASE_URL: must connect as enduva_api_login');
+    expect(() => loadEnv({ DATABASE_URL: value })).not.toThrow(/s3cret-pw|10\.0\.0\.9/);
+  });
+
+  it('accepts TLS settings', () => {
+    const tls = `${url}?sslmode=verify-full&sslrootcert=/etc/ssl/supabase.crt`;
+    expect(loadEnv({ DATABASE_URL: tls }).DATABASE_URL).toBe(tls);
+  });
+
   it('accepts the direct login without a pooler tenant', () => {
     const direct = 'postgresql://enduva_api_login:pw@127.0.0.1:54322/postgres';
     expect(loadEnv({ DATABASE_URL: direct }).DATABASE_URL).toBe(direct);

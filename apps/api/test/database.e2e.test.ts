@@ -1,10 +1,11 @@
 import { type CanActivate, Controller, type ExecutionContext, Get, Injectable, Post } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
-import { createDatabase, profiles, type Transaction } from '@enduva/db';
+import { createDatabase, type Database, profiles, type Transaction } from '@enduva/db';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { DATABASE } from '../src/db/database.js';
 import { type IdentifiedRequest, RequestTx } from '../src/db/request-transaction.js';
 import { createTestApp, http, logCapture, testEnv } from './support.js';
 
@@ -87,6 +88,22 @@ describe.skipIf(!available)(`database (e2e, local Supabase${available ? '' : ': 
     const res = await http(app).get('/v1/health/ready');
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ status: 'ok' });
+  });
+
+  it('is not ready when the pool logs in as another role', async () => {
+    // The env check refuses such a URL; this stands in for a login node-postgres or the pooler changed anyway.
+    const other = await createTestApp(testEnv({ DATABASE_URL: LOCAL_POOLER_URL }));
+    try {
+      other.get<Database>(DATABASE).$client.options.connectionString = LOCAL_POOLER_URL.replace(
+        'enduva_api_login.pooler-dev:enduva-local-api',
+        'enduva_worker_login.pooler-dev:enduva-local-worker',
+      );
+      const res = await http(other).get('/v1/health/ready');
+      expect(res.status).toBe(503);
+      expect(res.body).toMatchObject({ code: 'database_unavailable' });
+    } finally {
+      await other.close();
+    }
   });
 
   it('runs a request with verified claims in one transaction as enduva_api, scoped by RLS', async () => {

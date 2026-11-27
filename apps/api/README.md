@@ -27,7 +27,7 @@ process with exit code 1 and a list of the offending variable names (never their
 
 | Variable | Default | Notes |
 | --- | --- | --- |
-| `DATABASE_URL` | required | Transaction-pooler URL as `enduva_api_login` (`<role>.<tenant>` through the pooler). Any other user is refused |
+| `DATABASE_URL` | required | Transaction-pooler URL as `enduva_api_login` (`<role>.<tenant>` through the pooler). Any other user is refused, and so is any query parameter but `sslmode`, `sslrootcert` and `uselibpqcompat` (node-postgres lets `?user=` or `?options=` override the URL). Readiness also checks `current_user` |
 | `DATABASE_POOL_MAX` | `10` | Pool size per process (06-deployment → Connection budget) |
 | `NODE_ENV` | `development` | `development`, `test` or `production` |
 | `HOST` / `PORT` | `0.0.0.0` / `3000` | |
@@ -42,8 +42,9 @@ Never point a local process at a hosted project.
 
 - **Routes** live under `/v1` through Nest's URI versioning (`defaultVersion: '1'`), not a global prefix, so
   Nest's 404 handling also covers paths outside `/v1`.
-- **Health:** `GET /v1/health` is liveness and never touches the database. `GET /v1/health/ready` pings the
-  database (`select 1`, 2 s timeout) and answers `503` `database_unavailable` otherwise.
+- **Health:** `GET /v1/health` is liveness and never touches the database. `GET /v1/health/ready` asks the
+  database for `current_user` (2 s timeout) and answers `503` `database_unavailable` unless it answers as
+  `enduva_api_login`.
 - **Errors:** every error is RFC 9457 problem details (`application/problem+json`) with `type: about:blank`, the
   status phrase as `title`, `status` and a stable `code` from [`src/problem/problem.ts`](src/problem/problem.ts).
   Throw `ProblemException(code)` for expected errors. Messages of Nest and Express exceptions are not passed on.
