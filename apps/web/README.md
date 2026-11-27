@@ -13,8 +13,8 @@ In this directory:
 | --- | --- |
 | `pnpm generate` | Compiles the Paraglide messages (`src/paraglide/`) and the route tree (`src/routeTree.gen.ts`) for `tsc`. Both are git-ignored |
 | `pnpm build` | [`scripts/build.mjs`](scripts/build.mjs): `vite build`, then the same route-tree and Paraglide identity check as the landing page ([`apps/landing/README.md`](../landing/README.md#identity-check)) |
-| `pnpm dev` | Vite dev server on port 3000 |
-| `pnpm test` | Vitest. Turbo builds first: `test/ssr.test.ts` renders through the production SSR bundle |
+| `pnpm dev` | Vite dev server (talks to the local API at `http://127.0.0.1:3000` unless `ENDUVA_API_URL` is set) |
+| `pnpm test` | Vitest. Turbo builds first: `test/ssr*.test.ts` render through the production SSR bundle |
 
 `dist/server/server.js` exports the SSR fetch handler; the Node server preset is pinned in 0.12a.
 
@@ -24,6 +24,24 @@ In this directory:
 request, so no query data is shared between requests or users. Never create a `QueryClient` (or anything else that
 holds user data) at module scope. Loaders fill the cache with `context.queryClient.ensureQueryData(…)`;
 `@tanstack/react-router-ssr-query` dehydrates it into the page.
+
+## Environment
+
+| Variable | Read by | Meaning |
+| --- | --- | --- |
+| `ENDUVA_API_URL` | the server, at call time ([`src/config.server.ts`](src/config.server.ts)) | Origin of the API for server-side calls. Required in a production build |
+
+Nothing is baked in at build time, so one image serves every environment. The browser doesn't call the API yet; 0.9b
+adds its public URL together with sign-in.
+
+## API
+
+Calls go through the generated client [`@enduva/api-client`](../../packages/api-client) (its README defines the
+result contract). [`/status`](src/routes/status.tsx) shows the API's liveness and readiness: a server function asks
+`GET /v1/health` and `GET /v1/health/ready`, and the route loader puts the result in the request's `QueryClient`
+([`src/api/queries.ts`](src/api/queries.ts)). [`test/ssr-isolation.test.ts`](test/ssr-isolation.test.ts) renders
+that page for two visitors at once against a stub API that answers each call differently, and requires each page to
+show its own answer; with a module-level `QueryClient` it fails.
 
 ## Locale
 
@@ -41,5 +59,5 @@ switch with the theme. Tailwind's default palette is removed, so only token colo
 ## Negative tests
 
 `negative/*.tsx` must fail `tsc` with exactly the diagnostic they name (`pnpm test:negative` from the repository root):
-a wrong component prop, a `Link` to a missing route, an undeclared search param, a misspelled message and a
-misspelled router-context field.
+a wrong component prop, a `Link` to a missing route, an undeclared search param, a misspelled message, a misspelled
+router-context field, a loader-data field that doesn't exist and a misspelled field of the API status query data.

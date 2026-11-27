@@ -14,5 +14,11 @@
   "error_title": "Something went wrong",
   "error_body": "This page could not be loaded. Try again in a moment.",
   "error_retry": "Try again",
-  "back_home": "Back to the start page"
+  "back_home": "Back to the start page",
+  "nav_status": "Status",
+  "status_title": "Service status",
+  "status_api": "API",
+  "status_database": "Database",
+  "status_up": "Available",
+  "status_down": "Unavailable"
 }

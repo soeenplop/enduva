@@ -36,11 +36,11 @@
       "dependsOn": ["^transit"]
     },
     "typecheck": {
-      "dependsOn": ["transit", "generate"],
+      "dependsOn": ["transit", "generate", "^generate"],
       "outputs": []
     },
     "lint": {
-      "dependsOn": ["transit", "generate"],
+      "dependsOn": ["transit", "generate", "^generate"],
       "outputs": []
     },
     "test": {

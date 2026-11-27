@@ -14,5 +14,11 @@
   "error_title": "Etwas ist schiefgelaufen",
   "error_body": "Diese Seite konnte nicht geladen werden. Versuch es gleich noch einmal.",
   "error_retry": "Erneut versuchen",
-  "back_home": "Zurück zur Startseite"
+  "back_home": "Zurück zur Startseite",
+  "nav_status": "Status",
+  "status_title": "Dienststatus",
+  "status_api": "API",
+  "status_database": "Datenbank",
+  "status_up": "Erreichbar",
+  "status_down": "Nicht erreichbar"
 }
