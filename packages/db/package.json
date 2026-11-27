@@ -18,13 +18,21 @@
     "db:keys": "node scripts/ensure-signing-key.mjs",
     "db:start": "pnpm db:keys && supabase start --workdir ../..",
     "db:stop": "supabase stop --workdir ../..",
-    "db:reset": "supabase db reset --workdir ../.."
+    "db:reset": "supabase db reset --workdir ../..",
+    "db:generate": "drizzle-kit generate --config drizzle.config.mjs",
+    "db:custom": "drizzle-kit generate --config drizzle.config.mjs --custom"
+  },
+  "dependencies": {
+    "drizzle-orm": "0.45.4",
+    "pg": "8.23.1"
   },
   "devDependencies": {
     "@enduva/config": "workspace:*",
     "@swc/cli": "catalog:",
     "@swc/core": "catalog:",
     "@types/node": "catalog:",
+    "@types/pg": "8.23.1",
+    "drizzle-kit": "0.31.11",
     "oxlint": "catalog:",
     "oxlint-tsgolint": "catalog:",
     "typescript": "catalog:",
