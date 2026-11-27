@@ -69,7 +69,8 @@ describe.each(ACTORS)('$role without a user identity', (actor) => {
       it.each(updates)("can't update $name", async (table) => {
         const update = sql`update ${tableSql(table.name)} set ${sql.raw(table.access[actor.role].set ?? '')}`;
         expect(await anonymous(update)).toEqual({ rows: 0 });
-        expect(await asOwner(USER_A, update)).not.toEqual({ rows: 0 });
+        // A has exactly one row in every account table (supabase/seed.sql).
+        expect(await asOwner(USER_A, update)).toEqual({ rows: 1 });
       });
 
       const deletes = TABLE_CASES.filter((table) => table.access[actor.role].delete);
