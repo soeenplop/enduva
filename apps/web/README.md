@@ -39,7 +39,8 @@ adds its public URL together with sign-in.
 Calls go through the generated client [`@enduva/api-client`](../../packages/api-client) (its README defines the
 result contract). [`/status`](src/routes/status.tsx) shows the API's liveness and readiness: a server function asks
 `GET /v1/health` and `GET /v1/health/ready`, and the route loader puts the result in the request's `QueryClient`
-([`src/api/queries.ts`](src/api/queries.ts)). [`test/ssr-isolation.test.ts`](test/ssr-isolation.test.ts) renders
+([`src/api/queries.ts`](src/api/queries.ts)). Each probe has a 2 s deadline, so a stalled API shows as unavailable instead
+of holding the page, and unexpected errors are logged on the server and reach the page only as a generic error. [`test/ssr-isolation.test.ts`](test/ssr-isolation.test.ts) renders
 that page for two visitors at once against a stub API that answers each call differently, and requires each page to
 show its own answer; with a module-level `QueryClient` it fails.
 

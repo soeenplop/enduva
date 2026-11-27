@@ -1,13 +1,26 @@
-// /status failure modes, rendered through the production SSR bundle.
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+// /status failure modes, rendered through the production SSR bundle: a stalled API and a broken configuration.
+import { once } from 'node:events';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { PROBE_TIMEOUT_MS } from '../src/api/status';
 
+// Accepts every request and never answers.
+const stalled = createServer(() => {});
 type Server = { fetch(req: Request): Promise<Response> };
 let server: Server;
 
 beforeAll(async () => {
+  stalled.listen(0, '127.0.0.1');
+  await once(stalled, 'listening');
   ({ default: server } = (await import(new URL('../dist/server/server.js', import.meta.url).href)) as {
     default: Server;
   });
+});
+
+afterAll(() => {
+  stalled.closeAllConnections();
+  stalled.close();
 });
 
 const render = async () => {
@@ -16,6 +29,16 @@ const render = async () => {
 };
 
 describe('/status', () => {
+  it('shows a stalled API as unavailable after the probe deadline', async () => {
+    process.env['ENDUVA_API_URL'] = `http://127.0.0.1:${(stalled.address() as AddressInfo).port}`;
+    const started = Date.now();
+    const { status, html } = await render();
+    expect(status).toBe(200);
+    expect(html).toContain('id="status-api" data-state="down"');
+    expect(html).toContain('id="status-database" data-state="down"');
+    expect(Date.now() - started).toBeLessThan(PROBE_TIMEOUT_MS + 2_000);
+  });
+
   it.each([
     ['missing', undefined, 'ENDUVA_API_URL is not set'],
     ['malformed', 'not a url', 'Invalid URL'],
