@@ -3,8 +3,8 @@
 // - Exactly the expected HTML files: every page under each locale prefix plus the picker at `/`,
 //   and no unprefixed duplicate such as dist/client/imprint/index.html.
 // - Each page: the opening <html> tag's own `lang`, the translated heading, the placeholder notice
-//   where the final text is owned by a later task, links to the page in the other locale, and
-//   internal links that all carry a locale prefix.
+//   where the final text is owned by a later task, links to the page in the other locale, the
+//   ELv2 note with the repository link, and internal links that all carry a locale prefix.
 // - The picker links to every locale and redirects by `navigator.languages` (its inline script is
 //   run in a sandbox).
 //
@@ -13,7 +13,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runInNewContext } from 'node:vm';
-import { pagePaths } from '../site.mjs';
+import { pagePaths, repositoryUrl } from '../site.mjs';
 
 const { m } = await import('../src/paraglide/messages.js');
 const { baseLocale, locales, localizeHref } = await import('../src/paraglide/runtime.js');
@@ -87,6 +87,8 @@ function checkPage(outDir, path, locale, failures) {
     const otherHref = localizeHref(path, { locale: other });
     if (!anchors.includes(otherHref)) fail(`link to ${otherHref} missing`);
   }
+  if (!anchors.includes(repositoryUrl) || !decode(html).includes(m.footer_licence({}, { locale })))
+    fail(`ELv2 licence note with a link to ${repositoryUrl} missing`);
   const unprefixed = anchors.filter(
     (href) => href.startsWith('/') && !locales.some((l) => href.startsWith(localizeHref('/', { locale: l }))),
   );

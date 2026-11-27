@@ -2,6 +2,9 @@
 // scripts/build.mjs (picker, static checks).
 import settings from './project.inlang/settings.json' with { type: 'json' };
 
+/** The public repository, linked from the licence note. */
+export const repositoryUrl = 'https://github.com/soeenplop/enduva';
+
 /** @type {readonly string[]} */
 export const locales = settings.locales;
 

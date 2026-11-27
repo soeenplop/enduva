@@ -30,3 +30,7 @@ Each `negative/*.tsx` starts with `// @expect TS<code> at <line>:<col>` and must
 ## Messages
 
 `messages/{de,en}.json`, compiled by Paraglide JS. They live in the app, not in `@enduva/i18n`, because the landing copy is used nowhere else and the landing build stays self-contained; the locales must match `@enduva/i18n` (unit test). The plugin is pinned in `devDependencies` and loaded from `node_modules`; a missing plugin only warns and yields empty messages, which the tests and the static check catch. Every key must exist in both catalogs.
+
+## Design
+
+Concept B "Daybreak": colors, spacing and type come from `@enduva/ui/tokens.css`, which follows the system's light/dark setting. Manrope (SIL OFL) is self-hosted from `@fontsource-variable/manrope`. The final landing page is task 5.1.
