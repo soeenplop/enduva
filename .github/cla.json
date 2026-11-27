@@ -1,0 +1,9 @@
+{
+  "status": "draft",
+  "version": null,
+  "sha256": null,
+  "exempt": [
+    { "id": 82885605, "login": "soeenplop" },
+    { "id": 29139614, "login": "renovate[bot]" }
+  ]
+}
