@@ -2,6 +2,6 @@
 // `mergeConfig` from `vitest/config`. Nest packages add `unplugin-swc` with swc/nest.json (ADR-0001).
 export default {
   test: {
-    include: ['test/**/*.test.ts'],
+    include: ['test/**/*.test.{ts,tsx}'],
   },
 };
