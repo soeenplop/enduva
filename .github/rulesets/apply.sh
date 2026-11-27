@@ -7,6 +7,9 @@
 # impossible), the CI jobs as required checks on the latest commit, only GitHub Actions
 # (integration 15368) may report them, no force pushes, no deletion, merge commits only,
 # and no bypass actors (a bypass for admins would be a bypass for every agent).
+# The `cla` check is a commit status that .github/workflows/cla.yml sets on the PR head.
+#
+# cla-signatures.json: the CLA signature store branch is append-only (no force pushes, no deletion).
 set -euo pipefail
 
 dir="$(cd "$(dirname "$0")" && pwd)"

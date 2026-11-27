@@ -1,0 +1,57 @@
+# CLA check (roadmap task 0.5, T24), logic and rules in tools/cla-check.mjs. Its result is the commit
+# status `cla` on the evaluated PR head SHA, a required check of the `main` ruleset
+# (.github/rulesets/main.json). The job itself (`cla-check`) is not the required check.
+#
+# Security: `pull_request_target`, `issue_comment` and `push` all run this file and the script from
+# the base branch. The job checks out only that base commit (github.sha) and never checks out,
+# installs or runs PR code. PR data (titles, branch names, logins, comments) is read through the API
+# inside the script and never interpolated into a shell. No third-party actions; actions pinned by SHA.
+#
+# Activation: `status` in .github/cla.json (owner-only, see CONTRIBUTING.md). While it is "draft",
+# the check collects no signatures and passes only PRs whose commits and opener are exempt accounts.
+name: cla
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+  # Signing comments.
+  issue_comment:
+    types: [created, edited]
+  # A CLA or config change re-evaluates every open PR against the new version.
+  push:
+    branches: [main]
+    paths: [CLA.md, .github/cla.json]
+
+permissions: {}
+
+concurrency:
+  group: cla-${{ github.event.pull_request.number || github.event.issue.number || 'push' }}
+  cancel-in-progress: false
+
+jobs:
+  cla:
+    name: cla-check
+    if: github.event_name != 'issue_comment' || github.event.issue.pull_request
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      # Append to the cla-signatures branch. `main` stays protected by its ruleset (PRs only).
+      contents: write
+      # Read the PR, its commits and comments; create or update the signing prompt comment.
+      pull-requests: write
+      # The `cla` status on the evaluated head SHA.
+      statuses: write
+    steps:
+      # The base commit (github.sha), never the PR head.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      # No install: the script has no dependencies.
+      - name: CLA check
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node tools/cla-check.mjs
