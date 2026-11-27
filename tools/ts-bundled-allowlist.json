@@ -11,6 +11,18 @@
       "consumers": ["workspace:enduva"],
       "usage": "Our formatter (`pnpm format` / `pnpm format:check`). The file is a lazy-loaded, re-bundled copy of Prettier 3.10.1's `typescript` parser plugin (its `//#region` comment names `prettier@3.10.1/.../plugins/typescript.mjs`; the audit reads only `6.0` from it), used for the languages oxfmt delegates to Prettier and for its Tailwind class sorter. JS/TS/JSON are formatted by oxfmt's native (Rust) formatter: `format:check` on the spike (ADR-0001) passes with this file removed, so our check does not load it.",
       "reason": "Ships inside every current oxfmt release; it cannot be dropped as a dependency. Parsing and printing only: no type checking, language service or emit."
+    },
+    {
+      "package": "prettier",
+      "version": "3.10.1",
+      "bundledTypeScript": "6.0.3",
+      "files": {
+        "plugins/typescript.js": "sha256:9c1b3055e18e29378c3f147d9c7967801f6a2405db3fc85a4b08a0f4c484ff24",
+        "plugins/typescript.mjs": "sha256:befece7495d9fee605e81a93bf7b06a9ebe3c59523de65172187ef43123418e3"
+      },
+      "consumers": ["@tanstack/router-generator@1.168.0"],
+      "usage": "@tanstack/router-generator (hard dependency; run by `tsr generate` via @tanstack/router-cli and by the TanStack Start Vite build via @tanstack/router-plugin in apps/landing) formats the generated route trees (`routeTree.gen.ts`) with Prettier's `typescript` parser.",
+      "reason": "TanStack Router's generator depends on Prettier and formats with `parser: 'typescript'`. TanStack stays (owner ruling on PR #97). Parsing and printing only: no type checking, language service or emit. Root entry added by the lead under W13 on PR #110."
     }
   ]
 }

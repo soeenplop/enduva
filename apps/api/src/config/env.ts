@@ -1,6 +1,14 @@
 import * as z from 'zod';
 
-const port = z.coerce.number().int().min(0).max(65_535);
+/**
+ * A decimal port number. Blank or whitespace-only values are rejected instead of coerced to 0, which would silently
+ * bind an ephemeral port; an explicit `0` still asks for one.
+ */
+const port = z
+  .string()
+  .regex(/^\d+$/, 'must be a decimal port number')
+  .transform(Number)
+  .pipe(z.number().int().max(65_535));
 const positiveInt = z.coerce.number().int().positive();
 
 /** Environment of the API process. Every value is validated at boot; the process refuses to start otherwise. */

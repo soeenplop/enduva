@@ -764,9 +764,9 @@ function selfTest() {
     /"usage" must[\s\S]*"reason" must/,
   );
   realFails(
-    'real allowlist with a stale prettier entry fails',
-    { entries: [...allowlist.entries, { ...listed, package: 'prettier', version: '3.10.1' }] },
-    /stale allowlist entry 1 \(prettier@3\.10\.1\)/,
+    'real allowlist with a stale entry for a package that is not installed fails',
+    { entries: [...allowlist.entries, { ...listed, package: 'not-installed-formatter', version: '1.0.0' }] },
+    new RegExp(`stale allowlist entry ${allowlist.entries.length} \\(not-installed-formatter@1\\.0\\.0\\)`),
   );
   if (failed > 0) process.exit(1);
 }

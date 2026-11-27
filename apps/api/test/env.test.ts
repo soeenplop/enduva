@@ -23,7 +23,16 @@ describe('loadEnv', () => {
     });
   });
 
+  it('keeps an explicit PORT=0 for an ephemeral port', () => {
+    expect(loadEnv({ PORT: '0' })).toMatchObject({ PORT: 0 });
+  });
+
   it.each([
+    ['PORT', ''],
+    ['PORT', '   '],
+    ['PORT', ' 8080'],
+    ['PORT', '-1'],
+    ['PORT', '80.5'],
     ['PORT', 'http'],
     ['PORT', '70000'],
     ['NODE_ENV', 'staging'],

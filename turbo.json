@@ -2,23 +2,31 @@
   "$schema": "./node_modules/turbo/schema.json",
   "globalDependencies": ["packages/config/**"],
   "tasks": {
+    "generate": {
+      "outputs": ["src/routeTree.gen.ts", "src/paraglide/**"]
+    },
     "build": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^build", "generate"],
+      "outputs": ["dist/**"]
+    },
+    "@enduva/landing#build": {
+      "dependsOn": ["^build", "generate"],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/assets/brand/final/web/**"],
       "outputs": ["dist/**"]
     },
     "transit": {
       "dependsOn": ["^transit"]
     },
     "typecheck": {
-      "dependsOn": ["transit"],
+      "dependsOn": ["transit", "generate"],
       "outputs": []
     },
     "lint": {
-      "dependsOn": ["transit"],
+      "dependsOn": ["transit", "generate"],
       "outputs": []
     },
     "test": {
-      "dependsOn": ["^build", "transit"],
+      "dependsOn": ["^build", "transit", "generate"],
       "outputs": []
     },
     "@enduva/api#test": {
