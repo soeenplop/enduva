@@ -23,9 +23,14 @@ const meColumns = {
 
 const ownProfile = eq(profiles.userId, sql`app.current_user_id()`);
 
-/** The response body, as the contract's `Me` schema describes it. `role` is changed only by an operator (ADR-0002). */
-function toMe(row: Omit<Me, 'onboardingCompletedAt'> & { onboardingCompletedAt: Date | null }): Me {
-  return { ...row, onboardingCompletedAt: row.onboardingCompletedAt?.toISOString() ?? null };
+/**
+ * The response body, as the contract's `Me` schema describes it. `role` is changed only by an operator (ADR-0002).
+ * PostgreSQL allows `infinity`/`-infinity` in the `timestamptz` column, which Drizzle maps to an invalid `Date`: it is
+ * sent as `null`, as `JSON.stringify` did before (`toISOString()` would throw and answer 500).
+ */
+export function toMe(row: Omit<Me, 'onboardingCompletedAt'> & { onboardingCompletedAt: Date | null }): Me {
+  const at = row.onboardingCompletedAt;
+  return { ...row, onboardingCompletedAt: at === null || Number.isNaN(at.getTime()) ? null : at.toISOString() };
 }
 
 @Controller('me')

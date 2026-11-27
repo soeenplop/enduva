@@ -40,13 +40,41 @@ const strongEtag = z.string().meta({
   example: '"3-Yk1oQ2J4dE9wN3F1cjVzVg"',
 });
 
+/** Express tags every other JSON body with a weak ETag of its bytes, and answers a matching `If-None-Match` with 304. */
+const weakEtag = z
+  .string()
+  .optional()
+  .meta({ description: 'Weak entity tag of the body. Opaque', example: 'W/"f-VaSQ4oDUiZblZNAEkkN+sX+q3Sg"' });
+
+// Informational headers are optional: a client must not reject a response because a proxy dropped one.
+const noStore = z.string().optional().meta({ description: 'Always `no-store`', example: 'no-store' });
+
+/** The validator and caching headers of a body response, and of the bodyless 304 that answers a matching tag. */
+const cacheHeaders = (etag: z.ZodString | z.ZodOptional<z.ZodString>) =>
+  z.object({ ETag: etag, 'Cache-Control': noStore });
+
+const conditional = {
+  header: z.object({ 'If-None-Match': z.string().optional().meta({ description: 'ETag of a cached copy' }) }),
+};
+
+const notModified = (etag: z.ZodString | z.ZodOptional<z.ZodString>): ZodOpenApiResponseObject => ({
+  description: 'The cached copy named by `If-None-Match` is current. No body',
+  headers: cacheHeaders(etag),
+});
+
+/** The throttler answers every route, public ones too (per client IP and endpoint). */
+const throttled = problem(
+  '`rate_limited`',
+  z.object({ 'Retry-After': z.string().meta({ description: 'Seconds to wait' }) }),
+);
+
 /** Errors every authenticated route can answer, besides its own. */
 const authenticatedErrors = {
   '401': problem(
     '`unauthorized`: missing, invalid or revoked token or session. `device_revoked`: wipe local data',
     z.object({ 'WWW-Authenticate': z.literal('Bearer') }),
   ),
-  '429': problem('`rate_limited`', z.object({ 'Retry-After': z.string().meta({ description: 'Seconds to wait' }) })),
+  '429': throttled,
   '503': problem('`database_unavailable` or `auth_unavailable`'),
   default: problem('Any other error, e.g. `internal_error`'),
 } satisfies Record<string, ZodOpenApiResponseObject>;
@@ -66,7 +94,13 @@ export const openApiDocument = createDocument(
           operationId: 'getHealth',
           summary: 'Liveness',
           security: [],
-          responses: { '200': json('The process serves requests', HealthStatus), default: problem('Any error') },
+          requestParams: conditional,
+          responses: {
+            '200': json('The process serves requests', HealthStatus, cacheHeaders(weakEtag)),
+            '304': notModified(weakEtag),
+            '429': throttled,
+            default: problem('Any other error'),
+          },
         },
       },
       '/v1/health/ready': {
@@ -74,8 +108,11 @@ export const openApiDocument = createDocument(
           operationId: 'getReadiness',
           summary: 'Readiness: the database is reachable',
           security: [],
+          requestParams: conditional,
           responses: {
-            '200': json('Ready', HealthStatus),
+            '200': json('Ready', HealthStatus, cacheHeaders(weakEtag)),
+            '304': notModified(weakEtag),
+            '429': throttled,
             '503': problem('`database_unavailable`'),
             default: problem('Any other error'),
           },
@@ -85,14 +122,10 @@ export const openApiDocument = createDocument(
         get: {
           operationId: 'getMe',
           summary: "The signed-in user's profile",
-          requestParams: {
-            header: z.object({
-              'If-None-Match': z.string().optional().meta({ description: 'ETag of a cached copy' }),
-            }),
-          },
+          requestParams: conditional,
           responses: {
-            '200': json('The profile', Me, z.object({ ETag: strongEtag })),
-            '304': { description: 'The cached copy named by `If-None-Match` is current' },
+            '200': json('The profile', Me, cacheHeaders(strongEtag)),
+            '304': notModified(strongEtag),
             ...authenticatedErrors,
           },
         },
@@ -108,7 +141,7 @@ export const openApiDocument = createDocument(
           },
           requestBody: { required: true, content: { 'application/json': { schema: MeUpdate } } },
           responses: {
-            '200': json('The updated profile', Me, z.object({ ETag: strongEtag })),
+            '200': json('The updated profile', Me, cacheHeaders(strongEtag)),
             '400': problem('`bad_request`: the body is invalid. Echoes no input'),
             '412': problem('`precondition_failed`: `If-Match` is outdated or not a single strong tag of this user'),
             '428': problem('`precondition_required`: `If-Match` is missing'),

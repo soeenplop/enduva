@@ -113,7 +113,12 @@ describe.skipIf(auth === undefined)(`/v1/me (e2e, local Supabase${auth ? '' : ':
     const conditional = await get(second).set('if-none-match', firstTag);
     expect(conditional.status).toBe(200);
     expect(conditional.body).toMatchObject({ id: second.userId });
-    expect((await get(first).set('if-none-match', firstTag)).status).toBe(304);
+    const notModified = await get(first).set('if-none-match', firstTag);
+    expect(notModified.status).toBe(304);
+    // Bodyless, with the strong tag and no-store the spec documents for the 304.
+    expect(notModified.text).toBe('');
+    expect(notModified.headers.etag).toBe(firstTag);
+    expect(notModified.headers['cache-control']).toBe('no-store');
     const res = await patch(second, { displayName: 'Wrong account' }, firstTag);
     expect(res.status).toBe(412);
     expect((await get(second)).body).toEqual(secondRes.body);

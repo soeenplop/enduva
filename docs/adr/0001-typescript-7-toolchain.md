@@ -190,6 +190,21 @@ Task 0.8a ([#10](https://github.com/soeenplop/enduva/issues/10)) builds [`apps/a
 - **API fixtures (criteria 2 and 5).** [`apps/api/negative/`](../../apps/api/negative) holds the ported fixtures for the root runner: TS2554 (controller built without its injected service), TS2345 (a problem code outside the closed set) and `typescript(no-floating-promises)`. The spike keeps its own copies until it is deleted (Consequences).
 - **New runtime packages** (`@nestjs/throttler` 6.8.0, `nestjs-pino` 5.3.2, `pino` 10.4.0, `pino-http` 11.0.0) bring no TypeScript: `pnpm audit:ts` passes with no new allowlist entry.
 
+## Handoff in 0.8c
+
+Task 0.8c ([#12](https://github.com/soeenplop/enduva/issues/12)) brings criterion 3 into the real workspace:
+
+- **Contracts and spec.** [`packages/contracts`](../../packages/contracts) builds the OpenAPI 3.1 document with `zod-openapi` 6.0.3. `apps/api` writes it to the committed [`apps/api/openapi.json`](../../apps/api/openapi.json) in its Turbo `generate` task. The `build-typecheck-lint-test` job fails when the working tree is dirty after the Turbo run, so a schema change without the regenerated spec fails CI.
+- **Swift client.** [`apps/apple/EnduvaAPIClient`](../../apps/apple/EnduvaAPIClient) uses the spike's pins (generator 1.14.4, runtime 1.13.4, URLSession 1.4.0, plus swift-http-types 1.8.0 for the middlewares). Its `openapi.json` is a symlink to the committed spec, which the build plugin follows. The `swift-client` job (`macos-26`, a required check by lead decision on PR #126) runs `swift test --force-resolved-versions`. It closes the spike's two runtime gaps with a stub transport: a bearer `ClientMiddleware`, and decoding of the problem bodies that the API's `ProblemFilter` (0.8a) sends.
+- **Web client.** Orval moves in with `@enduva/api-client` ([PR #129](https://github.com/soeenplop/enduva/pull/129)). pnpm links its optional `prettier` peer to the allowlisted Prettier 3.10.1, which makes `orval@8.49.0` a second consumer. The lead added it to the root entry's consumers under W13: Orval only imports Prettier with `output.formatter: 'prettier'`, which our config omits. A pnpmfile hook unlinking the peer was rejected as a workaround.
+- **Generator findings** (the spike's single route didn't show them):
+  1. Zod renders `.nullable()` as `anyOf: [X, {type: 'null'}]`, and swift-openapi-generator 1.14.4 **drops** such properties, with only a build warning. The document's `override` emits `type: [X, 'null']` instead (plus `null` in `enum`), which becomes a Swift optional.
+  2. Zod closes output objects (`additionalProperties: false`), and the generated Swift decoders then refuse unknown keys, so an added response field would break shipped apps. The override removes it from responses; request bodies stay closed.
+  3. The runtime percent-encodes header parameters (`If-Match: "1-x"` → `%221-x%22`). `EntityTagHeaderMiddleware` sends the entity tag unencoded.
+  4. The API's timestamps carry milliseconds, which the runtime's default ISO 8601 transcoder refuses. `Client.enduva` sets `.iso8601WithFractionalSeconds`.
+  5. Optional and nullable both map to Swift optionals, and `nil` is omitted when encoding: the generated `MeUpdate` can't send `null` to clear a field ([#127](https://github.com/soeenplop/enduva/issues/127), for 0.11b).
+- **Spike.** The spike's `Swift client` job is now covered by `swift-client`, and its OpenAPI generation by the contracts and the drift check. The spike stays until the lead retires it (see below).
+
 ## Consequences
 
 - 0.4 can scaffold the monorepo with the stack above. Copy `tsconfig.base.json`, `.swcrc`, `.oxlintrc.json`, `.oxfmtrc.json`, `tsr.config.json` (with the footer), the negative-test script, both audit scripts and the bundled-TS allowlist into `packages/config` / CI. 0.4 copied the presets, `.oxfmtrc.json`, both audit scripts and the allowlist; `tsr.config.json` and the negative-test script move with the apps ([Handoff in 0.4](#handoff-in-04)). Use Node 24 in CI and pin `@types/node` (plus an `overrides` entry) to the same major as the minimum supported or deployed Node.

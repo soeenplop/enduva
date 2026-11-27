@@ -70,8 +70,8 @@ describe('generated client', () => {
   ])('makes up a Problem for an error with %s, instead of throwing or returning undefined', async (...args) => {
     const [, status, body, contentType, statusText] = args;
     const { fetch } = stub(status, body, { 'content-type': contentType }, statusText);
-    const res = await getHealth({ baseUrl: 'http://h', fetch });
-    if (res.status === 200) throw new Error('unexpected 200');
+    const res = await getHealth({}, { baseUrl: 'http://h', fetch });
+    if (res.status === 200 || res.status === 304) throw new Error(`unexpected ${res.status}`);
     // The generated type promises a Problem for every error status, and it is one.
     expect(res.data.code).toBe(UNEXPECTED_RESPONSE);
     expect(res.data).toEqual({
@@ -85,7 +85,7 @@ describe('generated client', () => {
   it('passes a real problem body through unchanged', async () => {
     const problem = { type: 'about:blank', title: 'Too Many Requests', status: 429, code: 'rate_limited', detail: 'x' };
     const { fetch } = stub(429, problem, { 'content-type': 'application/problem+json' });
-    expect((await getHealth({ baseUrl: 'http://h', fetch })).data).toEqual(problem);
+    expect((await getHealth({}, { baseUrl: 'http://h', fetch })).data).toEqual(problem);
   });
 
   it.each([
@@ -94,14 +94,14 @@ describe('generated client', () => {
     ['an empty body', '', 'application/json'],
   ])('rejects a success response with %s with ApiResponseError', async (_case, body, contentType) => {
     const { fetch } = stub(200, body, { 'content-type': contentType });
-    const call = getHealth({ baseUrl: 'http://h', fetch });
+    const call = getHealth({}, { baseUrl: 'http://h', fetch });
     await expect(call).rejects.toBeInstanceOf(ApiResponseError);
     await expect(call).rejects.toMatchObject({ status: 200 });
   });
 
   it('refuses a call without baseUrl before any request', async () => {
     const { fetch } = stub(200, { status: 'ok' });
-    await expect(getHealth({ fetch })).rejects.toThrow('`baseUrl` is required');
+    await expect(getHealth({}, { fetch })).rejects.toThrow('`baseUrl` is required');
     expect(fetch).not.toHaveBeenCalled();
   });
 });

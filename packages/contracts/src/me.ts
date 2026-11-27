@@ -84,7 +84,20 @@ export type Me = z.output<typeof Me>;
  */
 export const MeUpdate = z
   .strictObject({
-    displayName: displayName.refine(isPrintable).nullable(),
+    displayName: displayName
+      .refine(isPrintable)
+      .meta({
+        description:
+          'Trimmed first (leading and trailing white space); then 1 to 100 characters, no control characters',
+        // Zod's length keywords would apply to the untrimmed JSON string: drop them, and require one non-white-space
+        // character instead (ECMAScript `\s` is exactly what `trim()` removes), so a blank name fails here too.
+        override: ({ jsonSchema }) => {
+          delete jsonSchema.minLength;
+          delete jsonSchema.maxLength;
+          jsonSchema.pattern = '\\S';
+        },
+      })
+      .nullable(),
     birthDate: birthDate.refine(isBirthDate).nullable().meta({ format: 'date' }),
     sex: sex.nullable(),
     heightCm: heightCm.nullable(),
