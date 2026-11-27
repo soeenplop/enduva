@@ -1,0 +1,4 @@
+{
+  "extends": "@enduva/config/tsconfig/react.json",
+  "include": ["src", "test"]
+}
