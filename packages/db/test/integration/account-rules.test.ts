@@ -4,8 +4,23 @@
 import { sql, type SQL } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import type { Database, Transaction } from '../../src/index.js';
-import { ACTORS, attempt, openDatabase, pgCode, rolledBack, ROUTES, USER_A, USER_C, USER_D } from './support.js';
+import { withUserTx, withWorkerTx, type Database, type Transaction } from '../../src/index.js';
+import {
+  ACTORS,
+  apiUrl,
+  attempt,
+  claimsFor,
+  openDatabase,
+  pgCode,
+  rolledBack,
+  ROUTES,
+  TABLE_CASES,
+  tableSql,
+  USER_A,
+  USER_C,
+  USER_D,
+  workerUrl,
+} from './support.js';
 
 const rows = async <T extends Record<string, unknown>>(tx: Transaction, query: SQL) =>
   (await tx.execute<T>(query)).rows;
@@ -39,11 +54,12 @@ describe.each(ACTORS)('$role', (actor) => {
 
       it('is stamped by the database and can never be undone or moved', async () => {
         const states = await asA(async (tx) => {
-          // A past time is ignored: the database stamps the revocation itself.
+          // A past time is ignored: the database stamps the revocation itself, at the time of the UPDATE (after the
+          // transaction began, before RETURNING runs).
           const [revoked] = await rows<{ stamped: boolean }>(
             tx,
             sql`update ${t} set revoked_at = '2000-01-01' where revoked_at is null
-                returning revoked_at = now() as stamped`,
+                returning revoked_at between now() and clock_timestamp() as stamped`,
           );
           const attempts: Record<string, string | undefined> = {};
           for (const [label, set] of [
@@ -80,6 +96,51 @@ describe.each(ACTORS)('$role', (actor) => {
 
       it("can't delete the history", async () => {
         expect(await attempt(() => asA((tx) => rowCount(tx, sql`delete from ${t}`)))).toEqual({ denied: true });
+      });
+    });
+
+    // Under READ COMMITTED a revoking transaction sees rows committed after it began. Its revocation must still
+    // succeed and stay at or after the row's start (`granted_at` / `created_at`), although `now()` is earlier.
+    describe('revoking a row created after the revoking transaction began', () => {
+      let api: Database;
+      let worker: Database;
+      beforeAll(() => {
+        api = openDatabase(apiUrl(route));
+        worker = openDatabase(workerUrl(route));
+      });
+      afterAll(async () => {
+        await Promise.all([api.$client.end(), worker.$client.end()]);
+      });
+
+      it.each([
+        ['consents', 'granted_at'],
+        ['devices', 'created_at'],
+      ] as const)('succeeds for %s, with revoked_at >= %s', async (name, start) => {
+        const table = TABLE_CASES.find((c) => c.name === name);
+        if (table === undefined) throw new Error(`no table case for ${name}`);
+        const t = tableSql(name);
+        const startColumn = sql.raw(start);
+        // C has no profile, so the committed rows below belong to nobody else and go with C's account afterwards.
+        try {
+          const revoked = await asUser(USER_C, async (tx) => {
+            // A separate transaction that begins after this one creates and commits the row.
+            await withUserTx(api, claimsFor(USER_C), async (grant) => {
+              await grant.execute(sql`insert into app.profiles (user_id) values (${USER_C})`);
+              await grant.execute(sql`insert into ${t} ${table.newRow(USER_C)}`);
+            });
+            return rows(
+              tx,
+              sql`update ${t} set revoked_at = now() where revoked_at is null
+                  returning ${startColumn} > now() as created_after_start,
+                            revoked_at >= ${startColumn} as ordered,
+                            revoked_at <= clock_timestamp() as stamped_by_update`,
+            );
+          });
+          expect(revoked).toEqual([{ created_after_start: true, ordered: true, stamped_by_update: true }]);
+        } finally {
+          // Account deletion removes the committed profile and its rows again.
+          await withWorkerTx(worker, USER_C, (tx) => tx.execute(sql`delete from app.profiles`));
+        }
       });
     });
 
