@@ -8,6 +8,16 @@
     "./tsconfig/*.json": "./tsconfig/*.json",
     "./swc/*.json": "./swc/*.json",
     "./oxlint.json": "./oxlint.json",
-    "./vitest": "./vitest.preset.mjs"
+    "./vitest": "./vitest.preset.mjs",
+    "./vitest/nest": "./vitest.nest.mjs"
+  },
+  "dependencies": {
+    "unplugin-swc": "2.0.0"
+  },
+  "peerDependencies": {
+    "@swc/core": "1.16.22"
+  },
+  "devDependencies": {
+    "@swc/core": "catalog:"
   }
 }
