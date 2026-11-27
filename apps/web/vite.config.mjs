@@ -6,7 +6,6 @@ import { defineConfig } from 'vite';
 import { paraglideOptions } from './paraglide.options.mjs';
 
 export default defineConfig({
-  server: { port: 3000 },
   plugins: [
     paraglideVitePlugin(paraglideOptions),
     tailwindcss(),

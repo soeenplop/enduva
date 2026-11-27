@@ -25,6 +25,11 @@ export function AppHeader() {
                 {m.nav_home()}
               </Link>
             </li>
+            <li>
+              <Link to="/status" className={navLink} activeProps={{ className: 'text-text', 'aria-current': 'page' }}>
+                {m.nav_status()}
+              </Link>
+            </li>
           </ul>
         </nav>
         <LanguageSwitch />

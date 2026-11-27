@@ -375,6 +375,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@enduva/api-client':
+        specifier: workspace:*
+        version: link:../../packages/api-client
       '@enduva/ui':
         specifier: workspace:*
         version: link:../../packages/ui
