@@ -114,6 +114,21 @@ describe('web app shell', () => {
     await close();
   });
 
+  it('hydrates in the locale the server chose, whatever the browser prefers', async () => {
+    // The request says German (Accept-Language from the context locale), the browser's own preference is English.
+    const { page, errors, close } = await open({ locale: 'de-DE' });
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+      Object.defineProperty(navigator, 'language', { get: () => 'en-US' });
+    });
+    await page.goto(origin);
+    await page.waitForLoadState('networkidle');
+    expect(await lang(page)).toBe('de');
+    expect(await heading(page)).toBe('Willkommen bei Enduva');
+    expect(errors).toEqual([]);
+    await close();
+  });
+
   it('answers unknown URLs with the localized 404 page', async () => {
     const { page, close } = await open({ locale: 'de-DE' });
     const res = await page.goto(`${origin}/no-such-page`);
