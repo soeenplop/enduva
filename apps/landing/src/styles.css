@@ -42,6 +42,10 @@ h3 {
   letter-spacing: -0.02em;
   margin: 0 0 var(--enduva-space-4);
   text-wrap: balance;
+  /* Long German compounds ("Datenschutzerklärung") must wrap at 320 CSS px (WCAG 1.4.10 Reflow):
+     hyphenate by the page's `lang`, and break anywhere where hyphenation isn't available. */
+  hyphens: auto;
+  overflow-wrap: anywhere;
 }
 
 h1 {
