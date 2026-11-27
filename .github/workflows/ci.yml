@@ -102,8 +102,7 @@ jobs:
       # app). Regenerating them from the committed spec must leave the tree unchanged.
       - name: Generated client is committed and up to date
         run: |
-          swift package --force-resolved-versions --allow-writing-to-package-directory \
-            generate-code-from-openapi --target EnduvaAPIClient
+          ../scripts/generate-client.sh
           if [ -n "$(git status --porcelain .)" ]; then
             git status --porcelain .
             echo "::error::The generated Swift client is stale. Regenerate it (apps/apple/EnduvaAPIClient/README.md) and commit the result."

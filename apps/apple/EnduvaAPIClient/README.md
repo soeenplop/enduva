@@ -35,7 +35,7 @@ Known limit: optional and nullable properties both become Swift optionals, and `
 
 ```sh
 # After a change to apps/api/openapi.json: regenerate and commit GeneratedSources
-swift package --force-resolved-versions --allow-writing-to-package-directory generate-code-from-openapi --target EnduvaAPIClient
+../scripts/generate-client.sh
 swift test --force-resolved-versions   # compiles and runs the tests (macOS)
 ```
 

@@ -203,7 +203,7 @@ Task 0.8c ([#12](https://github.com/soeenplop/enduva/issues/12)) brings criterio
   3. The runtime percent-encodes header parameters (`If-Match: "1-x"` → `%221-x%22`). `EntityTagHeaderMiddleware` sends the entity tag unencoded.
   4. The API's timestamps carry milliseconds, which the runtime's default ISO 8601 transcoder refuses. `Client.enduva` sets `.iso8601WithFractionalSeconds`.
   5. Optional and nullable both map to Swift optionals, and `nil` is omitted when encoding: the generated `MeUpdate` can't send `null` to clear a field ([#127](https://github.com/soeenplop/enduva/issues/127), for 0.11b).
-- **Update in 0.11a.** The generated Swift sources are now committed: Xcode runs the build plugin once per platform into one output path, which fails the iPhone app that embeds the Watch app. The `swift-client` job regenerates them with the generator's command plugin and fails on a diff.
+- **Update in 0.11a.** The generated Swift sources are now committed: Xcode runs the build plugin once per platform into one output path, which fails the iPhone app that embeds the Watch app. The `swift-client` job regenerates them with the pinned generator CLI (`apps/apple/scripts/generate-client.sh`) and fails on a diff.
 - **Spike.** The spike's `Swift client` job is now covered by `swift-client`, and its OpenAPI generation by the contracts and the drift check. The spike stays until the lead retires it (see below).
 
 ## Consequences
