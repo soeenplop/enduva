@@ -79,6 +79,28 @@ jobs:
       - name: Negative tests (tsc and oxlint must fail on the broken fixtures)
         run: pnpm test:negative
 
+  # Required (lead decision on PR #126): the generated Swift client compiles from the committed
+  # apps/api/openapi.json, and its middlewares and body decoding pass their tests. No pnpm needed: the build job's
+  # drift check keeps the spec in sync with the contracts. It runs on every PR (no path filter), as a required
+  # check must.
+  swift-client:
+    name: swift-client
+    runs-on: macos-26
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: apps/apple/EnduvaAPIClient
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Toolchain versions
+        run: |
+          xcodebuild -version
+          swift --version
+      - name: Generate, compile and test the Swift client (swift-openapi-generator build plugin)
+        run: swift test --force-resolved-versions
+
   gitleaks:
     name: gitleaks
     runs-on: ubuntu-24.04
