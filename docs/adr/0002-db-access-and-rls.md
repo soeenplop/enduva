@@ -1,6 +1,7 @@
 # ADR-0002: Database access and row-level security
 
-- **Status:** Proposed (task 0.7, issue [#9](https://github.com/soeenplop/enduva/issues/9)). Becomes Accepted when the owner approves the PR.
+- **Status:** Proposed (task 0.7, issue [#9](https://github.com/soeenplop/enduva/issues/9)). Becomes Accepted when the PR
+  merges under the normal merge rules ([`AGENTS.md` → Merging](../../AGENTS.md#merging), W12).
 - **Date:** 2026-11-27
 - **Decisions affected:** T13, T25 ([`00-decisions.md`](../plan/00-decisions.md)); [`02-architecture.md` → Tenant isolation](../plan/02-architecture.md#tenant-isolation-adr-0002-task-07), [`06-deployment.md` → Supabase](../plan/06-deployment.md#supabase)
 
@@ -13,6 +14,17 @@ identity set for exactly one transaction. Production reaches Postgres through Su
 (Supavisor), so nothing may depend on session state.
 
 ## Decision
+
+### Trust boundary
+
+- **Who a transaction acts for** comes from outside the database: the claims of an access token the API verified
+  (0.8) or the user ID of a trusted job. `withUserTx`/`withWorkerTx` set it transaction-locally.
+- **What RLS guarantees** given that identity: every query, including one that forgets its ownership filter or joins
+  the wrong way, sees and writes only that user's rows, and with no identity it sees and writes nothing. Grants
+  limit which operations and columns each role may use at all.
+- **What stays with the application:** keeping the runtime database credentials secret (anyone with them can set any
+  identity), passing only verified identities to the helpers, and keeping SQL parameterized. RLS doesn't defend
+  against a caller that sets someone else's `sub`.
 
 ### Driver: node-postgres
 
@@ -76,8 +88,9 @@ select set_config('request.jwt.claims', $1, true), set_config('role', 'enduva_ap
 `enduva_worker` and `{ sub: userId }`. Both reject a `sub` that isn't a UUID, and `withUserTx` rejects claims whose
 `role` isn't `authenticated`. The claims must come from a token the API verified against the JWKS (0.8).
 
-Policies read the identity through `app.current_user_id()`, which returns the claims' `sub` as a UUID or NULL. We
-don't use Supabase's `auth.uid()`: that would need grants on Supabase's `auth` schema, and it also accepts the legacy
+Policies read the identity through `app.current_user_id()`, which returns the claims' `sub` as a UUID or NULL. This
+is the convention for every user-owned table ([`03-domain-model.md`](../plan/03-domain-model.md)). We don't use
+Supabase's `auth.uid()`: that would need grants on Supabase's `auth` schema, and it also accepts the legacy
 `request.jwt.claim.sub` setting. With no claims, policies match no row. A `sub` that isn't a UUID fails the cast and
 with it the query.
 
@@ -86,16 +99,32 @@ with it the query.
 Every table has an `own_rows` policy `for all to enduva_api, enduva_worker`, with `using` and `with check`
 `user_id = (select app.current_user_id())`. The sub-select makes Postgres evaluate the function once per statement.
 
+Grants are column-level and least-privilege. INSERT grants list only the columns a caller supplies, so `id`,
+`version`, `granted_at` and the timestamps always start at their defaults, and no row can be inserted already
+revoked.
+
 | Table | `enduva_api` | `enduva_worker` |
 | --- | --- | --- |
-| `profiles` | select, insert (restrictive policy: only `role = 'user'`), update of the user-editable columns | select, insert, update, delete |
-| `user_settings` | select, insert, update of the settings columns | same |
-| `entitlements` | select | same |
-| `consents` | select, insert, update of `revoked_at` | same |
-| `devices` | select, insert, update of `name`, `last_seen_at`, `revoked_at` | same |
+| `profiles` | select; insert and update of the user-editable columns (+ `user_id` on insert) | select; update of the user-editable columns; delete (account deletion) |
+| `user_settings` | select; insert and update of the settings columns (+ `user_id` on insert) | select; update of the settings columns |
+| `entitlements` | select | select; insert; update of `tier`, `valid_from`, `valid_until` |
+| `consents` | select; insert of `purpose`, `consent_version` (+ `user_id`); update of `revoked_at` | select; update of `revoked_at` |
+| `devices` | select; insert of `kind`, `name`, `auth_session_id`, `last_seen_at` (+ `user_id`); update of `name`, `last_seen_at`, `revoked_at` | select; update of `last_seen_at`, `revoked_at` |
 
-The API deletes nothing (account deletion and entitlement changes are jobs) and can never change `user_id`, `role`,
-`version` or timestamps. Triggers maintain `updated_at` and bump `version`.
+- **`role` is in no grant.** Profiles start as `user`; only an operator (the migration role) makes an admin.
+  `role` and entitlements are authorisation inputs (architecture → Authentication), so the request path can write
+  neither. Entitlement changes from store notifications are worker jobs.
+- **Revocation is one-way, for every role.** A trigger (`app.keep_revocation`) stamps `revoked_at` with the
+  transaction time when a consent or device is revoked and rejects any later change to it (`23514`). A stale or
+  replayed write can't make withdrawn consent or a revoked device active again. Granting consent again inserts a new
+  row.
+- **History stays until the account goes.** Neither role may delete consents or devices. The worker deletes an
+  account by deleting its profile, and the foreign-key cascade removes every account row with it.
+- The API deletes nothing and can never change `user_id`, `role`, `version` or timestamps. Triggers maintain
+  `updated_at` and bump `version`.
+- Functions in `app` are created as `enduva_owner`, whose global default privileges grant EXECUTE to nobody else. A
+  schema-scoped `ALTER DEFAULT PRIVILEGES` can't revoke PostgreSQL's global default of EXECUTE for PUBLIC, so the
+  default is changed for that role. Each function also revokes PUBLIC explicitly.
 
 ### Tables and sync columns
 
@@ -105,7 +134,7 @@ differences:
 - **`consents` instead of `ai_consents`**, as the roadmap names it: purpose-specific (`health_data`,
   `ai_nutrition`, `ai_coach`; architecture → AI), with `consent_version`, `granted_at` and `revoked_at`. At most one
   active consent per user and purpose. Revoking sets `revoked_at`, and granting again inserts a new row, so the
-  history stays.
+  history stays (see above: revocation is one-way).
 - **Sync columns:** `profiles` and `user_settings` get `version` for `ETag`/`If-Match`. `change_seq` and
   `deleted_at` are **deferred to 1.0a**: these tables are served by `/me`, not by the offline sync. `change_seq`
   needs `sync_state`, which 1.0a introduces. Account data is hard-deleted on account deletion (GDPR), not
@@ -125,8 +154,11 @@ ES256-signed, and the JWKS endpoint serves the public key, as on hosted projects
   accepts any login role with a password. `enduva_api_login.pooler-dev` therefore works without further
   configuration. Hosted projects use `<role>.<project-ref>`. This is **unverified** until 0.12b/0.12c connect with
   the real login roles.
-- **Nothing leaks across transactions.** After `withUserTx` commits or rolls back, the same session (pool of one,
-  direct and through the pooler) shows `current_user = enduva_api_login` and no claims.
+- **Nothing leaks across transactions.** After `withUserTx` or `withWorkerTx` commits or rolls back, the **same
+  Postgres backend** shows the login role as `current_user` and no claims, directly and through the pooler.
+  Supavisor may give successive transactions different backends, so the test records `pg_backend_pid()` inside the
+  transaction and probes until a statement reports that pid. A control shows that session-level state set with
+  `set_config(…, false)` is visible to the same probe.
 - After a custom setting has been set once in a session, `current_setting(name, true)` returns `''`, not NULL, so
   `app.current_user_id()` treats `''` as unset.
 - **Named prepared statements:** 200 executions of one named statement from 8 concurrent clients through the local
@@ -143,20 +175,33 @@ ES256-signed, and the JWKS endpoint serves the public key, as on hosted projects
 
 - **Cross-tenant suite:** acting as user A against user B and vice versa, as `enduva_api` and `enduva_worker`,
   through the pooler **and** directly. For every account table, reading, updating, deleting and inserting the
-  other user's rows, and handing an own row to them, return nothing or are denied with `42501`. Joins and
-  aggregates see one user only. Positive controls show that the same statements work on the actor's own rows, and
-  any error other than `42501` fails the test.
-- **Escape attempts:** no claims → no rows; no `set role` → no privileges; `row_security = off`, `set role` to
+  other user's rows, and handing an own row to them, return nothing or are denied with `42501`. Inserts use rows
+  that are valid for their owner: for `profiles` and `user_settings` a fixture user without that row (C has no
+  profile, D no settings). Joins and aggregates see one user only. Controls run the same statements on the actor's
+  own rows: they work where the role's grants allow them and are denied where they don't. Any error other than
+  `42501` fails the test.
+- **Account rules:** revoking a consent or device is stamped by the database and can't be cleared or moved (both
+  roles), and granting consent again adds a row. Neither role can set `role`, `version` or timestamps, the API
+  can't write entitlements, the worker can't create profiles or delete consent or device history, and deleting a
+  profile removes every account row.
+- **Escape attempts:** with no claims, claims without `sub` or an empty `sub`, both roles read nothing and every
+  insert, update and (worker) delete they are allowed is denied or touches nothing, while the same statement works
+  with the owner's identity. No `set role` → no privileges; `row_security = off`, `set role` to
   `postgres`/`service_role`/`authenticated`/…, disabling RLS, dropping policies and changing owners are denied.
+  Nothing of the identity stays on the backend (see Findings).
 - **Catalog:** role attributes and memberships; every table in `app` is owned by `enduva_owner` with RLS enabled,
-  forced and a policy, so tables added later are covered; nothing is reachable for `public`, `anon`,
-  `authenticated` or `service_role`; the API can't delete or edit `user_id`/`role`.
+  forced and a policy, so tables added later are covered; no table, column, function or schema privilege for
+  `public`, `anon`, `authenticated` or `service_role`; a snapshot of every runtime-role grant, column by column; no
+  runtime role may write `role`, ids, versions or timestamps; only the worker deletes, and only profiles; the
+  revocation trigger is in place; new functions of `enduva_owner` get no EXECUTE for PUBLIC.
 - **Data API and JWKS:** PostgREST rejects schema `app` for the publishable key and a user token. Seeded users sign
   in, their ES256 tokens verify against the JWKS (`ES256` only, exact `iss`, `aud = authenticated`), and the verified
   claims drive `withUserTx` through the pooler.
 
-Deliberately weakening the setup makes the suite fail: an extra `using (true)` policy on `devices` alone fails 10
-tests, and that policy together with `BYPASSRLS` on `enduva_api` and a grant on `app` to `authenticated` fails 68.
+Deliberately weakening the setup makes the suite (462 tests) fail: an extra `using (true)` policy on `devices` alone
+fails 64 tests, and that policy together with `BYPASSRLS` on `enduva_api` and a grant on `app` to `authenticated`
+fails 157. Dropping the revocation trigger fails 9, and table-wide INSERT and UPDATE on `profiles` for the worker
+fail 16.
 
 ### CI (0.5)
 

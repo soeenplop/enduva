@@ -38,7 +38,8 @@ pnpm --filter @enduva/db test:integration   # against the running local stack, a
 ```
 
 The integration suite reads URLs and keys from `supabase status`. It covers the cross-tenant matrix (every
-account table, API and worker role, through Supavisor and directly), escape attempts, the role and grant catalog,
+account table, API and worker role, through Supavisor and directly), the account rules (one-way revocation,
+operator-only `role`), escape attempts, the role and grant catalog,
 and the Data API and JWKS path ([ADR-0002 → Tests](../../docs/adr/0002-db-access-and-rls.md#tests)). Every write is
 rolled back, so the seed stays intact.
 

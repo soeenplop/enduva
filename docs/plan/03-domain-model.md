@@ -4,7 +4,7 @@ A first sketch. Column details are settled per feature PR. Conventions:
 
 - `id uuid` (UUIDv7, can be generated on the client). `user_id` references `auth.users`.
 - `created_at`, `updated_at`, `deleted_at` (soft delete for synced entities), `version bigint` (sync), `change_seq bigint` (per-user change feed).
-- Every user-owned table has RLS `user_id = auth.uid()`.
+- Every user-owned table has RLS `user_id = (select app.current_user_id())`, the `sub` of the transaction-local claims ([ADR-0002](../adr/0002-db-access-and-rls.md#identity-transaction-local-claims)).
 - SI units in storage: metres, seconds, kilograms, grams, kcal, bpm.
 
 ```mermaid
