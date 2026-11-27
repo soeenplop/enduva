@@ -27,6 +27,9 @@
 //   5. Every file is attributed to the nearest enclosing package.json with a `name` and `version`,
 //      and its SHA-256 digest is recorded per installed copy: pnpm can install one name and version
 //      more than once (peer variants, bundled dependencies), and every copy is judged on its own.
+//      Every installed directory of an allowlisted name and version is a copy too, even if no file
+//      in it matches a signature (#100): a listed file that was deleted, or changed until it lost
+//      its signature, must fail rather than drop the copy from the audit.
 //   6. The consumers of each such package (the packages and workspace importers that depend on it
 //      directly) are read from the installed dependency graph with `pnpm why <name> -r --json`, run
 //      in the workspace that owns each scanned `node_modules`.
@@ -39,9 +42,10 @@
 //     file, and a non-empty list of distinct consumers.
 //   - Any other package that contains compiler code must have an entry with exactly this package
 //     name and version, the detected bundled TypeScript version (string equality, so `6.0` and
-//     `6.0.3` are different), the exact file list with matching digests in every installed copy,
-//     and exactly the consumers found in the graph (`<name>@<version>`, or `workspace:<name>` for
-//     an importer).
+//     `6.0.3` are different), and exactly the consumers found in the graph (`<name>@<version>`, or
+//     `workspace:<name>` for an importer). In every installed copy each listed file must exist with
+//     its listed digest (read directly, not via the signature scan), and no unlisted file may carry
+//     compiler code.
 //   - Allowlist entries that match no installed package fail as stale. So any change of an
 //     allowlisted package's version, of the bytes of a file that carries the compiler, of the set of
 //     such files, or of a consumer's name or version fails until the allowlist is updated on purpose.
@@ -133,15 +137,38 @@ function readManifest(dir) {
   }
 }
 
-/** Finds every installed package that contains TypeScript compiler code. */
-export function scan(roots) {
+/**
+ * Finds every installed package that contains TypeScript compiler code. `tracked` holds
+ * `<name>@<version>` ids (the allowlisted ones) whose every installed directory becomes a copy,
+ * with or without compiler code.
+ */
+export function scan(roots, tracked = new Set()) {
   // `${name}@${version}` -> { name, version, copies: [{ dir, files: Map<path, digest> }], versions: Set }
   const hits = new Map();
   const copies = new Map(); // package dir -> copy
 
+  function copyOf(owner) {
+    const key = `${owner.name}@${owner.version}`;
+    let hit = hits.get(key);
+    if (!hit) {
+      hit = { name: owner.name, version: owner.version, copies: [], versions: new Set() };
+      hits.set(key, hit);
+    }
+    let copy = copies.get(owner.dir);
+    if (!copy) {
+      copy = { dir: owner.dir, files: new Map() };
+      copies.set(owner.dir, copy);
+      hit.copies.push(copy);
+    }
+    return { hit, copy };
+  }
+
   function walk(dir, owner) {
     const manifest = readManifest(dir);
-    if (manifest) owner = { name: manifest.name, version: manifest.version, dir };
+    if (manifest) {
+      owner = { name: manifest.name, version: manifest.version, dir };
+      if (tracked.has(`${owner.name}@${owner.version}`)) copyOf(owner);
+    }
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       if (entry.isSymbolicLink()) continue;
       const path = join(dir, entry.name);
@@ -153,18 +180,7 @@ export function scan(roots) {
       const bytes = readFileSync(path);
       const text = bytes.toString('latin1');
       if (!SIGNATURES.some((s) => text.includes(s))) continue;
-      const key = `${owner.name}@${owner.version}`;
-      let hit = hits.get(key);
-      if (!hit) {
-        hit = { name: owner.name, version: owner.version, copies: [], versions: new Set() };
-        hits.set(key, hit);
-      }
-      let copy = copies.get(owner.dir);
-      if (!copy) {
-        copy = { dir: owner.dir, files: new Map() };
-        copies.set(owner.dir, copy);
-        hit.copies.push(copy);
-      }
+      const { hit, copy } = copyOf(owner);
       copy.files.set(relative(owner.dir, path).split('\\').join('/'), sha256(bytes));
       for (const v of versionsInCode(text)) hit.versions.add(v);
     }
@@ -178,6 +194,14 @@ export function scan(roots) {
   for (const hit of hits.values()) hit.copies.sort((a, b) => a.dir.localeCompare(b.dir));
   return [...hits.values()].sort((a, b) => `${a.name}@${a.version}`.localeCompare(`${b.name}@${b.version}`));
 }
+
+/** The `<name>@<version>` ids of the allowlist entries, for scan(). */
+export const trackedIds = (allowlist) =>
+  new Set(
+    (Array.isArray(allowlist?.entries) ? allowlist.entries : [])
+      .filter((e) => isObject(e) && typeof e.package === 'string' && typeof e.version === 'string')
+      .map((e) => `${e.package}@${e.version}`),
+  );
 
 const byText = (a, b) => a.localeCompare(b);
 const major = (v) => Number(v.split('.')[0]);
@@ -214,6 +238,8 @@ function validate(e, i) {
     for (const [f, d] of Object.entries(e.files))
       if (!nonBlank(f) || typeof d !== 'string' || !DIGEST.test(d))
         p.push(`${at}: "files"."${f}" must be sha256:<64 hex>`);
+      else if (f.startsWith('/') || f.split('/').includes('..'))
+        p.push(`${at}: "files"."${f}" must be a path inside the package`);
   }
   const c = e.consumers;
   if (
@@ -269,20 +295,28 @@ export function judge(hits, allowlist) {
         `${id}: detected bundled TypeScript ${detected.version}, allowlist says ${entry.bundledTypeScript}`,
       );
     }
-    // Every installed copy must carry exactly the reviewed files and bytes (#100).
+    // Every installed copy must carry exactly the reviewed files and bytes (#100). The listed files
+    // are read directly, so a deleted file, or one changed until it lost its signature, still fails.
     const listed = isObject(entry.files) ? entry.files : {};
+    const listedFiles = Object.keys(listed).sort(byText);
     for (const copy of hit.copies) {
       const at = hit.copies.length > 1 ? `${id} (copy in ${copy.dir})` : id;
-      const copyFiles = [...copy.files.keys()].sort(byText);
-      if (!same(Object.keys(listed), copyFiles)) {
-        problems.push(
-          `${at}: compiler code found in [${copyFiles.join(', ')}], allowlist lists [${Object.keys(listed).sort(byText).join(', ')}]`,
-        );
-        continue;
+      for (const f of listedFiles) {
+        if (f.startsWith('/') || f.split('/').includes('..')) continue; // reported by validate()
+        const path = join(copy.dir, f);
+        if (!existsSync(path) || !lstatSync(path).isFile()) {
+          problems.push(`${at}: listed file ${f} is missing`);
+          continue;
+        }
+        const digest = sha256(readFileSync(path));
+        if (digest !== listed[f]) problems.push(`${at}: ${f} is ${digest}, allowlist says ${listed[f]}`);
       }
-      for (const f of copyFiles)
-        if (listed[f] !== copy.files.get(f))
-          problems.push(`${at}: ${f} is ${copy.files.get(f)}, allowlist says ${listed[f]}`);
+      const copyFiles = [...copy.files.keys()].sort(byText);
+      if (copyFiles.some((f) => !Object.hasOwn(listed, f))) {
+        problems.push(
+          `${at}: compiler code found in [${copyFiles.join(', ')}], allowlist lists [${listedFiles.join(', ')}]`,
+        );
+      }
     }
     const consumers = [...(hit.consumers ?? [])].sort(byText);
     if (consumers.length === 0) problems.push(`${id}: no consumers found in the dependency graph`);
@@ -327,7 +361,7 @@ export function consumersOf(hits, roots) {
 
 function run(allowlistPath, roots) {
   const allowlist = JSON.parse(readFileSync(allowlistPath, 'utf8'));
-  const { problems, report } = judge(consumersOf(scan(roots), roots), allowlist);
+  const { problems, report } = judge(consumersOf(scan(roots, trackedIds(allowlist)), roots), allowlist);
   for (const line of report) console.log(line);
   if (problems.length > 0) {
     console.error(`FAIL bundled TypeScript audit (${roots.join(', ')}):\n  ${problems.join('\n  ')}`);
@@ -568,6 +602,47 @@ function selfTest() {
     { entries: [entry] },
     /fake-formatter@1\.0\.0 \(copy in [^)]*_peer[^)]*\): compiler code found in \[dist\/extra\.mjs, dist\/parser\.js\]/,
   );
+  // #100: a copy whose only listed file is gone, or no longer matches a signature, has no compiler
+  // code left for the scan to find. It must still be judged, and fail, in either scan order.
+  const strip = (dir) => writeFileSync(join(dir, 'dist', 'parser.js'), 'module.exports = {};\n');
+  const remove = (dir) => rmSync(join(dir, 'dist', 'parser.js'));
+  for (const [what, change, problem] of [
+    ['is missing its only listed file', remove, 'listed file dist/parser\\.js is missing'],
+    ['lost the signature in its only listed file', strip, 'dist/parser\\.js is sha256:[0-9a-f]{64}, allowlist says'],
+  ]) {
+    for (const [which, storeKey] of [
+      ['first', 'fake-formatter@1.0.0'],
+      ['second', 'fake-formatter@1.0.0_peer'],
+    ]) {
+      check(
+        `rejects the ${which} of two copies if it ${what}`,
+        true,
+        (r) => {
+          formatter(r);
+          formatter(r, {}, '1.0.0', 'fake-formatter@1.0.0_peer');
+          change(join(r, '.pnpm', storeKey, 'node_modules', 'fake-formatter'));
+        },
+        { entries: [entry] },
+        new RegExp(
+          `fake-formatter@1\\.0\\.0 \\(copy in [^)]*/\\.pnpm/${storeKey.replaceAll('.', '\\.')}/node_modules/fake-formatter\\): ${problem}`,
+        ),
+      );
+    }
+  }
+  check(
+    'rejects the only copy if it is missing its only listed file (not reported as stale)',
+    true,
+    (r) => remove(formatter(r)),
+    { entries: [entry] },
+    /^(?![\s\S]*stale)[\s\S]*fake-formatter@1\.0\.0: listed file dist\/parser\.js is missing/,
+  );
+  check(
+    'rejects a listed path outside the package',
+    true,
+    (r) => formatter(r),
+    { entries: [{ ...entry, files: { ...entry.files, '../other/parser.js': entry.files['dist/parser.js'] } }] },
+    /"files"\."\.\.\/other\/parser\.js" must be a path inside the package/,
+  );
   for (const change of [{ usage: '' }, { reason: null }, { usage: '   ' }, { consumers: [] }, { files: {} }]) {
     const field = Object.keys(change)[0];
     check(
@@ -635,7 +710,7 @@ function selfTest() {
     const root = join(tmp, String(i), 'node_modules');
     mkdirSync(root, { recursive: true });
     c.setup(root);
-    const hits = scan([root]);
+    const hits = scan([root], trackedIds(c.allowlist));
     for (const h of hits) h.consumers = new Set(c.consumers);
     const { problems } = judge(hits, c.allowlist);
     const text = problems.join('\n');
@@ -653,7 +728,7 @@ function selfTest() {
     report(false, 'oxfmt regression: no allowlisted oxfmt installed (update these checks if oxfmt left the graph)');
     process.exit(1);
   }
-  const hits = consumersOf(scan(roots), roots);
+  const hits = consumersOf(scan(roots, trackedIds(allowlist)), roots);
   const oxfmt = hits.find((h) => h.name === 'oxfmt' && h.version === listed.version);
   report(
     oxfmt !== undefined &&
