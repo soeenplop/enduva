@@ -21,11 +21,14 @@ the user's access token as `Authorization: Bearer …`, an optional `fetch`) and
 SSR process can serve several users at once. Errors are not thrown: the result is `{ data, status, headers }`, and
 `status` narrows `data` to the documented body, which it always is:
 
-- `304` and `204` have no body.
-- Every other status from 300 up carries a `Problem`. If the response has no problem body (a proxy's HTML page,
-  malformed JSON), the client makes one up with `code: UNEXPECTED_RESPONSE` (`'unexpected_response'`, never sent by
+- A `304` to a `GET` or `HEAD` has no body.
+- `200` carries its parsed JSON object (not validated against the schema). Without a JSON object body (empty,
+  malformed, `null`, an array or a primitive), the call rejects with `ApiResponseError` (status only, no body).
+- Every other status carries a `Problem`, because the generated types put every undeclared status there (a `204`,
+  a `304` to a `PATCH`, an undocumented `201`). If the response has no problem body (a proxy's HTML page, malformed
+  JSON, no body), the client makes one up with `code: UNEXPECTED_RESPONSE` (`'unexpected_response'`, never sent by
   the API) and the response's status, so `res.data.code` is always readable.
-- Other success statuses carry their parsed JSON body (not validated against the schema). Without one, the call
-  rejects with `ApiResponseError` (status only, no body).
+
+An operation that later declares another success status (`201`, `204`) must extend these rules in `src/fetcher.ts`.
 
 So a call throws only on network failures, without `baseUrl`, and with `ApiResponseError`.

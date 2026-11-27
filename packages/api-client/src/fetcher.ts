@@ -60,15 +60,19 @@ function parseJson(text: string, contentType: string | null): { ok: true; value:
 
 /**
  * Orval mutator: every generated call goes through here. Returns `{ data, status, headers }`, which the generated
- * per-status response types discriminate on `status`, and `data` always has the type they promise:
+ * per-status response types discriminate on `status`, and `data` always has the type they promise for the current
+ * operations (which declare `200`, `304` on GETs, and problem responses for everything else, so Orval puts any other
+ * status, `204` and a PATCH `304` included, in the `Problem` arm):
  *
- * - 304 and 204 have no body (`undefined`).
- * - Every other status from 300 up carries a `Problem`: the response's problem body, or, if it has none (an HTML page
- *   from a proxy, malformed JSON), a made-up one with `code: UNEXPECTED_RESPONSE` and the response's status.
- * - Any other success status carries its parsed JSON body (not validated against the schema). Without one, the call
- *   rejects with `ApiResponseError`.
+ * - A `304` to a `GET` or `HEAD` has no body (`undefined`).
+ * - `200` carries its parsed JSON object (not validated against the schema). Without a JSON object body (empty,
+ *   malformed, `null`, an array or a primitive), the call rejects with `ApiResponseError`.
+ * - Every other status carries a `Problem`: the response's problem body, or, if it has none (an HTML page from a
+ *   proxy, malformed JSON, a bodyless `204`, an undocumented `201`), a made-up one with `code: UNEXPECTED_RESPONSE`
+ *   and the response's status.
  *
- * So a call throws only on network failures, without `baseUrl`, and with `ApiResponseError`.
+ * So a call throws only on network failures, without `baseUrl`, and with `ApiResponseError`. An operation that later
+ * declares another success status (e.g. `201` or `204`) must extend these rules.
  */
 export async function apiFetch<T>(path: string, init: ApiRequestInit = {}): Promise<T> {
   const { baseUrl, accessToken, fetch: fetchFn = fetch, ...request } = init;
@@ -79,13 +83,16 @@ export async function apiFetch<T>(path: string, init: ApiRequestInit = {}): Prom
   const res = await fetchFn(url, { ...request, headers });
   const { status } = res;
   const result = (data: unknown) => ({ data, status, headers: res.headers }) as T;
-  if (status === 304 || status === 204) return result(undefined);
+  const method = (request.method ?? 'GET').toUpperCase();
+  if (status === 304 && (method === 'GET' || method === 'HEAD')) return result(undefined);
   const body = parseJson(await res.text(), res.headers.get('content-type'));
-  if (status >= 300) {
-    if (body.ok && isProblem(body.value)) return result(body.value);
-    const title = res.statusText === '' ? 'Unexpected response' : res.statusText;
-    return result({ type: 'about:blank', title, status, code: UNEXPECTED_RESPONSE } satisfies ProblemBody);
+  if (status === 200) {
+    if (!body.ok || typeof body.value !== 'object' || body.value === null || Array.isArray(body.value)) {
+      throw new ApiResponseError(status);
+    }
+    return result(body.value);
   }
-  if (!body.ok) throw new ApiResponseError(status);
-  return result(body.value);
+  if (body.ok && isProblem(body.value)) return result(body.value);
+  const title = res.statusText === '' ? 'Unexpected response' : res.statusText;
+  return result({ type: 'about:blank', title, status, code: UNEXPECTED_RESPONSE } satisfies ProblemBody);
 }

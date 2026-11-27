@@ -26,6 +26,8 @@ function stub(status: number, body?: unknown, headers: Record<string, string> = 
   return { fetch, calls };
 }
 
+let stubbed: typeof fetch;
+
 describe('generated client', () => {
   it('sends the bearer token and If-None-Match, and returns the typed body with its ETag', async () => {
     const { fetch, calls } = stub(200, me, { 'content-type': 'application/json; charset=utf-8', etag: '"2-x"' });
@@ -82,6 +84,27 @@ describe('generated client', () => {
     });
   });
 
+  it.each([
+    ['a bodyless 204 to a GET', 204, undefined, () => getHealth({}, { baseUrl: 'http://h', fetch: stubbed })],
+    [
+      'a 304 to a PATCH',
+      304,
+      undefined,
+      () => updateMe({}, { 'If-Match': '"1-x"' }, { baseUrl: 'http://h', fetch: stubbed }),
+    ],
+    [
+      'an undocumented 201 with JSON',
+      201,
+      JSON.stringify(me),
+      () => getMe({}, { baseUrl: 'http://h', fetch: stubbed }),
+    ],
+  ])('gives %s the Problem its generated type promises', async (_case, status, body, call) => {
+    stubbed = stub(status, body, { 'content-type': 'application/json' }).fetch;
+    const res = await call();
+    expect(res.status).toBe(status);
+    expect((res.data as { code: string }).code).toBe(UNEXPECTED_RESPONSE);
+  });
+
   it('passes a real problem body through unchanged', async () => {
     const problem = { type: 'about:blank', title: 'Too Many Requests', status: 429, code: 'rate_limited', detail: 'x' };
     const { fetch } = stub(429, problem, { 'content-type': 'application/problem+json' });
@@ -92,6 +115,9 @@ describe('generated client', () => {
     ['HTML', '<html>Hi</html>', 'text/html'],
     ['malformed JSON', '{"status":', 'application/json'],
     ['an empty body', '', 'application/json'],
+    ['JSON null', 'null', 'application/json'],
+    ['a JSON array', '[]', 'application/json'],
+    ['a JSON primitive', '42', 'application/json'],
   ])('rejects a success response with %s with ApiResponseError', async (_case, body, contentType) => {
     const { fetch } = stub(200, body, { 'content-type': contentType });
     const call = getHealth({}, { baseUrl: 'http://h', fetch });
