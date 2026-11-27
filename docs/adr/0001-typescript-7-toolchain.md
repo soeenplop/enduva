@@ -170,6 +170,18 @@ Task 0.5a ([#7](https://github.com/soeenplop/enduva/issues/7)) made the root che
 - **Spike.** Its lockfile audit checks only its own lockfile now, and `spike-ts7.yml` no longer runs on root lockfile changes.
 - **CodeQL: approved standalone analysis exception (W13).** Its JavaScript/TypeScript extractor (CodeQL CLI 2.27.6) runs its own bundled TypeScript 5.9.2, calling `ts.createProgram` per file (`noResolve`, no type checker) only to parse our code for its own analysis. The lead approved it as a standalone analysis exception under W13 ([decision on PR #104](https://github.com/soeenplop/enduva/pull/104#issuecomment-7212225890)): CodeQL runs outside our build toolchain and never type-checks, emits or serves as a language service for our build, and it influences no artifact. It is added as a **non-required** check (security alerts only) in a follow-up PR. Inside our build toolchain the TS < 7 ban stays absolute.
 
+## Handoff in 0.10
+
+Task 0.10 ([#15](https://github.com/soeenplop/enduva/issues/15)) brought the landing half of criterion 4 into the real workspace as [`apps/landing`](../../apps/landing):
+
+- **Route generation.** `pnpm generate` runs `paraglide-js compile` and `tsr generate` with Start's footer in [`tsr.config.json`](../../apps/landing/tsr.config.json). Turbo runs it before `build`, `typecheck`, `lint` and `test`, and the root `test:negative` runs it before the runner.
+- **Identity check.** [`scripts/build.mjs`](../../apps/landing/scripts/build.mjs) hashes the route tree **and** the Paraglide output before and after `vite build` and fails on any difference. Paraglide's Vite plugin sets `isServer` and `isDevelopment` itself and resolves the project path against Vite's root, so the compile step passes the same values ([`paraglide.options.mjs`](../../apps/landing/paraglide.options.mjs)). Without that, `tsc` checks a different runtime than the build ships.
+- **Prerender check.** [`scripts/check-static.mjs`](../../apps/landing/scripts/check-static.mjs) replaces the spike's `check-prerender.mjs`: every page under `/de/…` and `/en/…` with its `<html lang>`, no unprefixed duplicates, and the language picker at `/`.
+- **Negative fixtures.** The spike's four landing fixtures moved to [`apps/landing/negative/`](../../apps/landing/negative), where the root runner finds them.
+- **Bundled TypeScript.** With TanStack in the root graph, Prettier 3.10.1 (TS 6.0.3, via `@tanstack/router-generator` 1.168.0) needs a root allowlist entry, decided by the lead (W13).
+
+The spike's landing workspace stays until 0.9a has taken over the web half; it is deleted with the spike.
+
 ## Handoff in 0.8a
 
 Task 0.8a ([#10](https://github.com/soeenplop/enduva/issues/10)) builds [`apps/api`](../../apps/api) on this stack:
