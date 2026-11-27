@@ -73,6 +73,20 @@ const trustedProxies = z
     error: 'must be comma-separated proxy IPs or CIDRs (or loopback, linklocal, uniquelocal), not a hop count',
   });
 
+const loopbackHosts = new Set(['127.0.0.1', 'localhost', '[::1]']);
+
+/** An exact issuer URL: https (plain http only on a loopback host), no trailing slash, query, fragment or credentials. */
+function isIssuer(value: string): boolean {
+  // An empty `?` or `#` leaves `search`/`hash` empty but would still swallow the appended JWKS path.
+  if (value.includes('?') || value.includes('#')) return false;
+  const url = URL.parse(value);
+  if (url === null || url.username !== '' || url.password !== '' || url.search !== '' || url.hash !== '') return false;
+  // Already in normal form (lower-case host, no default port, no dot segments), so `iss` can be compared as a string.
+  const normalized = url.href === value || url.href === `${value}/`;
+  if (!normalized || value.endsWith('/')) return false;
+  return url.protocol === 'https:' || (url.protocol === 'http:' && loopbackHosts.has(url.hostname));
+}
+
 /** Environment of the API process. Every value is validated at boot; the process refuses to start otherwise. */
 export const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -85,6 +99,15 @@ export const envSchema = z.object({
   DATABASE_POOL_MAX: positiveInt.max(100).default(10),
   /** How long a checkout may wait for a connection, queued or new, before it fails (node-postgres). */
   DATABASE_CONNECT_TIMEOUT_MS: positiveInt.max(60_000).default(5_000),
+  /**
+   * Supabase Auth issuer, compared exactly with a token's `iss`: `https://<project-ref>.supabase.co/auth/v1`, locally
+   * `http://127.0.0.1:54321/auth/v1`. The JWKS is fetched from `<issuer>/.well-known/jwks.json`.
+   */
+  AUTH_ISSUER: z.string().refine(isIssuer, {
+    error: 'must be the exact https issuer URL without a trailing slash (http only on a loopback host)',
+  }),
+  /** The one asymmetric algorithm the project signs access tokens with. HS256 and `none` are never accepted. */
+  AUTH_JWT_ALGORITHM: z.enum(['ES256', 'RS256']).default('ES256'),
   /** Trusted ingress proxies (addresses/CIDRs). Empty: `X-Forwarded-For` is ignored and the socket peer is the client. */
   TRUST_PROXY: trustedProxies.default([]),
   /** Requests per client IP, endpoint and window. */

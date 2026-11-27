@@ -3,16 +3,19 @@ import { describe, expect, it } from 'vitest';
 import { InvalidEnvError, loadEnv } from '../src/config/env.js';
 
 const url = 'postgresql://enduva_api_login.pooler-dev:s3cret-pw@127.0.0.1:54329/postgres';
+const issuer = 'http://127.0.0.1:54321/auth/v1';
 
 describe('loadEnv', () => {
   it('applies the defaults', () => {
-    expect(loadEnv({ DATABASE_URL: url })).toEqual({
+    expect(loadEnv({ AUTH_ISSUER: issuer, DATABASE_URL: url })).toEqual({
       NODE_ENV: 'development',
       HOST: '0.0.0.0',
       PORT: 3000,
       LOG_LEVEL: 'info',
       DATABASE_URL: url,
       DATABASE_POOL_MAX: 10,
+      AUTH_ISSUER: issuer,
+      AUTH_JWT_ALGORITHM: 'ES256',
       DATABASE_CONNECT_TIMEOUT_MS: 5000,
       TRUST_PROXY: [],
       THROTTLE_LIMIT: 100,
@@ -21,7 +24,7 @@ describe('loadEnv', () => {
   });
 
   it('coerces numbers', () => {
-    expect(loadEnv({ DATABASE_URL: url, PORT: '8080', THROTTLE_LIMIT: '5' })).toMatchObject({
+    expect(loadEnv({ AUTH_ISSUER: issuer, DATABASE_URL: url, PORT: '8080', THROTTLE_LIMIT: '5' })).toMatchObject({
       PORT: 8080,
       THROTTLE_LIMIT: 5,
     });
@@ -29,19 +32,33 @@ describe('loadEnv', () => {
 
   it('reads trusted proxies as a list of addresses, CIDRs and named ranges', () => {
     expect(
-      loadEnv({ DATABASE_URL: url, TRUST_PROXY: ' 10.0.1.5, 172.16.0.0/12,fd00::/8 ,uniquelocal,' }),
+      loadEnv({
+        AUTH_ISSUER: issuer,
+        DATABASE_URL: url,
+        TRUST_PROXY: ' 10.0.1.5, 172.16.0.0/12,fd00::/8 ,uniquelocal,',
+      }),
     ).toMatchObject({
       TRUST_PROXY: ['10.0.1.5', '172.16.0.0/12', 'fd00::/8', 'uniquelocal'],
     });
-    expect(loadEnv({ DATABASE_URL: url, TRUST_PROXY: '' })).toMatchObject({ TRUST_PROXY: [] });
+    expect(loadEnv({ AUTH_ISSUER: issuer, DATABASE_URL: url, TRUST_PROXY: '' })).toMatchObject({ TRUST_PROXY: [] });
   });
 
   it('keeps an explicit PORT=0 for an ephemeral port', () => {
-    expect(loadEnv({ DATABASE_URL: url, PORT: '0' })).toMatchObject({ PORT: 0 });
+    expect(loadEnv({ AUTH_ISSUER: issuer, DATABASE_URL: url, PORT: '0' })).toMatchObject({ PORT: 0 });
   });
 
-  it('refuses a missing DATABASE_URL', () => {
-    expect(() => loadEnv({})).toThrow(new InvalidEnvError('Invalid environment:\n  DATABASE_URL: is required'));
+  it('refuses a missing DATABASE_URL or AUTH_ISSUER', () => {
+    expect(() => loadEnv({ AUTH_ISSUER: issuer })).toThrow(
+      new InvalidEnvError('Invalid environment:\n  DATABASE_URL: is required'),
+    );
+    expect(() => loadEnv({ DATABASE_URL: url })).toThrow(
+      new InvalidEnvError('Invalid environment:\n  AUTH_ISSUER: is required'),
+    );
+  });
+
+  it('accepts a hosted https issuer', () => {
+    const hosted = 'https://abcdefghijklmnop.supabase.co/auth/v1';
+    expect(loadEnv({ AUTH_ISSUER: hosted, DATABASE_URL: url })).toMatchObject({ AUTH_ISSUER: hosted });
   });
 
   it.each([
@@ -68,8 +85,19 @@ describe('loadEnv', () => {
     ['DATABASE_CONNECT_TIMEOUT_MS', '0'],
     ['DATABASE_URL', 'mysql://enduva_api_login@localhost/db'],
     ['DATABASE_URL', 'not a url'],
+    ['AUTH_ISSUER', 'http://abcdefghijklmnop.supabase.co/auth/v1'],
+    ['AUTH_ISSUER', 'https://abcdefghijklmnop.supabase.co/auth/v1/'],
+    ['AUTH_ISSUER', 'https://ABCDEFGHIJKLMNOP.supabase.co/auth/v1'],
+    ['AUTH_ISSUER', 'https://abcdefghijklmnop.supabase.co:443/auth/v1'],
+    ['AUTH_ISSUER', 'https://abcdefghijklmnop.supabase.co/auth/v1?x=1'],
+    ['AUTH_ISSUER', 'https://abcdefghijklmnop.supabase.co/auth/v1?'],
+    ['AUTH_ISSUER', 'https://abcdefghijklmnop.supabase.co/auth/v1#'],
+    ['AUTH_ISSUER', 'https://user:pw@abcdefghijklmnop.supabase.co/auth/v1'],
+    ['AUTH_ISSUER', 'not a url'],
+    ['AUTH_JWT_ALGORITHM', 'HS256'],
+    ['AUTH_JWT_ALGORITHM', 'none'],
   ])('refuses %s=%s', (name, value) => {
-    expect(() => loadEnv({ DATABASE_URL: url, [name]: value })).toThrow(
+    expect(() => loadEnv({ AUTH_ISSUER: issuer, DATABASE_URL: url, [name]: value })).toThrow(
       new RegExp(`^Invalid environment:\\n  ${name}: `),
     );
   });
@@ -78,7 +106,9 @@ describe('loadEnv', () => {
     'refuses to connect as %s',
     (user) => {
       const other = url.replace('enduva_api_login.pooler-dev', user);
-      expect(() => loadEnv({ DATABASE_URL: other })).toThrow('DATABASE_URL: must connect as enduva_api_login');
+      expect(() => loadEnv({ AUTH_ISSUER: issuer, DATABASE_URL: other })).toThrow(
+        'DATABASE_URL: must connect as enduva_api_login',
+      );
     },
   );
 
@@ -89,18 +119,20 @@ describe('loadEnv', () => {
     ['a host override', `${url}?host=10.0.0.9`],
     ['a malformed escape in the user name', url.replace('enduva_api_login.pooler-dev', 'enduva_api_login.%E0%A4%A')],
   ])('refuses a DATABASE_URL with %s, without echoing it', (_case, value) => {
-    expect(() => loadEnv({ DATABASE_URL: value })).toThrow('DATABASE_URL: must connect as enduva_api_login');
-    expect(() => loadEnv({ DATABASE_URL: value })).not.toThrow(/s3cret-pw|10\.0\.0\.9/);
+    expect(() => loadEnv({ AUTH_ISSUER: issuer, DATABASE_URL: value })).toThrow(
+      'DATABASE_URL: must connect as enduva_api_login',
+    );
+    expect(() => loadEnv({ AUTH_ISSUER: issuer, DATABASE_URL: value })).not.toThrow(/s3cret-pw|10\.0\.0\.9/);
   });
 
   it('accepts TLS settings', () => {
     const tls = `${url}?sslmode=verify-full&sslrootcert=/etc/ssl/supabase.crt`;
-    expect(loadEnv({ DATABASE_URL: tls }).DATABASE_URL).toBe(tls);
+    expect(loadEnv({ AUTH_ISSUER: issuer, DATABASE_URL: tls }).DATABASE_URL).toBe(tls);
   });
 
   it('accepts the direct login without a pooler tenant', () => {
     const direct = 'postgresql://enduva_api_login:pw@127.0.0.1:54322/postgres';
-    expect(loadEnv({ DATABASE_URL: direct }).DATABASE_URL).toBe(direct);
+    expect(loadEnv({ AUTH_ISSUER: issuer, DATABASE_URL: direct }).DATABASE_URL).toBe(direct);
   });
 
   it('lists every offending variable but never a value', () => {

@@ -35,6 +35,8 @@ process with exit code 1 and a list of the offending variable names (never their
 | `LOG_LEVEL` | `info` | pino level, or `silent` |
 | `TRUST_PROXY` | empty | Comma-separated IPs/CIDRs of the ingress peers whose `X-Forwarded-For` is honoured: Traefik's own address(es), or a subnet that only trusted proxies can join. **Not** the subnet of Dokploy's `dokploy-network`, `uniquelocal` or `linklocal` (see Client IPs). Empty trusts none. No hop counts |
 | `THROTTLE_LIMIT` / `THROTTLE_TTL_SECONDS` | `100` / `60` | Requests per client IP **and endpoint** per window (see Throttling) |
+| `AUTH_ISSUER` | required | Supabase Auth issuer, compared exactly with a token's `iss`: `https://<project-ref>.supabase.co/auth/v1`, locally `http://127.0.0.1:54321/auth/v1`. https only, except on a loopback host; no trailing slash. The JWKS comes from `<issuer>/.well-known/jwks.json` |
+| `AUTH_JWT_ALGORITHM` | `ES256` | The one asymmetric algorithm the project signs access tokens with: `ES256` or `RS256`. HS256 and `none` are never accepted |
 
 Locally, start the database with `pnpm --filter @enduva/db db:start` and `db:reset` ([`packages/db`](../db/README.md)).
 Never point a local process at a hosted project.
@@ -100,3 +102,8 @@ Never point a local process at a hosted project.
 - `test/database.e2e.test.ts` runs against the **local** Supabase stack through the transaction pooler: readiness, a
   request transaction as `enduva_api` under RLS, rollback, and a failed query whose parameter stays out of the logs.
   Without a running stack its tests are reported as skipped (`SKIPPED, not running` in the suite name), as in CI.
+- `test/token-verifier.test.ts` checks token verification with locally generated keys: wrong `iss`/`aud`/`role`,
+  HS256 (also with the public key as secret), `none`, the other asymmetric algorithm, unknown or forged keys,
+  tampering, expiry and `iat`/`nbf` around the clock skew, missing claims, anonymous users; and the remote JWKS
+  (caching, rotation with concurrent tokens sharing one refetch, fail closed, at most one fetch per 30 s cooldown also
+  while fetches fail, 503 for unknown keys until a fetch succeeds, no redirects) against a stand-in endpoint.
