@@ -43,18 +43,21 @@ const strongEtag = z.string().meta({
 /** Express tags every other JSON body with a weak ETag of its bytes, and answers a matching `If-None-Match` with 304. */
 const weakEtag = z
   .string()
+  .optional()
   .meta({ description: 'Weak entity tag of the body. Opaque', example: 'W/"f-VaSQ4oDUiZblZNAEkkN+sX+q3Sg"' });
 
-const noStore = z.string().meta({ description: 'Always `no-store`', example: 'no-store' });
+// Informational headers are optional: a client must not reject a response because a proxy dropped one.
+const noStore = z.string().optional().meta({ description: 'Always `no-store`', example: 'no-store' });
 
 /** The validator and caching headers of a body response, and of the bodyless 304 that answers a matching tag. */
-const cacheHeaders = (etag: z.ZodString) => z.object({ ETag: etag, 'Cache-Control': noStore });
+const cacheHeaders = (etag: z.ZodString | z.ZodOptional<z.ZodString>) =>
+  z.object({ ETag: etag, 'Cache-Control': noStore });
 
 const conditional = {
   header: z.object({ 'If-None-Match': z.string().optional().meta({ description: 'ETag of a cached copy' }) }),
 };
 
-const notModified = (etag: z.ZodString): ZodOpenApiResponseObject => ({
+const notModified = (etag: z.ZodString | z.ZodOptional<z.ZodString>): ZodOpenApiResponseObject => ({
   description: 'The cached copy named by `If-None-Match` is current. No body',
   headers: cacheHeaders(etag),
 });

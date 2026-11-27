@@ -72,7 +72,9 @@ describe('OpenAPI document', () => {
     // The bodyless 304 keeps the validator and the caching header.
     const notModified = operation('GET /v1/me').responses['304'];
     expect(notModified).not.toHaveProperty('content');
-    expect(Object.keys(notModified.headers as Json)).toEqual(['ETag', 'Cache-Control']);
+    expect(notModified.headers.ETag).toMatchObject({ required: true });
+    // Informational headers are optional, so a proxy that drops one can't make a client reject the response.
+    expect(notModified.headers['Cache-Control']).not.toHaveProperty('required');
     const patch = operation('PATCH /v1/me');
     expect(patch.parameters).toContainEqual(
       expect.objectContaining({ in: 'header', name: 'If-Match', required: true }),
@@ -87,6 +89,8 @@ describe('OpenAPI document', () => {
       expect(op.responses['200'].headers).toHaveProperty('ETag');
       expect(op.responses['304']).not.toHaveProperty('content');
       expect(op.responses['304'].headers).toHaveProperty('ETag');
+      // Express adds the weak tag; documented, but not required.
+      expect(op.responses['200'].headers.ETag).not.toHaveProperty('required');
       expect(op.responses['429'].headers).toHaveProperty('Retry-After');
     }
   });

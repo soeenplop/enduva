@@ -32,21 +32,19 @@
             "description": "The process serves requests",
             "headers": {
               "ETag": {
-                "required": true,
                 "description": "Weak entity tag of the body. Opaque",
                 "schema": {
-                  "type": "string",
                   "description": "Weak entity tag of the body. Opaque",
-                  "example": "W/\"f-VaSQ4oDUiZblZNAEkkN+sX+q3Sg\""
+                  "example": "W/\"f-VaSQ4oDUiZblZNAEkkN+sX+q3Sg\"",
+                  "type": "string"
                 }
               },
               "Cache-Control": {
-                "required": true,
                 "description": "Always `no-store`",
                 "schema": {
-                  "type": "string",
                   "description": "Always `no-store`",
-                  "example": "no-store"
+                  "example": "no-store",
+                  "type": "string"
                 }
               }
             },
@@ -62,21 +60,19 @@
             "description": "The cached copy named by `If-None-Match` is current. No body",
             "headers": {
               "ETag": {
-                "required": true,
                 "description": "Weak entity tag of the body. Opaque",
                 "schema": {
-                  "type": "string",
                   "description": "Weak entity tag of the body. Opaque",
-                  "example": "W/\"f-VaSQ4oDUiZblZNAEkkN+sX+q3Sg\""
+                  "example": "W/\"f-VaSQ4oDUiZblZNAEkkN+sX+q3Sg\"",
+                  "type": "string"
                 }
               },
               "Cache-Control": {
-                "required": true,
                 "description": "Always `no-store`",
                 "schema": {
-                  "type": "string",
                   "description": "Always `no-store`",
-                  "example": "no-store"
+                  "example": "no-store",
+                  "type": "string"
                 }
               }
             }
@@ -135,21 +131,19 @@
             "description": "Ready",
             "headers": {
               "ETag": {
-                "required": true,
                 "description": "Weak entity tag of the body. Opaque",
                 "schema": {
-                  "type": "string",
                   "description": "Weak entity tag of the body. Opaque",
-                  "example": "W/\"f-VaSQ4oDUiZblZNAEkkN+sX+q3Sg\""
+                  "example": "W/\"f-VaSQ4oDUiZblZNAEkkN+sX+q3Sg\"",
+                  "type": "string"
                 }
               },
               "Cache-Control": {
-                "required": true,
                 "description": "Always `no-store`",
                 "schema": {
-                  "type": "string",
                   "description": "Always `no-store`",
-                  "example": "no-store"
+                  "example": "no-store",
+                  "type": "string"
                 }
               }
             },
@@ -165,21 +159,19 @@
             "description": "The cached copy named by `If-None-Match` is current. No body",
             "headers": {
               "ETag": {
-                "required": true,
                 "description": "Weak entity tag of the body. Opaque",
                 "schema": {
-                  "type": "string",
                   "description": "Weak entity tag of the body. Opaque",
-                  "example": "W/\"f-VaSQ4oDUiZblZNAEkkN+sX+q3Sg\""
+                  "example": "W/\"f-VaSQ4oDUiZblZNAEkkN+sX+q3Sg\"",
+                  "type": "string"
                 }
               },
               "Cache-Control": {
-                "required": true,
                 "description": "Always `no-store`",
                 "schema": {
-                  "type": "string",
                   "description": "Always `no-store`",
-                  "example": "no-store"
+                  "example": "no-store",
+                  "type": "string"
                 }
               }
             }
@@ -256,12 +248,11 @@
                 }
               },
               "Cache-Control": {
-                "required": true,
                 "description": "Always `no-store`",
                 "schema": {
-                  "type": "string",
                   "description": "Always `no-store`",
-                  "example": "no-store"
+                  "example": "no-store",
+                  "type": "string"
                 }
               }
             },
@@ -286,12 +277,11 @@
                 }
               },
               "Cache-Control": {
-                "required": true,
                 "description": "Always `no-store`",
                 "schema": {
-                  "type": "string",
                   "description": "Always `no-store`",
-                  "example": "no-store"
+                  "example": "no-store",
+                  "type": "string"
                 }
               }
             }
@@ -397,12 +387,11 @@
                 }
               },
               "Cache-Control": {
-                "required": true,
                 "description": "Always `no-store`",
                 "schema": {
-                  "type": "string",
                   "description": "Always `no-store`",
-                  "example": "no-store"
+                  "example": "no-store",
+                  "type": "string"
                 }
               }
             },
