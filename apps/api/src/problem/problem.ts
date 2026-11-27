@@ -7,6 +7,8 @@ import { STATUS_CODES } from 'node:http';
 export const problemStatus = {
   bad_request: 400,
   unauthorized: 401,
+  /** The token's device was revoked: the client wipes its local account data (02-architecture → Watch). */
+  device_revoked: 401,
   forbidden: 403,
   not_found: 404,
   method_not_allowed: 405,
@@ -55,7 +57,7 @@ export class ProblemException extends Error {
   }
 }
 
-/** The first, generic code of each status: `database_unavailable` for 503, not `auth_unavailable`. */
+/** The first, generic code of each status: `unauthorized` for 401, not `device_revoked`. */
 const codeByStatus = new Map<number, ProblemCode>();
 for (const [code, status] of Object.entries(problemStatus))
   if (!codeByStatus.has(status)) codeByStatus.set(status, code as ProblemCode);

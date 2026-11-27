@@ -94,6 +94,37 @@ Supabase's `auth.uid()`: that would need grants on Supabase's `auth` schema, and
 `request.jwt.claim.sub` setting. With no claims, policies match no row. A `sub` that isn't a UUID fails the cast and
 with it the query.
 
+### Session check: one function owned by the migration role (0.8b)
+
+The API checks on every request, inside the request transaction, that the token's session still exists and its
+account is active (architecture → Authentication). Sessions and users live in Supabase's `auth` schema. `postgres`
+may read `auth.sessions` and `auth.users` but holds `USAGE` on `auth` without grant option, so it can't give
+`enduva_owner` or a runtime role access. Instead,
+[`app.auth_session_active()`](../../supabase/migrations/20261127182543_auth_session_check.sql) is a `SECURITY DEFINER`
+function **owned by `postgres`**, the only function in `app` not owned by `enduva_owner`:
+
+- It takes no arguments and returns a boolean for the user and `session_id` in the transaction's claims: true if
+  that session exists for that user and hasn't passed `not_after`, and the user isn't soft-deleted or banned.
+  Missing claims return false. The database doesn't verify the claims: the API sets them from a token it verified
+  against the JWKS, which binds the answer to the token's owner at the HTTP boundary, but anyone with the API's
+  database login can set any claims. That is the same trusted-caller boundary as `withUserTx` (Trust boundary).
+- `stable`, EXECUTE for `enduva_api` only (PUBLIC revoked), and `search_path = pg_catalog, pg_temp`. An empty search
+  path would still look up **types** in the caller's temporary schema first, so a temporary domain named `uuid` or
+  `jsonb` could take over a cast and run its check with `postgres`' rights. With `pg_temp` listed last (functions and
+  operators are never looked up there) and every type, function and operator schema-qualified, it can't. The helper
+  `app.current_user_id()` on the same call path gets the same treatment. The catalog test pins owner, path and
+  grants, and that temporary domains don't change the result.
+- **Profile creation and account deletion.** The API creates a missing profile and settings on a user's first
+  request, in a statement that inserts only while `app.auth_session_active()` still holds. A request that passed the
+  check before its account was disabled therefore creates nothing afterwards. One overlap is left: an insert made just
+  before the account was disabled and not yet committed when the purge runs, which the purge can't see. Account
+  deletion (0.13b) must therefore **disable the auth user first** (ban or soft delete, so no new request passes) and
+  **end by hard-deleting the auth user**: the cascade from `auth.users` to `profiles` waits for such an insert (its
+  foreign-key check holds a key-share lock on the `auth.users` row) and then removes it. 0.13b's acceptance includes
+  that case: a first request whose transaction is still open across the disable and the purge leaves no row behind.
+- Hosted projects grant `postgres` the same rights on `auth`; this is **unverified** until 0.12b applies the migration
+  there.
+
 ### RLS decides whose rows, grants decide which operations
 
 Every table has an `own_rows` policy `for all to enduva_api, enduva_worker`, with `using` and `with check`

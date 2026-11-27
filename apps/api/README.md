@@ -99,6 +99,13 @@ Never point a local process at a hosted project.
   and rolls back if the handler throws. Handlers take it with the `@RequestTx()` parameter decorator and pass it to
   services; using it on a route without verified claims fails with a `500`. Requests without claims get no
   transaction.
+- **Session and account check:** the first statement of every request transaction, synchronous and uncached, so a
+  request started after a revocation committed is refused ([`src/auth/account-status.ts`](src/auth/account-status.ts)).
+  `app.auth_session_active()` (ADR-0002 → Session check) confirms that the token's session still exists and hasn't
+  expired and that its user exists, isn't deleted and isn't banned; otherwise `401 unauthorized`. A revoked device for
+  the session answers `401 device_revoked`, on which clients wipe their local account data. A user's first request
+  creates their profile and settings with defaults.
+- **`GET /v1/me`:** the user's profile (`Cache-Control: no-store`).
 
 ## Tests
 
@@ -120,3 +127,7 @@ Never point a local process at a hosted project.
   while fetches fail, 503 for unknown keys until a fetch succeeds, no redirects) against a stand-in endpoint.
   `test/auth-guard.e2e.test.ts` runs the guard on the real `AppModule` against that endpoint: protected and public
   routes, malformed and duplicate headers, `503`, throttling first, no token in the logs.
+- `test/auth.e2e.test.ts` signs in through the **local** Auth server and covers `/v1/me`, profile creation, a
+  foreign issuer, and the unexpired tokens of signed-out, deleted, soft-deleted and banned accounts (reads and
+  writes) and of a revoked device right after a successful request. Skipped without a running stack, like the
+  database tests.
