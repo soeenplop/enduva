@@ -29,10 +29,17 @@ holds user data) at module scope. Loaders fill the cache with `context.queryClie
 
 No locale in the URL (02-architecture.md, Internationalisation). [`src/server.ts`](src/server.ts) resolves it per
 request: the `enduva-locale` cookie (a stand-in for the profile setting until 0.9b), then `Accept-Language`, then
-`en`. Messages live in [`packages/i18n/messages`](../../packages/i18n/messages); every key must exist in `de` and `en`
-(unit test).
+`en`. The language switch sets the cookie and reloads. Messages live in
+[`packages/i18n/messages`](../../packages/i18n/messages); every key must exist in `de` and `en` (unit test).
+
+## Design
+
+Colors, radii and type come from `@enduva/ui/tokens.css`, which follows the system's light/dark setting. Tailwind CSS 4
+maps its theme onto those custom properties ([`src/styles.css`](src/styles.css)), so utilities such as `bg-surface`
+switch with the theme. Tailwind's default palette is removed, so only token colors exist.
 
 ## Negative tests
 
 `negative/*.tsx` must fail `tsc` with exactly the diagnostic they name (`pnpm test:negative` from the repository root):
-a `Link` to a missing route, an undeclared search param, a misspelled message and a misspelled router-context field.
+a wrong component prop, a `Link` to a missing route, an undeclared search param, a misspelled message and a
+misspelled router-context field.

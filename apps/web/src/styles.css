@@ -1,0 +1,55 @@
+/* Colors, scales and light/dark come from the design tokens (@enduva/ui/tokens.css), which follow
+   the system setting. Tailwind's theme maps onto their custom properties, so `bg-surface` or
+   `text-muted` switch with the theme on their own. */
+@import 'tailwindcss';
+@import '@enduva/ui/tokens.css';
+/* Manrope (SIL OFL), self-hosted. */
+@import '@fontsource-variable/manrope/wght.css';
+
+@theme inline {
+  --color-*: initial;
+  --color-background: var(--enduva-color-background);
+  --color-surface: var(--enduva-color-surface);
+  --color-text: var(--enduva-color-text);
+  --color-muted: var(--enduva-color-muted);
+  --color-primary: var(--enduva-color-primary);
+  --color-on-primary: var(--enduva-color-on-primary);
+  --color-accent: var(--enduva-color-accent);
+  --color-on-accent: var(--enduva-color-on-accent);
+  --color-border: var(--enduva-color-border);
+  --color-success: var(--enduva-color-success);
+  --color-warning: var(--enduva-color-warning);
+  --color-danger: var(--enduva-color-danger);
+  --radius-sm: var(--enduva-radii-sm);
+  --radius-md: var(--enduva-radii-md);
+  --radius-lg: var(--enduva-radii-lg);
+  --radius-pill: var(--enduva-radii-pill);
+  --font-body: 'Manrope Variable', var(--enduva-fonts-body);
+  --text-caption: var(--enduva-type-caption);
+  --text-small: var(--enduva-type-small);
+  --text-body: var(--enduva-type-body);
+  --text-lead: var(--enduva-type-lead);
+  --text-heading: var(--enduva-type-heading);
+  --text-display: var(--enduva-type-display);
+}
+
+@layer base {
+  h1,
+  h2,
+  h3 {
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+    /* Long German compounds must wrap at 320 CSS px (WCAG 1.4.10 Reflow), as on the landing page. */
+    hyphens: auto;
+    overflow-wrap: anywhere;
+  }
+
+  .brand-mark-sun {
+    fill: var(--enduva-color-accent);
+  }
+
+  .brand-mark-bowl {
+    fill: var(--enduva-color-text);
+  }
+}
