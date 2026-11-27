@@ -15,6 +15,8 @@ export const problemStatus = {
   rate_limited: 429,
   internal_error: 500,
   database_unavailable: 503,
+  /** The signing keys (JWKS) can't be fetched, so no token can be verified. */
+  auth_unavailable: 503,
 } as const satisfies Record<string, number>;
 
 export type ProblemCode = keyof typeof problemStatus;
@@ -53,11 +55,12 @@ export class ProblemException extends Error {
   }
 }
 
-const codeByStatus = new Map<number, ProblemCode>(
-  Object.entries(problemStatus).map(([code, status]) => [status, code as ProblemCode]),
-);
+/** The first, generic code of each status: `database_unavailable` for 503, not `auth_unavailable`. */
+const codeByStatus = new Map<number, ProblemCode>();
+for (const [code, status] of Object.entries(problemStatus))
+  if (!codeByStatus.has(status)) codeByStatus.set(status, code as ProblemCode);
 
-/** The stable code for a status from Nest or Express: its own code if it has one, otherwise the generic one. */
+/** The stable code for a status from Nest or Express: its generic code if it has one, otherwise `bad_request`/`internal_error`. */
 export function codeForStatus(status: number): ProblemCode {
   return codeByStatus.get(status) ?? (status >= 400 && status < 500 ? 'bad_request' : 'internal_error');
 }

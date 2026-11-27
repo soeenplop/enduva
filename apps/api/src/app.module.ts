@@ -6,6 +6,7 @@ import { Logger, LoggerModule } from 'nestjs-pino';
 import type { DestinationStream } from 'pino';
 import type { HttpLogger } from 'pino-http';
 
+import { AuthModule } from './auth/auth.module.js';
 import type { Env } from './config/env.js';
 import { DatabaseModule } from './db/database.module.js';
 import { HealthModule } from './health/health.module.js';
@@ -28,12 +29,13 @@ export class AppModule {
       imports: [
         LoggerModule.forRoot(loggerParams(http)),
         // One bucket per client IP and endpoint (the default key includes controller and handler). The guard runs after
-        // body parsing and routing, so unmatched routes and rejected bodies are not counted. Per-user limits follow
-        // with auth (0.8b).
+        // body parsing and routing, so unmatched routes and rejected bodies are not counted.
         ThrottlerModule.forRoot({
           throttlers: [{ ttl: seconds(env.THROTTLE_TTL_SECONDS), limit: env.THROTTLE_LIMIT }],
         }),
         DatabaseModule.register(env),
+        // After the throttler, so its guard runs first and unauthenticated floods are limited before verification.
+        AuthModule.register(env),
         HealthModule,
       ],
       providers: [

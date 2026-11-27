@@ -44,6 +44,8 @@ export class ProblemFilter implements ExceptionFilter {
       response.end();
       return;
     }
+    // RFC 6750: a 401 names the scheme the client must authenticate with, and no more.
+    if (body.status === 401) response.setHeader('WWW-Authenticate', 'Bearer');
     response.status(body.status).type(PROBLEM_CONTENT_TYPE).send(JSON.stringify(body));
   }
 

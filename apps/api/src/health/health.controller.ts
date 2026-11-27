@@ -1,7 +1,9 @@
 import { Controller, Get, Header } from '@nestjs/common';
 
+import { Public } from '../auth/auth.guard.js';
 import { HealthService, type Status } from './health.service.js';
 
+@Public()
 @Controller('health')
 export class HealthController {
   // Constructor injection without @Inject: resolved through the design:paramtypes metadata SWC emits.

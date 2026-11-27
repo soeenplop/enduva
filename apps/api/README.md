@@ -69,11 +69,20 @@ Never point a local process at a hosted project.
   that name ([`src/db/errors.ts`](src/db/errors.ts); new tables go into its `schemaTables` list): never the query text, parameters, Drizzle's message or stack, or
   Postgres' message, detail, hint or where. This holds for every database log path (request errors, readiness,
   idle client errors).
+- **Authentication:** a global guard ([`src/auth`](src/auth)) requires `Authorization: Bearer <access token>` on every
+  route not marked `@Public()` (only health is). The token must verify against Supabase's JWKS with exactly
+  `AUTH_JWT_ALGORITHM`, carry the exact `AUTH_ISSUER` as `iss`, `aud` and `role` `authenticated`, a valid `exp` and an
+  `iat` not in the future (10 s clock skew), a UUID `sub` and `session_id`, and not be an anonymous user's. jose caches
+  the JWKS for 10 minutes and refetches it, at most every 30 s, when a token names an unknown key ID (rotation).
+  Every rejection is the same `401 unauthorized` with `WWW-Authenticate: Bearer`; the reason is neither sent nor
+  logged, and neither are tokens or claims. If the JWKS can't be fetched, requests fail closed with `503`
+  `auth_unavailable`. The request keeps only `sub`, `role` and `session_id` as its claims. The throttler runs before
+  the guard, so unauthenticated requests are limited too.
 - **Throttling:** `@nestjs/throttler` as a global guard, in memory per process. Each matched endpoint (controller and
   handler) has its own bucket per client IP, so the limit is not an API-wide or ingress-wide request limit. The
   guard runs after the body parser and routing: requests to unmatched routes and requests whose body is rejected are
-  never counted. Over the limit: `429` `rate_limited` with `Retry-After`. Per-user limits follow with auth (0.8b);
-  an overall request limit belongs to the ingress.
+  never counted. Over the limit: `429` `rate_limited` with `Retry-After`. Per-user limits are not in place yet; an
+  overall request limit belongs to the ingress.
 - **Client IPs:** the throttler keys on Express' `req.ip`, which takes `X-Forwarded-For` only from a peer in
   `TRUST_PROXY`. Every peer listed there can choose the client IP it forwards, so list only the ingress. In Dokploy,
   every deployed service joins the shared `dokploy-network` by default, and so can reach every other one
@@ -84,7 +93,7 @@ Never point a local process at a hosted project.
   (0.12c).
 - **Database:** one pg pool on `DATABASE_URL` ([ADR-0002](../../docs/adr/0002-db-access-and-rls.md)). It connects
   lazily, so the API starts and stays live while the database is down. A request whose `claims` were set by the
-  auth guard (0.8b) runs its handler in **one** `withUserTx` transaction as `enduva_api`, with the claims set
+  auth guard runs its handler in **one** `withUserTx` transaction as `enduva_api`, with the claims set
   transaction-locally, so it works with the transaction pooler. The transaction commits before the response is sent
   and rolls back if the handler throws. Handlers take it with the `@RequestTx()` parameter decorator and pass it to
   services; using it on a route without verified claims fails with a `500`. Requests without claims get no
@@ -99,10 +108,13 @@ Never point a local process at a hosted project.
   unexpected and hostile errors), log redaction and throttling.
 - `test/dist.e2e.test.ts` runs the SWC build with plain `node`: it boots, serves `/v1/health`, and refuses to boot
   with an invalid environment. The worker entrypoint runs and exits.
-- `test/database.e2e.test.ts` runs against the **local** Supabase stack through the transaction pooler: readiness, a
-  request transaction as `enduva_api` under RLS, rollback, and a failed query whose parameter stays out of the logs.
+- `test/database.e2e.test.ts` runs against the **local** Supabase stack through the transaction pooler, with access
+  tokens from real sign-ins through the local Auth server: readiness, a request transaction as `enduva_api` under
+  RLS, rollback, and a failed query whose parameter stays out of the logs.
   Without a running stack its tests are reported as skipped (`SKIPPED, not running` in the suite name), as in CI.
 - `test/token-verifier.test.ts` checks token verification with locally generated keys: wrong `iss`/`aud`/`role`,
   HS256 (also with the public key as secret), `none`, the other asymmetric algorithm, unknown or forged keys,
   tampering, expiry and `iat`/`nbf` around the clock skew, missing claims, anonymous users; and the remote JWKS
-  (caching, rotation, fail closed) against a stand-in endpoint.
+  (caching, rotation, fail closed) against a stand-in endpoint. `test/auth-guard.e2e.test.ts` runs the guard on
+  the real `AppModule` against that endpoint: protected and public routes, malformed headers, `503`, throttling
+  first, no token in the logs.

@@ -3,6 +3,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { Database } from '@enduva/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { Public } from '../src/auth/auth.guard.js';
 import { DATABASE } from '../src/db/database.js';
 import { ProblemException } from '../src/problem/problem.js';
 import { HealthController } from '../src/health/health.controller.js';
@@ -13,6 +14,7 @@ const problemType = /^application\/problem\+json/;
 
 const reqId = (line: Record<string, unknown>): unknown => (line.req as { id?: unknown } | undefined)?.id;
 
+@Public()
 @Controller('boom')
 class BoomController {
   @Get()
