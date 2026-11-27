@@ -9,7 +9,7 @@ legacy decorators and decorator metadata, and type-checked by TypeScript 7 `tsc 
 | Script | What it does |
 | --- | --- |
 | `pnpm build` | SWC: `src` → `dist` (`dist/main.js`, `dist/worker.js`), preset `@enduva/config/swc/nest.json` |
-| `pnpm dev` | Builds once, then runs `swc --watch` and `node --watch dist/main.js`, reading `apps/api/.env` if it exists |
+| `pnpm dev` | Builds the workspace packages it depends on (e.g. `@enduva/db`, whose runtime entry is `dist/`) and itself once, then runs `swc --watch` and `node --watch dist/main.js`, reading `apps/api/.env` if it exists |
 | `pnpm start` | `node dist/main.js` (production entrypoint) |
 | `pnpm start:worker` | `node dist/worker.js` (a stub until the worker lands in 0.12c) |
 | `pnpm typecheck` | `tsc -p tsconfig.json` (TS 7, no emit) |
