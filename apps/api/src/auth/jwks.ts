@@ -25,9 +25,11 @@ export interface RemoteKeysOptions {
  *
  * - A fetched key set is used for 10 minutes. Within that time a token naming an unknown key ID (rotation) refetches
  *   the set, at most once per cooldown (30 s).
- * - **Every** attempt starts the cooldown, a failed one too. A token that needs a fetch inside the cooldown fails
- *   with `AuthUnavailableError` without one (fail closed); fresh keys keep verifying tokens they match.
- * - Concurrent verifications share one in-flight fetch, which times out after 5 s.
+ * - **Every** attempt starts the cooldown, a failed one too. A token that needs a fetch inside it fails without one:
+ *   with `AuthUnavailableError` (503) if the last attempt failed, so an outage answers consistently; as an unknown
+ *   key (401) if the last attempt succeeded. Fresh keys keep verifying tokens they match.
+ * - Concurrent verifications share one in-flight fetch, including misses on a warm cache during rotation; they all
+ *   see its result. A fetch times out after 5 s and never follows a redirect: the keys come from the issuer URL only.
  */
 export function remoteKeys(issuer: string, options: RemoteKeysOptions = {}): JWTVerifyGetKey {
   const url = `${issuer}/.well-known/jwks.json`;
@@ -36,19 +38,23 @@ export function remoteKeys(issuer: string, options: RemoteKeysOptions = {}): JWT
   let fetchedAt = Number.NEGATIVE_INFINITY;
   let attemptedAt = Number.NEGATIVE_INFINITY;
   let inFlight: Promise<JWTVerifyGetKey> | undefined;
+  let lastAttemptFailed = false;
 
   async function fetchKeys(): Promise<JWTVerifyGetKey> {
     try {
       const response = await fetch(url, {
         headers: { accept: 'application/json' },
+        redirect: 'error',
         signal: AbortSignal.timeout(timeoutMs),
       });
       if (response.status !== 200) throw new AuthUnavailableError();
       const loaded = createLocalJWKSet((await response.json()) as JSONWebKeySet);
       keys = loaded;
       fetchedAt = now();
+      lastAttemptFailed = false;
       return loaded;
     } catch {
+      lastAttemptFailed = true;
       throw new AuthUnavailableError();
     }
   }
@@ -70,9 +76,14 @@ export function remoteKeys(issuer: string, options: RemoteKeysOptions = {}): JWT
     try {
       return await current(header, token);
     } catch (error) {
-      // An unknown key ID: the set may have rotated. Refetch once if the cooldown allows it, otherwise it stays a bad
-      // token rather than an outage.
-      if (!(error instanceof errors.JWKSNoMatchingKey) || now() - attemptedAt < cooldownMs) throw error;
+      if (!(error instanceof errors.JWKSNoMatchingKey)) throw error;
+      // An unknown key ID: the set may have rotated. Join a refresh already under way, or start one if the cooldown
+      // allows it. Inside the cooldown the last attempt's outcome decides: an outage stays 503, otherwise a bad token.
+      if (inFlight !== undefined) return (await inFlight)(header, token);
+      if (now() - attemptedAt < cooldownMs) {
+        if (lastAttemptFailed) throw new AuthUnavailableError();
+        throw error;
+      }
       return (await refresh())(header, token);
     }
   };
