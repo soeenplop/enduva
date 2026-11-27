@@ -28,6 +28,9 @@ allowBuilds:
   lefthook: false
   # Its postinstall only checks for the native binding, which comes from the platform package.
   '@swc/core': false
+  # drizzle-kit (via tsx and @esbuild-kit): its postinstall only verifies the native binary,
+  # which comes from the platform package (@esbuild/<platform>).
+  esbuild: false
 
 # Pinned versions younger than pnpm's minimum release age (same as the spike, ADR-0001).
 # Remove an entry once its release is older than the limit.
