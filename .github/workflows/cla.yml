@@ -19,6 +19,11 @@
 # `branches: [main]`: only PRs into main produce `cla`, so a stacked PR can't publish a result for
 # a smaller commit set; a PR retargeted to main is re-checked through `edited`. No `if:` anywhere: a
 # skipped job would count as a passing `cla` check on that head.
+#
+# Branches that predate the gate: merge `main` in. On #114, body edits and close/reopen produced no
+# `cla` result; merging `main` did. GitHub reads this workflow from the PR's merge commit, so a
+# branch that deletes this file gets no `cla` result: the required check stays missing, blocked
+# (fail-closed). Fork runs are additionally held back by the fork approval setting.
 name: cla
 
 on:
