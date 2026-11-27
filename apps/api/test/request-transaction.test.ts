@@ -22,18 +22,19 @@ const activeAccount = { active: true, device_revoked: false, has_profile: true }
  * A stand-in Database: a pool whose one client records the statements Drizzle sends (BEGIN, the identity, the account
  * check, COMMIT or ROLLBACK) and how it was given back to the pool. The account check answers with `status`.
  */
-function fakeDatabase(status: Readonly<Record<string, boolean>> = activeAccount) {
+function fakeDatabase(status: Readonly<Record<string, boolean>> = activeAccount, created = true) {
   const events: string[] = [];
   const label = (text: string) => {
     if (text.startsWith('select set_config')) return 'set identity';
     if (text.startsWith('select app.auth_session_active()')) return 'check account';
+    if (text.startsWith('select exists')) return 'find profile';
     return /^insert into app\.(\w+)/.exec(text)?.[0] ?? text;
   };
   const client = Object.assign(new EventEmitter(), {
     query: (query: { readonly text: string }) => {
       const event = label(query.text);
       events.push(event);
-      const rows = event === 'check account' ? [status] : [];
+      const rows = event === 'check account' ? [status] : event === 'insert into app.profiles' && created ? [{}] : [];
       return Promise.resolve({ rows, rowCount: rows.length, command: '', fields: [] });
     },
     release: (destroy?: boolean) => void events.push(destroy === true ? 'destroy' : 'release'),
@@ -109,6 +110,24 @@ describe('TransactionInterceptor', () => {
       lastValueFrom(new TransactionInterceptor(db).intercept(httpContext({ claims }), next)),
     ).rejects.toMatchObject({ code });
     expect(events).toEqual(['begin', 'set identity', 'check account', 'rollback', 'release']);
+  });
+
+  it('refuses the request if the profile insert finds the account no longer active', async () => {
+    const { db, events } = fakeDatabase({ ...activeAccount, has_profile: false }, false);
+    const next: CallHandler = { handle: () => (events.push('handler'), of('body')) };
+
+    await expect(
+      lastValueFrom(new TransactionInterceptor(db).intercept(httpContext({ claims }), next)),
+    ).rejects.toMatchObject({ code: 'unauthorized' });
+    expect(events).toEqual([
+      'begin',
+      'set identity',
+      'check account',
+      'insert into app.profiles',
+      'find profile',
+      'rollback',
+      'release',
+    ]);
   });
 
   it("creates the profile and settings on the user's first request", async () => {
