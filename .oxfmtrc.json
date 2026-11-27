@@ -4,5 +4,14 @@
   "singleQuote": true,
   "embeddedLanguageFormatting": "off",
   "sortPackageJson": false,
-  "ignorePatterns": ["pnpm-lock.yaml", "assets/**", "**/dist/**", "**/*.md", "**/*.yaml", "**/*.yml", "spikes/**"]
+  "ignorePatterns": [
+    "pnpm-lock.yaml",
+    "assets/**",
+    "**/dist/**",
+    "**/*.md",
+    "**/*.yaml",
+    "**/*.yml",
+    "spikes/**",
+    "tools/fixtures/**"
+  ]
 }

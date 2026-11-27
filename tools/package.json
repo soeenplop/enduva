@@ -1,0 +1,15 @@
+{
+  "name": "@enduva/tools",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Repository audits (TypeScript 7 only, T1). Run them from the root: `pnpm audit:ts`.",
+  "type": "module",
+  "scripts": {
+    "lint": "oxlint -c node_modules/@enduva/config/oxlint.json --deny-warnings *.mjs",
+    "test": "node audit-lockfile.mjs --self-test && node audit-bundled-typescript.mjs --self-test"
+  },
+  "devDependencies": {
+    "@enduva/config": "workspace:*",
+    "oxlint": "catalog:"
+  }
+}

@@ -3,6 +3,7 @@
 packages:
   - apps/*
   - packages/*
+  - tools
 
 # Exact versions shared by the workspace packages (`catalog:` in their package.json).
 catalog:

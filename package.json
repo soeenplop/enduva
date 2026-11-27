@@ -15,7 +15,10 @@
     "lint": "turbo run lint",
     "test": "turbo run test",
     "format": "oxfmt .",
-    "format:check": "oxfmt --check ."
+    "format:check": "oxfmt --check .",
+    "audit:lockfile": "node tools/audit-lockfile.mjs --self-test && node tools/audit-lockfile.mjs pnpm-lock.yaml",
+    "audit:bundled-ts": "node tools/audit-bundled-typescript.mjs --self-test && node tools/audit-bundled-typescript.mjs --allowlist tools/ts-bundled-allowlist.json node_modules",
+    "audit:ts": "pnpm audit:lockfile && pnpm audit:bundled-ts && pnpm why typescript -r"
   },
   "devDependencies": {
     "@commitlint/cli": "21.2.4",

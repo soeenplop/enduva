@@ -15,6 +15,9 @@
     "test": {
       "outputs": []
     },
+    "@enduva/tools#test": {
+      "cache": false
+    },
     "//#format:check": {
       "cache": false
     }
