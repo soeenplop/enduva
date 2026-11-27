@@ -12,6 +12,7 @@
     "**/*.yaml",
     "**/*.yml",
     "spikes/**",
+    "supabase/migrations/meta/**",
     "tools/fixtures/**"
   ]
 }
