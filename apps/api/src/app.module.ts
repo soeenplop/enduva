@@ -7,6 +7,7 @@ import type { DestinationStream } from 'pino';
 import type { HttpLogger } from 'pino-http';
 
 import type { Env } from './config/env.js';
+import { DatabaseModule } from './db/database.module.js';
 import { HealthModule } from './health/health.module.js';
 import { createHttpLogger, loggerParams } from './logging/logging.js';
 import { ProblemFilter } from './problem/problem.filter.js';
@@ -30,6 +31,7 @@ export class AppModule {
         ThrottlerModule.forRoot({
           throttlers: [{ ttl: seconds(env.THROTTLE_TTL_SECONDS), limit: env.THROTTLE_LIMIT }],
         }),
+        DatabaseModule.register(env),
         HealthModule,
       ],
       providers: [

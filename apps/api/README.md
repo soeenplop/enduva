@@ -27,17 +27,23 @@ process with exit code 1 and a list of the offending variable names (never their
 
 | Variable | Default | Notes |
 | --- | --- | --- |
+| `DATABASE_URL` | required | Transaction-pooler URL as `enduva_api_login` (`<role>.<tenant>` through the pooler). Any other user is refused |
+| `DATABASE_POOL_MAX` | `10` | Pool size per process (06-deployment → Connection budget) |
 | `NODE_ENV` | `development` | `development`, `test` or `production` |
 | `HOST` / `PORT` | `0.0.0.0` / `3000` | |
 | `LOG_LEVEL` | `info` | pino level, or `silent` |
 | `TRUST_PROXY` | `0` | Number of trusted reverse proxies (Traefik: `1`), so throttling sees the client IP |
 | `THROTTLE_LIMIT` / `THROTTLE_TTL_SECONDS` | `100` / `60` | Requests per client IP and window |
 
+Locally, start the database with `pnpm --filter @enduva/db db:start` and `db:reset` ([`packages/db`](../db/README.md)).
+Never point a local process at a hosted project.
+
 ## Behaviour
 
 - **Routes** live under `/v1` through Nest's URI versioning (`defaultVersion: '1'`), not a global prefix, so
   Nest's 404 handling also covers paths outside `/v1`.
-- **Health:** `GET /v1/health` is liveness and touches nothing else.
+- **Health:** `GET /v1/health` is liveness and never touches the database. `GET /v1/health/ready` pings the
+  database (`select 1`, 2 s timeout) and answers `503` `database_unavailable` otherwise.
 - **Errors:** every error is RFC 9457 problem details (`application/problem+json`) with `type: about:blank`, the
   status phrase as `title`, `status` and a stable `code` from [`src/problem/problem.ts`](src/problem/problem.ts).
   Throw `ProblemException(code)` for expected errors. Messages of Nest and Express exceptions are not passed on.
@@ -48,12 +54,16 @@ process with exit code 1 and a list of the offending variable names (never their
   no headers, tokens, bodies, client IPs or health data. Nest's own logs go through the same logger (nestjs-pino).
 - **Throttling:** `@nestjs/throttler`, per client IP on every route, in memory per process. Over the limit: `429`
   `rate_limited` with `Retry-After`. Per-user limits follow with auth (0.8b).
+- **Database:** one pg pool on `DATABASE_URL` ([ADR-0002](../../docs/adr/0002-db-access-and-rls.md)). It connects
+  lazily, so the API starts and stays live while the database is down.
 
 ## Tests
 
-- Unit tests for the env schema and the problem mapping.
-- `test/health.e2e.test.ts` boots the real `AppModule` under SWC: DI through decorator metadata, liveness, request
-  IDs, problem bodies (404 inside and outside `/v1`, malformed body, unexpected error), log redaction and
-  throttling.
+- Unit tests for the env schema, and the problem mapping.
+- `test/health.e2e.test.ts` boots the real `AppModule` under SWC: DI through decorator metadata, liveness,
+  readiness without a database, request IDs, problem bodies (404 inside and outside `/v1`, malformed body,
+  unexpected error), log redaction and throttling.
 - `test/dist.e2e.test.ts` runs the SWC build with plain `node`: it boots, serves `/v1/health`, and refuses to boot
   with an invalid environment. The worker entrypoint runs and exits.
+- `test/database.e2e.test.ts` runs against the **local** Supabase stack through the transaction pooler: readiness.
+  Without a running stack its tests are reported as skipped (`SKIPPED, not running` in the suite name), as in CI.

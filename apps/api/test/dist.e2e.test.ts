@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 
 import { afterAll, describe, expect, it } from 'vitest';
 
+import { UNREACHABLE_DATABASE_URL } from './support.js';
+
 // The production build: plain `node` on SWC's output, as in the container (`node dist/main.js`). Turbo builds the
 // package before its tests (turbo.json).
 const dist = (file: string) => fileURLToPath(new URL(`../dist/${file}`, import.meta.url));
@@ -39,6 +41,7 @@ describe('dist/main.js (SWC build, plain node)', () => {
     });
     expect(r.status).toBe(1);
     expect(r.stderr).toContain('Invalid environment:');
+    expect(r.stderr).toContain('DATABASE_URL: is required');
     expect(r.stderr).toContain('PORT:');
     expect(r.stderr).toContain('NODE_ENV:');
     expect(r.stderr).not.toContain('s3cret');
@@ -47,7 +50,13 @@ describe('dist/main.js (SWC build, plain node)', () => {
   it('boots and serves /v1/health', async () => {
     const port = await freePort();
     api = spawn(process.execPath, [dist('main.js')], {
-      env: { ...cleanEnv, HOST: '127.0.0.1', PORT: String(port), LOG_LEVEL: 'warn' },
+      env: {
+        ...cleanEnv,
+        HOST: '127.0.0.1',
+        PORT: String(port),
+        LOG_LEVEL: 'warn',
+        DATABASE_URL: UNREACHABLE_DATABASE_URL,
+      },
       stdio: 'ignore',
     });
     let res: Response | undefined;
