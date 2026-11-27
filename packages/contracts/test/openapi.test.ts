@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { HealthStatus, isProblemCode, Me, openApiDocument, Problem, PROBLEM_CONTENT_TYPE } from '../src/index.js';
+import {
+  HealthStatus,
+  isProblemCode,
+  Me,
+  MeUpdate,
+  openApiDocument,
+  Problem,
+  PROBLEM_CONTENT_TYPE,
+} from '../src/index.js';
 
 type Json = Record<string, any>;
 const doc = openApiDocument as Json;
@@ -92,6 +100,20 @@ describe('OpenAPI document', () => {
     expect(JSON.stringify(doc)).not.toContain('"anyOf"');
     expect(schemas.Me.properties.sex).toEqual({ type: ['string', 'null'], enum: ['female', 'male', null] });
     expect(schemas.MeUpdate.properties.heightCm).toEqual({ type: ['number', 'null'], minimum: 50, maximum: 300 });
+    // The name is trimmed before its length is checked, so the spec has no raw length limits, only a non-blank rule.
+    const name = schemas.MeUpdate.properties.displayName as Json;
+    expect(name).toMatchObject({ type: ['string', 'null'], pattern: '\\S' });
+    expect(name).not.toHaveProperty('minLength');
+    expect(name).not.toHaveProperty('maxLength');
+    const nonBlank = new RegExp(name.pattern as string);
+    for (const [input, valid] of [
+      [`${' '.repeat(100)}A`, true],
+      ['\u00a0\u2003\n\t', false],
+      ['   ', false],
+    ] as const) {
+      expect(MeUpdate.safeParse({ displayName: input }).success, JSON.stringify(input)).toBe(valid);
+      expect(nonBlank.test(input), JSON.stringify(input)).toBe(valid);
+    }
     // The Zod regex is case-insensitive, which a JSON Schema pattern can't express: no pattern rather than a wrong one.
     expect(schemas.MeUpdate.properties.timeZone).not.toHaveProperty('pattern');
   });

@@ -517,8 +517,8 @@
               "string",
               "null"
             ],
-            "minLength": 1,
-            "maxLength": 100
+            "description": "Trimmed first (leading and trailing white space); then 1 to 100 characters, no control characters",
+            "pattern": "\\S"
           },
           "birthDate": {
             "format": "date",
