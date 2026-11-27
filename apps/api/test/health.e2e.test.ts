@@ -78,6 +78,16 @@ describe('GET /v1/health (e2e, SWC)', () => {
     expect(res.headers['x-powered-by']).toBeUndefined();
   });
 
+  it('answers a matching If-None-Match with a bodyless 304 that keeps the validator, as the OpenAPI spec says', async () => {
+    const etag = (await http(app).get('/v1/health')).headers.etag as string;
+    expect(etag).toMatch(/^W\/"/);
+    const res = await http(app).get('/v1/health').set('if-none-match', etag);
+    expect(res.status).toBe(304);
+    expect(res.text).toBe('');
+    expect(res.headers.etag).toBe(etag);
+    expect(res.headers['cache-control']).toBe('no-store');
+  });
+
   it('is not ready while the database is unreachable', async () => {
     const res = await http(app).get('/v1/health/ready');
     expect(res.status).toBe(503);

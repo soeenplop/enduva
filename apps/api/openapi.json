@@ -16,9 +16,40 @@
         "operationId": "getHealth",
         "summary": "Liveness",
         "security": [],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "description": "ETag of a cached copy",
+              "type": "string"
+            },
+            "description": "ETag of a cached copy"
+          }
+        ],
         "responses": {
           "200": {
             "description": "The process serves requests",
+            "headers": {
+              "ETag": {
+                "required": true,
+                "description": "Weak entity tag of the body. Opaque",
+                "schema": {
+                  "type": "string",
+                  "description": "Weak entity tag of the body. Opaque",
+                  "example": "W/\"f-VaSQ4oDUiZblZNAEkkN+sX+q3Sg\""
+                }
+              },
+              "Cache-Control": {
+                "required": true,
+                "description": "Always `no-store`",
+                "schema": {
+                  "type": "string",
+                  "description": "Always `no-store`",
+                  "example": "no-store"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -27,8 +58,51 @@
               }
             }
           },
+          "304": {
+            "description": "The cached copy named by `If-None-Match` is current. No body",
+            "headers": {
+              "ETag": {
+                "required": true,
+                "description": "Weak entity tag of the body. Opaque",
+                "schema": {
+                  "type": "string",
+                  "description": "Weak entity tag of the body. Opaque",
+                  "example": "W/\"f-VaSQ4oDUiZblZNAEkkN+sX+q3Sg\""
+                }
+              },
+              "Cache-Control": {
+                "required": true,
+                "description": "Always `no-store`",
+                "schema": {
+                  "type": "string",
+                  "description": "Always `no-store`",
+                  "example": "no-store"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "description": "Seconds to wait",
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds to wait"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "default": {
-            "description": "Any error",
+            "description": "Any other error",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -45,13 +119,87 @@
         "operationId": "getReadiness",
         "summary": "Readiness: the database is reachable",
         "security": [],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "description": "ETag of a cached copy",
+              "type": "string"
+            },
+            "description": "ETag of a cached copy"
+          }
+        ],
         "responses": {
           "200": {
             "description": "Ready",
+            "headers": {
+              "ETag": {
+                "required": true,
+                "description": "Weak entity tag of the body. Opaque",
+                "schema": {
+                  "type": "string",
+                  "description": "Weak entity tag of the body. Opaque",
+                  "example": "W/\"f-VaSQ4oDUiZblZNAEkkN+sX+q3Sg\""
+                }
+              },
+              "Cache-Control": {
+                "required": true,
+                "description": "Always `no-store`",
+                "schema": {
+                  "type": "string",
+                  "description": "Always `no-store`",
+                  "example": "no-store"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HealthStatus"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "The cached copy named by `If-None-Match` is current. No body",
+            "headers": {
+              "ETag": {
+                "required": true,
+                "description": "Weak entity tag of the body. Opaque",
+                "schema": {
+                  "type": "string",
+                  "description": "Weak entity tag of the body. Opaque",
+                  "example": "W/\"f-VaSQ4oDUiZblZNAEkkN+sX+q3Sg\""
+                }
+              },
+              "Cache-Control": {
+                "required": true,
+                "description": "Always `no-store`",
+                "schema": {
+                  "type": "string",
+                  "description": "Always `no-store`",
+                  "example": "no-store"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "description": "Seconds to wait",
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds to wait"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -106,6 +254,15 @@
                   "description": "Strong entity tag of the returned version. Opaque: send it back unchanged, never parse it.",
                   "example": "\"3-Yk1oQ2J4dE9wN3F1cjVzVg\""
                 }
+              },
+              "Cache-Control": {
+                "required": true,
+                "description": "Always `no-store`",
+                "schema": {
+                  "type": "string",
+                  "description": "Always `no-store`",
+                  "example": "no-store"
+                }
               }
             },
             "content": {
@@ -117,7 +274,27 @@
             }
           },
           "304": {
-            "description": "The cached copy named by `If-None-Match` is current"
+            "description": "The cached copy named by `If-None-Match` is current. No body",
+            "headers": {
+              "ETag": {
+                "required": true,
+                "description": "Strong entity tag of the returned version. Opaque: send it back unchanged, never parse it.",
+                "schema": {
+                  "type": "string",
+                  "description": "Strong entity tag of the returned version. Opaque: send it back unchanged, never parse it.",
+                  "example": "\"3-Yk1oQ2J4dE9wN3F1cjVzVg\""
+                }
+              },
+              "Cache-Control": {
+                "required": true,
+                "description": "Always `no-store`",
+                "schema": {
+                  "type": "string",
+                  "description": "Always `no-store`",
+                  "example": "no-store"
+                }
+              }
+            }
           },
           "401": {
             "description": "`unauthorized`: missing, invalid or revoked token or session. `device_revoked`: wipe local data",
@@ -217,6 +394,15 @@
                   "type": "string",
                   "description": "Strong entity tag of the returned version. Opaque: send it back unchanged, never parse it.",
                   "example": "\"3-Yk1oQ2J4dE9wN3F1cjVzVg\""
+                }
+              },
+              "Cache-Control": {
+                "required": true,
+                "description": "Always `no-store`",
+                "schema": {
+                  "type": "string",
+                  "description": "Always `no-store`",
+                  "example": "no-store"
                 }
               }
             },

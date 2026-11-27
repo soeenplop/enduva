@@ -61,12 +61,26 @@ describe('OpenAPI document', () => {
   it('returns the ETag on /v1/me and needs it in If-Match to update', () => {
     for (const name of ['GET /v1/me', 'PATCH /v1/me'])
       expect(operation(name).responses['200'].headers.ETag).toMatchObject({ required: true });
-    expect(operation('GET /v1/me').responses).toHaveProperty('304');
+    // The bodyless 304 keeps the validator and the caching header.
+    const notModified = operation('GET /v1/me').responses['304'];
+    expect(notModified).not.toHaveProperty('content');
+    expect(Object.keys(notModified.headers as Json)).toEqual(['ETag', 'Cache-Control']);
     const patch = operation('PATCH /v1/me');
     expect(patch.parameters).toContainEqual(
       expect.objectContaining({ in: 'header', name: 'If-Match', required: true }),
     );
     expect(Object.keys(patch.responses as Json)).toEqual(expect.arrayContaining(['400', '412', '428']));
+  });
+
+  it('documents conditional GETs and throttling on the public health routes too', () => {
+    for (const name of ['GET /v1/health', 'GET /v1/health/ready']) {
+      const op = operation(name);
+      expect(op.parameters).toContainEqual(expect.objectContaining({ in: 'header', name: 'If-None-Match' }));
+      expect(op.responses['200'].headers).toHaveProperty('ETag');
+      expect(op.responses['304']).not.toHaveProperty('content');
+      expect(op.responses['304'].headers).toHaveProperty('ETag');
+      expect(op.responses['429'].headers).toHaveProperty('Retry-After');
+    }
   });
 
   it('keeps response objects open and request bodies closed', () => {
