@@ -24,5 +24,9 @@ describe('messages', () => {
   it('compiles translated messages for de and en', () => {
     expect(m.hero_title({}, { locale: 'de' })).toBe('Ausdauer, Kraft und Ernährung in einer App');
     expect(m.hero_title({}, { locale: 'en' })).toBe('Endurance, strength and nutrition in one app');
+    expect(m.placeholder_notice({ task: 'G1.1' }, { locale: 'de' })).toBe(
+      'Platzhalter, der endgültige Text folgt in G1.1.',
+    );
+    expect(m.placeholder_notice({ task: 'G1.1' }, { locale: 'en' })).toBe('Placeholder, final text follows in G1.1.');
   });
 });

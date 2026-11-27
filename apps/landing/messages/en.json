@@ -6,5 +6,17 @@
   "language_switch_label": "Choose language",
   "meta_home_title": "Enduva: endurance, strength and nutrition in one app",
   "meta_home_description": "Enduva brings endurance training, strength training and nutrition together in one app for iPhone, Apple Watch and the web. Currently in development.",
-  "hero_title": "Endurance, strength and nutrition in one app"
+  "picker_title": "Enduva: choose your language",
+  "picker_heading": "Choose your language",
+  "hero_title": "Endurance, strength and nutrition in one app",
+  "footer_legal_label": "Legal",
+  "page_imprint": "Imprint",
+  "page_privacy": "Privacy policy",
+  "page_terms": "Terms of use",
+  "page_disclaimer": "AI and medical disclaimer",
+  "page_data_sources": "Data sources",
+  "placeholder_notice": "Placeholder, final text follows in {task}.",
+  "placeholder_body": "This page is a placeholder. Enduva is in development, and sign-up is not open yet.",
+  "placeholder_description": "{page} of Enduva. Placeholder, final text follows in {task}.",
+  "back_home": "Back to the home page"
 }

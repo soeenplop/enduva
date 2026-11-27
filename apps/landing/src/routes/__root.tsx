@@ -1,5 +1,6 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
+import { SiteFooter } from '../components/SiteFooter';
 import { SiteHeader } from '../components/SiteHeader';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
@@ -35,6 +36,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
         <main id="main" tabIndex={-1}>
           {children}
         </main>
+        <SiteFooter />
         <Scripts />
       </body>
     </html>

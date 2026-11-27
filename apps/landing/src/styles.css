@@ -86,3 +86,37 @@ a {
 .language-switch a[aria-current='page'] {
   font-weight: 700;
 }
+
+.narrow {
+  max-width: 44rem;
+}
+
+.page {
+  padding-top: var(--enduva-space-12);
+  padding-bottom: var(--enduva-space-12);
+}
+
+.notice {
+  padding: var(--enduva-space-4);
+  border-left: 4px solid var(--enduva-color-warning);
+  background: var(--enduva-color-surface);
+  font-weight: 600;
+}
+
+.site-footer {
+  padding: var(--enduva-space-8) 0;
+  border-top: 1px solid var(--enduva-color-border);
+}
+
+.footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--enduva-space-2) var(--enduva-space-6);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.footer-links a {
+  color: var(--enduva-color-text);
+}
