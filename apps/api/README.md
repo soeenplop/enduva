@@ -63,7 +63,7 @@ Never point a local process at a hosted project.
   `/v1/items/:id`; `(unmatched)` when the request ended before routing), status and duration: no raw paths or query
   strings, headers, tokens, bodies, client IPs or health data. Nest's own logs go through the same logger
   (nestjs-pino).
-  Database errors add only their SQLSTATE (strict pattern) and their table and constraint, only if the schema declares
+  Database errors add only their SQLSTATE (in full if known, otherwise only its class) and their table and constraint, only if the schema declares
   that name ([`src/db/errors.ts`](src/db/errors.ts); new tables go into its `schemaTables` list): never the query text, parameters, Drizzle's message or stack, or
   Postgres' message, detail, hint or where. This holds for every database log path (request errors, readiness,
   idle client errors).

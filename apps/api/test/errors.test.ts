@@ -34,6 +34,16 @@ describe('databaseErrorFields', () => {
     );
   });
 
+  it('logs a SQLSTATE in full only if it is known, otherwise only its class', () => {
+    expect(databaseErrorFields(serverError({ code: '23ABC', table: 'x', constraint: 'x' }))).toEqual({
+      sqlStateClass: '23',
+    });
+    // Shaped like a SQLSTATE, but neither the code nor its class exists: could be data.
+    for (const code of ['SECRT', 'JD7X2', '2350', '235055', '']) {
+      expect(databaseErrorFields(serverError({ code, table: 'x', constraint: 'x' }))).toEqual({});
+    }
+  });
+
   it('keeps table and constraint names only if the schema declares them', () => {
     // Identifier-shaped, so a shape check would pass them, but they could be personal data.
     expect(databaseErrorFields(serverError({ table: 'jane_doe', constraint: 'jane_doe_diabetes' }))).toEqual({
