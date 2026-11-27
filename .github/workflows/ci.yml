@@ -114,7 +114,7 @@ jobs:
 
   # The Xcode project (0.11a): lint, then build both apps and run their unit tests and EnduvaKit's on the iOS and
   # watchOS simulators. The apps target iOS/watchOS 27, so this needs the Xcode 27 image, with the Xcode version
-  # pinned (the image's default moves).
+  # pinned (the image's default moves). Required (lead decision on PR #133), so it runs on every PR.
   apple:
     name: apple
     runs-on: xcode-27
