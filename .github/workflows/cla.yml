@@ -28,9 +28,9 @@ on:
   # behind. The script only ever evaluates open PRs to main.
   pull_request_target:
     types: [opened, synchronize, reopened, closed, edited]
-  # Signing comments.
+  # New signing comments only: edited comments never count as assent.
   issue_comment:
-    types: [created, edited]
+    types: [created]
   # A CLA policy change re-evaluates every open head against the new policy.
   push:
     branches: [main]

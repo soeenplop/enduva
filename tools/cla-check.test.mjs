@@ -861,6 +861,40 @@ describe('commit attribution through GitHub (web-flow)', () => {
   });
 });
 
+describe('edited comments are no assent', () => {
+  test('an edited signing comment does not count, a new one does', async () => {
+    const gh = fakeGitHub({
+      policy: V1_FILES,
+      opener: ALICE,
+      commits: [commit(0, ALICE)],
+      comments: [comment(ALICE, phrase(V1), { edited: true })],
+    });
+    assert.equal((await settleHead(gh)).state, 'failure', 'e.g. a moderator edited the phrase into it');
+    assert.match(prompt(gh), /Edited comments do not count/);
+    gh.pr().comments.push(sign(ALICE, V1));
+    assert.equal((await settleHead(gh)).state, 'success');
+  });
+
+  test('a stored record stops counting once its comment is edited or deleted', async () => {
+    for (const change of ['edit', 'delete']) {
+      const evidence = sign(ALICE, V1);
+      const gh = fakeGitHub({
+        policy: V1_FILES,
+        opener: ALICE,
+        commits: [commit(0, ALICE)],
+        records: [record(ALICE, V1, evidence)],
+      });
+      if (change === 'edit') gh.state.others.push({ ...evidence, updated_at: '2026-11-28T00:00:00Z' });
+      assert.equal((await settleHead(gh)).state, 'failure', change);
+    }
+  });
+
+  test('the workflow does not run for edited comments', () => {
+    const workflow = readFileSync(new URL('../.github/workflows/cla.yml', import.meta.url), 'utf8');
+    assert.match(workflow, /issue_comment:\n\s+types: \[created\]\n/);
+  });
+});
+
 describe('comment-triggered runs and the status quota', () => {
   test('the workflow starts no runner for comments that are no signing phrase or are from bots', () => {
     const workflow = readFileSync(new URL('../.github/workflows/cla.yml', import.meta.url), 'utf8');

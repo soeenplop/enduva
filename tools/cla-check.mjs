@@ -33,7 +33,7 @@
 //   or email alone is never trusted.
 // - Every commit's attribution is checked first. Only then are exemptions (account IDs, per commit)
 //   and signatures applied. The PR opener must be exempt or have signed too.
-// - A signature is a PR comment by that same account whose whole body is the phrase for
+// - A signature is an unedited PR comment by that same account whose whole body is the phrase for
 //   this version and hash. Records on the `cla-signatures` branch point to such a comment and count
 //   only if that comment still is one, so the store can't create assent on its own.
 // - Anything incomplete or inconsistent (pagination, counts, moved revisions, unreadable store or
@@ -94,6 +94,9 @@ export const phrase = (cla) => `${SIGNING_PREFIX} version ${cla.version}, sha256
 /** The whole comment must be the phrase: no substring match, only line endings and outer whitespace normalised. */
 export const isSignature = (body, cla) =>
   typeof body === 'string' && body.replace(/\r\n?/g, '\n').trim() === phrase(cla);
+
+/** A comment nobody (the author or a moderator) has edited since it was posted. */
+const unedited = (comment) => typeof comment?.created_at === 'string' && comment.updated_at === comment.created_at;
 
 /** Validates .github/cla.json against the CLA.md bytes and the approver keys of the same commit. */
 export function parseConfig(config, claBytes, approvers = '') {
@@ -389,11 +392,11 @@ export async function readStore(api, repo) {
   return { records, sha: file.sha };
 }
 
-/** A stored record counts only while the comment it points to is still a signing comment by that account. */
+/** A stored record counts only while the comment it points to is still an unedited signing comment by that account. */
 async function hasEvidence(api, repo, record, cla) {
   const response = await api.request('GET', `/repos/${repo}/issues/comments/${record.comment_id}`, undefined, [404]);
   const comment = response.status === 404 ? null : response.data;
-  return comment?.user?.id === record.github_id && isSignature(comment.body, cla);
+  return comment?.user?.id === record.github_id && unedited(comment) && isSignature(comment.body, cla);
 }
 
 /** Appends records (optimistic concurrency on the file's blob SHA); never rewrites existing ones. */
@@ -490,13 +493,13 @@ export async function evaluate({ api, repo, pr, policy, sleep }) {
     return verdict('success', 'Only exempt accounts (CLA not yet in force)');
   }
 
-  // 4. Signatures: a signing comment on this PR, else a stored record whose comment still is one.
+  // 4. Signatures: an unedited signing comment on this PR, else a stored record whose comment still is one.
   const comments = await retry(() => readComments(api, repo, number), sleep);
   const store = await readStore(api, repo);
   const signed = new Set();
   const records = [];
   for (const account of required) {
-    const comment = comments.find((c) => c.user?.id === account.id && isSignature(c.body, policy));
+    const comment = comments.find((c) => c.user?.id === account.id && unedited(c) && isSignature(c.body, policy));
     if (comment) {
       signed.add(account.id);
       records.push({
@@ -566,7 +569,7 @@ export function promptBody(result, policy, blockers = []) {
       phrase(policy),
       '```',
       '',
-      'The check runs again when a signing comment is posted.',
+      'The check runs again when a signing comment is posted. Edited comments do not count: post a new one instead.',
     );
   }
   return `${lines.join('\n')}\n`;
