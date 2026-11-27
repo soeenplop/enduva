@@ -20,6 +20,7 @@ The `cla` status check ([`.github/workflows/cla.yml`](.github/workflows/cla.yml)
 - To sign, post the exact comment that the check's prompt on your pull request shows, from your own account. It names the CLA version and the SHA-256 of its text, and the prompt links to that exact text at a fixed commit. The check records your signature (account ID, login, pull request, version, hash, time) on the `cla-signatures` branch and reuses it for later pull requests.
 - A new CLA version has a new phrase and hash: everyone signs again before further contributions can be merged.
 - If the check can't read your pull request completely (for example more than 250 commits), it fails rather than guess.
+- GitHub attaches the `cla` status to your pull request's **head commit**, so every open pull request to `main` with the same head commit shares it. It turns green only when **all** of them pass. If another account opens a pull request with the same head commit and hasn't signed, yours stays blocked until that account signs or that pull request is closed (also while the CLA is a draft, when only the maintainer can close it).
 
 ### Activating the CLA (maintainer only)
 
@@ -28,7 +29,7 @@ Approving the final CLA text is an owner-only decision. Activation is one pull r
 1. replaces `CLA.md` with the approved text, without the draft notice;
 2. sets `.github/cla.json` to `"status": "final"`, `"version"` to the new version (e.g. `"1.0"`) and `"sha256"` to the output of `node tools/cla-check.mjs --hash`.
 
-The check refuses a final config whose hash doesn't match `CLA.md` or whose text is still marked as a draft. Any later change to `CLA.md` needs a new version and hash. Merging re-evaluates every open pull request.
+The check refuses a final config whose hash doesn't match `CLA.md` or whose text is still marked as a draft. Any later change to `CLA.md` needs a new version and hash. Merging re-evaluates every open pull request; a check that was still running with the previous CLA doesn't post its result (or replaces it with a failure if it already did).
 
 ## Before you start
 
