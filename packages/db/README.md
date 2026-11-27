@@ -21,7 +21,7 @@ pnpm --filter @enduva/db db:stop
 | Supavisor (transaction mode) | `127.0.0.1:54329`, user name `<role>.pooler-dev` |
 | API login | `enduva_api_login` / `enduva-local-api` (set by `seed.sql`) |
 | Worker login | `enduva_worker_login` / `enduva-local-worker` (set by `seed.sql`) |
-| Synthetic users | `athlete.a@example.com` / `enduva-local-a`, `athlete.b@example.com` / `enduva-local-b` |
+| Synthetic users | `athlete.a@example.com` / `enduva-local-a`, `athlete.b@example.com` / `enduva-local-b` (full accounts); `athlete.c@…` / `enduva-local-c` (no profile yet), `athlete.d@…` / `enduva-local-d` (profile only) |
 
 These passwords are local development values, like the CLI's own `postgres`/`postgres`. Hosted environments set
 their own out of band (task 0.12b); migrations never contain a password.

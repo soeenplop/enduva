@@ -1,101 +1,26 @@
 // Cross-tenant suite (ADR-0002): acting as one user, every attempt to read or write another user's rows in every
 // account table returns nothing or is denied, for the API and the worker role, through the transaction pooler and
-// directly. Each attempt runs in its own rolled-back transaction. Positive controls show that the same statements
-// work on the actor's own rows, so "nothing" isn't the result of a broken statement.
+// directly. Each attempt runs in its own rolled-back transaction. Controls run the same statements on rows the actor
+// owns: they work where the role's grants allow them (so "nothing" isn't the result of a broken statement) and are
+// denied where they don't (support.ts → TABLE_CASES).
 import { sql, type SQL } from 'drizzle-orm';
-import type { PgTable } from 'drizzle-orm/pg-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { consents, devices, entitlements, profiles, userSettings } from '../../src/schema/index.js';
-import { withUserTx, withWorkerTx, type Database, type Transaction } from '../../src/index.js';
+import type { Database, Transaction } from '../../src/index.js';
 import {
-  apiUrl,
+  ACTORS,
   attempt,
-  claimsFor,
   isBlocked,
   openDatabase,
   rolledBack,
   ROUTES,
+  TABLE_CASES,
+  tableSql,
   USER_A,
   USER_B,
-  workerUrl,
   type Outcome,
-  type Route,
 } from './support.js';
-
-interface TableCase {
-  readonly table: PgTable;
-  /** One row per user (keyed by user_id), so a second own row can't be inserted. */
-  readonly oneToOne: boolean;
-  /** A no-op SET the API role may run, or undefined if it may not update the table at all. */
-  readonly apiSet: string | undefined;
-  readonly workerSet: string;
-  /** Column list and VALUES of a new row for `userId` that violates no constraint. */
-  readonly newRow: (userId: string) => SQL;
-}
-
-const TABLES: Readonly<Record<string, TableCase>> = {
-  profiles: {
-    table: profiles,
-    oneToOne: true,
-    apiSet: 'display_name = display_name',
-    workerSet: 'display_name = display_name',
-    newRow: (userId) => sql`(user_id) values (${userId})`,
-  },
-  user_settings: {
-    table: userSettings,
-    oneToOne: true,
-    apiSet: 'theme = theme',
-    workerSet: 'theme = theme',
-    newRow: (userId) => sql`(user_id) values (${userId})`,
-  },
-  entitlements: {
-    table: entitlements,
-    oneToOne: false,
-    apiSet: undefined,
-    workerSet: 'tier = tier',
-    newRow: (userId) => sql`(user_id, tier, source) values (${userId}, 'premium', 'manual')`,
-  },
-  consents: {
-    table: consents,
-    oneToOne: false,
-    apiSet: 'revoked_at = revoked_at',
-    workerSet: 'revoked_at = revoked_at',
-    newRow: (userId) => sql`(user_id, purpose, consent_version) values (${userId}, 'ai_coach', 'test')`,
-  },
-  devices: {
-    table: devices,
-    oneToOne: false,
-    apiSet: 'name = name',
-    workerSet: 'name = name',
-    newRow: (userId) => sql`(user_id, kind, auth_session_id) values (${userId}, 'web', gen_random_uuid())`,
-  },
-};
-
-interface Actor {
-  readonly role: 'enduva_api' | 'enduva_worker';
-  readonly url: (route: Route) => string;
-  readonly open: (db: Database, userId: string) => (fn: (tx: Transaction) => Promise<never>) => Promise<unknown>;
-  readonly set: (table: TableCase) => string | undefined;
-  readonly mayDelete: boolean;
-}
-
-const ACTORS: readonly Actor[] = [
-  {
-    role: 'enduva_api',
-    url: apiUrl,
-    open: (db, userId) => (fn) => withUserTx(db, claimsFor(userId), fn),
-    set: (table) => table.apiSet,
-    mayDelete: false,
-  },
-  {
-    role: 'enduva_worker',
-    url: workerUrl,
-    open: (db, userId) => (fn) => withWorkerTx(db, userId, fn),
-    set: (table) => table.workerSet,
-    mayDelete: true,
-  },
-];
 
 const PAIRS = [
   { actor: USER_A, victim: USER_B, label: 'A → B' },
@@ -121,11 +46,12 @@ describe.each(ACTORS)('$role', (actor) => {
     });
 
     describe.each(PAIRS)('$label', ({ actor: me, victim }) => {
-      const inTx = <T>(fn: (tx: Transaction) => Promise<T>) => rolledBack(actor.open(db, me), fn);
+      const inTxAs = <T>(userId: string, fn: (tx: Transaction) => Promise<T>) => rolledBack(actor.open(db, userId), fn);
+      const inTx = <T>(fn: (tx: Transaction) => Promise<T>) => inTxAs(me, fn);
 
-      describe.each(Object.entries(TABLES))('%s', (_name, table) => {
-        const t = table.table;
-        const set = actor.set(table);
+      describe.each(TABLE_CASES)('$name', (table) => {
+        const t = tableSql(table.name);
+        const access = table.access[actor.role];
 
         it('reads only its own rows', async () => {
           const owners = await inTx(async (tx) => {
@@ -139,13 +65,14 @@ describe.each(ACTORS)('$role', (actor) => {
         });
 
         it("can't update the other user's rows", async () => {
-          const statement = sql`update ${t} set ${sql.raw(set ?? 'user_id = user_id')} where user_id = `;
+          // A role that may update nothing here tries a column it can't write: the grant must deny it.
+          const statement = sql`update ${t} set ${sql.raw(access.set ?? 'user_id = user_id')} where user_id = `;
           const outcome = await attempt(() => inTx((tx) => rowCount(tx, sql`${statement}${victim}`)));
           expect(isBlocked(outcome)).toBe(true);
 
-          if (set !== undefined) {
-            expectTouched(await attempt(() => inTx((tx) => rowCount(tx, sql`${statement}${me}`))));
-          }
+          const own = await attempt(() => inTx((tx) => rowCount(tx, sql`${statement}${me}`)));
+          if (access.set !== undefined) expectTouched(own);
+          else expect(own).toEqual({ denied: true });
         });
 
         it("can't delete the other user's rows", async () => {
@@ -154,18 +81,20 @@ describe.each(ACTORS)('$role', (actor) => {
           expect(isBlocked(outcome)).toBe(true);
 
           const own = await attempt(() => inTx((tx) => rowCount(tx, sql`${statement}${me}`)));
-          if (actor.mayDelete) expectTouched(own);
+          if (access.delete) expectTouched(own);
           else expect(own).toEqual({ denied: true });
         });
 
-        it("can't insert rows for the other user", async () => {
-          const insert = (userId: string) => sql`insert into ${t} ${table.newRow(userId)}`;
-          expect(await attempt(() => inTx((tx) => rowCount(tx, insert(victim))))).toEqual({ denied: true });
+        // The row is valid for its owner, so only the identity check can stop it: for one-to-one tables the owner
+        // is a fixture user without that row yet (C has no profile, D no settings), otherwise the other user.
+        it("can't insert rows for another user", async () => {
+          const owner = table.freshUser ?? victim;
+          const insert = sql`insert into ${t} ${table.newRow(owner)}`;
+          expect(await attempt(() => inTx((tx) => rowCount(tx, insert)))).toEqual({ denied: true });
 
-          const mayInsert = actor.role === 'enduva_worker' ? !table.oneToOne : !table.oneToOne && t !== entitlements;
-          if (mayInsert) {
-            expectTouched(await attempt(() => inTx((tx) => rowCount(tx, insert(me)))));
-          }
+          const asOwner = await attempt(() => inTxAs(owner, (tx) => rowCount(tx, insert)));
+          if (access.insert) expectTouched(asOwner);
+          else expect(asOwner).toEqual({ denied: true });
         });
 
         it("can't hand its own rows to the other user", async () => {
