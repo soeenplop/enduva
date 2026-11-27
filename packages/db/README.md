@@ -1,7 +1,8 @@
 # @enduva/db
 
 Drizzle schema, the database client and the transaction-local identity helpers. Roles, grants and row-level
-security are hand-written SQL in [`supabase/migrations`](../../supabase/migrations).
+security are hand-written SQL in [`supabase/migrations`](../../supabase/migrations); the reasoning is in
+[ADR-0002](../../docs/adr/0002-db-access-and-rls.md).
 
 ## Local database
 
@@ -20,7 +21,7 @@ pnpm --filter @enduva/db db:stop
 | Supavisor (transaction mode) | `127.0.0.1:54329`, user name `<role>.pooler-dev` |
 | API login | `enduva_api_login` / `enduva-local-api` (set by `seed.sql`) |
 | Worker login | `enduva_worker_login` / `enduva-local-worker` (set by `seed.sql`) |
-| Synthetic users | `athlete.a@example.com` / `enduva-local-a`, `athlete.b@example.com` / `enduva-local-b` |
+| Synthetic users | `athlete.a@example.com` / `enduva-local-a`, `athlete.b@example.com` / `enduva-local-b` (full accounts); `athlete.c@…` / `enduva-local-c` (no profile yet), `athlete.d@…` / `enduva-local-d` (profile only) |
 
 These passwords are local development values, like the CLI's own `postgres`/`postgres`. Hosted environments set
 their own out of band (task 0.12b); migrations never contain a password.
@@ -28,6 +29,19 @@ their own out of band (task 0.12b); migrations never contain a password.
 Auth signs access tokens with the local ES256 key, and its JWKS is at
 `http://127.0.0.1:54321/auth/v1/.well-known/jwks.json`, so the API's JWKS verification works locally as it does on
 hosted projects.
+
+## Tests
+
+```sh
+pnpm --filter @enduva/db test               # unit tests, no database
+pnpm --filter @enduva/db test:integration   # against the running local stack, after db:reset
+```
+
+The integration suite reads URLs and keys from `supabase status`. It covers the cross-tenant matrix (every
+account table, API and worker role, through Supavisor and directly), the account rules (one-way revocation,
+operator-only `role`), escape attempts, the role and grant catalog,
+and the Data API and JWKS path ([ADR-0002 → Tests](../../docs/adr/0002-db-access-and-rls.md#tests)). Every write is
+rolled back, so the seed stays intact.
 
 ## Migration flow
 
@@ -41,7 +55,7 @@ All migrations live in [`supabase/migrations`](../../supabase/migrations) and ar
 2. **Roles, grants, RLS policies, functions, triggers:** hand-written SQL. Create the file with
    `pnpm --filter @enduva/db db:custom --name=<what>` so it takes its place in drizzle-kit's journal and the next
    generated migration sorts after it, then write the SQL.
-3. Run `pnpm --filter @enduva/db db:reset`.
+3. Run `pnpm --filter @enduva/db db:reset` and the integration suite.
 4. Commit the SQL **and** `supabase/migrations/meta`. Never edit a migration that has been merged; add a new one.
 
 Every new table in `app` needs, in a hand-written migration: `owner to enduva_owner`, `enable` + `force row level
@@ -68,4 +82,4 @@ const mine = await withUserTx(db, claims, (tx) => tx.select().from(profiles));
   `request.jwt.claims` and the role **transaction-locally**, and run `fn` in it. Row-level security limits every
   query in `fn` to that user. Outside them, the login roles can't read any table.
 - Don't call `.prepare('name')` on Drizzle queries: named prepared statements are what a transaction pooler can't
-  be relied on to keep.
+  be relied on to keep (ADR-0002).
