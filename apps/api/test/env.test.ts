@@ -13,6 +13,7 @@ describe('loadEnv', () => {
       LOG_LEVEL: 'info',
       DATABASE_URL: url,
       DATABASE_POOL_MAX: 10,
+      DATABASE_CONNECT_TIMEOUT_MS: 5000,
       TRUST_PROXY: [],
       THROTTLE_LIMIT: 100,
       THROTTLE_TTL_SECONDS: 60,
@@ -64,6 +65,7 @@ describe('loadEnv', () => {
     ['THROTTLE_LIMIT', '-1'],
     ['THROTTLE_TTL_SECONDS', '0'],
     ['DATABASE_POOL_MAX', '0'],
+    ['DATABASE_CONNECT_TIMEOUT_MS', '0'],
     ['DATABASE_URL', 'mysql://enduva_api_login@localhost/db'],
     ['DATABASE_URL', 'not a url'],
   ])('refuses %s=%s', (name, value) => {

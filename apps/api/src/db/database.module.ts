@@ -44,6 +44,7 @@ export class DatabaseModule {
             const db = createDatabase({
               connectionString: env.DATABASE_URL,
               max: env.DATABASE_POOL_MAX,
+              connectionTimeoutMillis: env.DATABASE_CONNECT_TIMEOUT_MS,
               applicationName: 'enduva-api',
             });
             // An idle client that loses its connection (database or pooler restart) emits `error` on the pool.

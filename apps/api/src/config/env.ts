@@ -82,6 +82,8 @@ export const envSchema = z.object({
   DATABASE_URL: databaseUrl,
   /** Pool size per process (06-deployment → Connection budget). */
   DATABASE_POOL_MAX: positiveInt.max(100).default(10),
+  /** How long a checkout may wait for a connection, queued or new, before it fails (node-postgres). */
+  DATABASE_CONNECT_TIMEOUT_MS: positiveInt.max(60_000).default(5_000),
   /** Trusted ingress proxies (addresses/CIDRs). Empty: `X-Forwarded-For` is ignored and the socket peer is the client. */
   TRUST_PROXY: trustedProxies.default([]),
   /** Requests per client IP, endpoint and window. */
