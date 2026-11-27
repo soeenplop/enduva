@@ -59,6 +59,7 @@ function isProxyEntry(entry: string): boolean {
 /**
  * Proxies whose `X-Forwarded-For` is trusted: comma-separated addresses or CIDRs of the ingress (Traefik in Dokploy).
  * Express only honours the header when the connecting peer is in this list, so a direct client can't spoof its IP.
+ * Every listed peer can, so list only Traefik, never a shared network such as Dokploy's `dokploy-network`.
  */
 const trustedProxies = z
   .string()

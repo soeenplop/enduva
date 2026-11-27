@@ -33,7 +33,7 @@ process with exit code 1 and a list of the offending variable names (never their
 | `NODE_ENV` | `development` | `development`, `test` or `production` |
 | `HOST` / `PORT` | `0.0.0.0` / `3000` | |
 | `LOG_LEVEL` | `info` | pino level, or `silent` |
-| `TRUST_PROXY` | empty | Comma-separated IPs/CIDRs of the ingress (Traefik in Dokploy, e.g. the CIDR of its Docker network). `X-Forwarded-For` is honoured only from these peers; empty trusts none. No hop counts |
+| `TRUST_PROXY` | empty | Comma-separated IPs/CIDRs of the ingress peers whose `X-Forwarded-For` is honoured: Traefik's own address(es), or a subnet that only trusted proxies can join. **Not** the subnet of Dokploy's `dokploy-network`, `uniquelocal` or `linklocal` (see Client IPs). Empty trusts none. No hop counts |
 | `THROTTLE_LIMIT` / `THROTTLE_TTL_SECONDS` | `100` / `60` | Requests per client IP **and endpoint** per window (see Throttling) |
 
 Locally, start the database with `pnpm --filter @enduva/db db:start` and `db:reset` ([`packages/db`](../db/README.md)).
@@ -72,6 +72,14 @@ Never point a local process at a hosted project.
   guard runs after the body parser and routing: requests to unmatched routes and requests whose body is rejected are
   never counted. Over the limit: `429` `rate_limited` with `Retry-After`. Per-user limits follow with auth (0.8b);
   an overall request limit belongs to the ingress.
+- **Client IPs:** the throttler keys on Express' `req.ip`, which takes `X-Forwarded-For` only from a peer in
+  `TRUST_PROXY`. Every peer listed there can choose the client IP it forwards, so list only the ingress. In Dokploy,
+  every deployed service joins the shared `dokploy-network` by default, and so can reach every other one
+  ([Dokploy networks](https://docs.dokploy.com/docs/core/networks)): trusting that network's subnet, or a named range
+  such as `uniquelocal` that covers Docker's subnets, lets any service on the server spoof client IPs. Trust
+  Traefik's address(es) on the network it shares with the API, pinned so a recreated container keeps them, or a
+  dedicated subnet that only Traefik is attached to besides the API. The production value is set with the deploy
+  (0.12c).
 - **Database:** one pg pool on `DATABASE_URL` ([ADR-0002](../../docs/adr/0002-db-access-and-rls.md)). It connects
   lazily, so the API starts and stays live while the database is down. A request whose `claims` were set by the
   auth guard (0.8b) runs its handler in **one** `withUserTx` transaction as `enduva_api`, with the claims set
