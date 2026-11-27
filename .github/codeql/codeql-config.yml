@@ -1,0 +1,18 @@
+# CodeQL configuration (task 0.5), used by .github/workflows/codeql.yml.
+# Only real product code and our own tooling are analysed. Excluded:
+# - spikes/**: throwaway spikes, removed after their decision (ADR-0001).
+# - tools/fixtures/**: synthetic vendored bundles (fake TS 6 compilers) for the audit self-tests.
+# - **/negative/**: deliberately broken fixtures that tsc/oxlint must reject (test:negative).
+# - build output and dependencies: never checked in, listed in case a future job builds first.
+name: enduva-codeql
+
+paths-ignore:
+  - spikes/**
+  - tools/fixtures/**
+  - '**/negative/**'
+  - '**/node_modules/**'
+  - '**/dist/**'
+  - '**/build/**'
+  - '**/.svelte-kit/**'
+  - '**/.turbo/**'
+  - '**/coverage/**'
