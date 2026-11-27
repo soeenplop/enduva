@@ -61,6 +61,8 @@ describe('TokenVerifier', () => {
     ['a missing issuer', { iss: undefined }],
     ['another audience', { aud: 'anon' }],
     ['an audience list without authenticated', { aud: ['anon', 'service'] }],
+    ['an audience list with authenticated and more', { aud: ['authenticated', 'other-service'] }],
+    ['authenticated as a one-element list', { aud: ['authenticated'] }],
     ['the anon role', { role: 'anon' }],
     ['the service_role role', { role: 'service_role' }],
     ['a sub that is not a UUID', { sub: 'athlete-a' }],
@@ -177,5 +179,74 @@ describe('remote JWKS', () => {
       keys: remoteKeys('http://127.0.0.1:1/auth/v1'),
     });
     await expect(nobody.verify(await token(first))).rejects.toThrow(AuthUnavailableError);
+  });
+
+  /** A verifier on a clock the test moves (milliseconds). */
+  function clocked(options: { readonly cacheMaxAgeMs?: number } = {}) {
+    const clock = { ms: 1_000_000 };
+    const remote = new TokenVerifier({
+      issuer: server.issuer,
+      algorithm: 'ES256',
+      keys: remoteKeys(server.issuer, { cooldownMs: 30_000, now: () => clock.ms, ...options }),
+    });
+    return { clock, remote };
+  }
+
+  it('limits failed fetches to one per cooldown during an outage, also for concurrent requests', async () => {
+    const { clock, remote } = clocked();
+    const signed = await token(first);
+    server.state.status = 500;
+    server.state.fetches = 0;
+    try {
+      const attempts = Array.from({ length: 5 }, () => remote.verify(signed));
+      for (const attempt of attempts) await expect(attempt).rejects.toThrow(AuthUnavailableError);
+      for (let i = 0; i < 5; i += 1) await expect(remote.verify(signed)).rejects.toThrow(AuthUnavailableError);
+      expect(server.state.fetches).toBe(1);
+      clock.ms += 29_999;
+      await expect(remote.verify(signed)).rejects.toThrow(AuthUnavailableError);
+      expect(server.state.fetches).toBe(1);
+      clock.ms += 1;
+      await expect(remote.verify(signed)).rejects.toThrow(AuthUnavailableError);
+      expect(server.state.fetches).toBe(2);
+    } finally {
+      server.state.status = 200;
+    }
+    // Recovered: the next attempt after the cooldown fetches and verifies again.
+    clock.ms += 30_000;
+    await expect(remote.verify(signed)).resolves.toMatchObject({ sub: TEST_USER });
+    expect(server.state.fetches).toBe(3);
+  });
+
+  it('keeps verifying with fresh keys while refetches for unknown keys fail, one fetch per cooldown', async () => {
+    const { clock, remote } = clocked();
+    const known = await token(first);
+    const unknown = await token(await signingKey('ES256'));
+    server.state.fetches = 0;
+    await remote.verify(known);
+    server.state.status = 500;
+    try {
+      clock.ms += 30_000;
+      await expect(remote.verify(unknown)).rejects.toThrow(AuthUnavailableError);
+      for (let i = 0; i < 5; i += 1) await expect(remote.verify(unknown)).rejects.toThrow(InvalidTokenError);
+      await expect(remote.verify(known)).resolves.toMatchObject({ sub: TEST_USER });
+      expect(server.state.fetches).toBe(2);
+    } finally {
+      server.state.status = 200;
+    }
+  });
+
+  it('refetches a stale key set, and fails closed if that fetch fails', async () => {
+    const { clock, remote } = clocked({ cacheMaxAgeMs: 600_000 });
+    const signed = await token(first);
+    server.state.fetches = 0;
+    await remote.verify(signed);
+    clock.ms += 600_000;
+    server.state.status = 500;
+    try {
+      await expect(remote.verify(signed)).rejects.toThrow(AuthUnavailableError);
+    } finally {
+      server.state.status = 200;
+    }
+    expect(server.state.fetches).toBe(2);
   });
 });

@@ -105,4 +105,5 @@ Never point a local process at a hosted project.
 - `test/token-verifier.test.ts` checks token verification with locally generated keys: wrong `iss`/`aud`/`role`,
   HS256 (also with the public key as secret), `none`, the other asymmetric algorithm, unknown or forged keys,
   tampering, expiry and `iat`/`nbf` around the clock skew, missing claims, anonymous users; and the remote JWKS
-  (caching, rotation, fail closed) against a stand-in endpoint.
+  (caching, rotation, fail closed, at most one fetch per 30 s cooldown also while fetches fail) against a stand-in
+  endpoint.
