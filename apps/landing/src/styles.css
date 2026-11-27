@@ -1,0 +1,88 @@
+/* Concept B "Daybreak": colors, scales and light/dark come from @enduva/ui/tokens.css. */
+@import '@enduva/ui/tokens.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--enduva-color-background);
+  color: var(--enduva-color-text);
+  font-family: var(--enduva-fonts-body);
+  line-height: 1.6;
+}
+
+main {
+  flex: 1;
+}
+
+main:focus {
+  outline: none;
+}
+
+a {
+  color: var(--enduva-color-accent);
+}
+
+:focus-visible {
+  outline: 3px solid var(--enduva-color-accent);
+  outline-offset: 3px;
+}
+
+.container {
+  width: 100%;
+  max-width: 68rem;
+  margin: 0 auto;
+  padding: 0 var(--enduva-space-6);
+}
+
+.skip-link {
+  position: absolute;
+  left: var(--enduva-space-4);
+  top: -100%;
+  padding: var(--enduva-space-2) var(--enduva-space-4);
+  background: var(--enduva-color-surface);
+  color: var(--enduva-color-text);
+}
+
+.skip-link:focus {
+  top: var(--enduva-space-4);
+}
+
+.site-header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--enduva-space-4);
+  min-height: 4.5rem;
+}
+
+.brand {
+  color: var(--enduva-color-text);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.language-switch ul {
+  display: flex;
+  gap: var(--enduva-space-4);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.language-switch a {
+  display: inline-block;
+  padding: var(--enduva-space-2);
+  color: var(--enduva-color-text);
+}
+
+.language-switch a[aria-current='page'] {
+  font-weight: 700;
+}

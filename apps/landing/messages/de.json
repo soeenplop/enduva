@@ -1,0 +1,10 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "language_name": "Deutsch",
+  "skip_to_content": "Zum Inhalt springen",
+  "home_link_label": "Enduva Startseite",
+  "language_switch_label": "Sprache wählen",
+  "meta_home_title": "Enduva: Ausdauer, Kraft und Ernährung in einer App",
+  "meta_home_description": "Enduva vereint Ausdauertraining, Krafttraining und Ernährung in einer App für iPhone, Apple Watch und das Web. Derzeit in Entwicklung.",
+  "hero_title": "Ausdauer, Kraft und Ernährung in einer App"
+}

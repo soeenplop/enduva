@@ -1,0 +1,10 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "language_name": "English",
+  "skip_to_content": "Skip to content",
+  "home_link_label": "Enduva home",
+  "language_switch_label": "Choose language",
+  "meta_home_title": "Enduva: endurance, strength and nutrition in one app",
+  "meta_home_description": "Enduva brings endurance training, strength training and nutrition together in one app for iPhone, Apple Watch and the web. Currently in development.",
+  "hero_title": "Endurance, strength and nutrition in one app"
+}
