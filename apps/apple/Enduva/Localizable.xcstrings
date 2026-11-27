@@ -1,0 +1,40 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "shell.status" : {
+      "comment" : "Shown below the name until the app has its first features.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In Entwicklung"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In development"
+          }
+        }
+      }
+    },
+    "shell.tagline" : {
+      "comment" : "What Enduva is, under the app name on the start screen.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ausdauer, Kraft und Ernährung in einer App"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Endurance, strength and nutrition in one app"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

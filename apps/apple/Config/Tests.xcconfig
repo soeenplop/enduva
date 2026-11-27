@@ -1,0 +1,5 @@
+// Unit tests run inside their app (TEST_HOST), so they see its bundle, resources and String Catalog.
+GENERATE_INFOPLIST_FILE = YES
+SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor
+SWIFT_APPROACHABLE_CONCURRENCY = YES
+BUNDLE_LOADER = $(TEST_HOST)

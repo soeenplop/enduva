@@ -1,0 +1,8 @@
+#include "Tests.xcconfig"
+
+PRODUCT_NAME = EnduvaWatchTests
+PRODUCT_BUNDLE_IDENTIFIER = $(ENDUVA_BUNDLE_ID).watchkitapp.tests
+SDKROOT = watchos
+SUPPORTED_PLATFORMS = watchos watchsimulator
+TARGETED_DEVICE_FAMILY = 4
+TEST_HOST = $(BUILT_PRODUCTS_DIR)/EnduvaWatch.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/EnduvaWatch
