@@ -31,9 +31,10 @@ jobs:
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: printf '%s\n' "$PR_TITLE" | pnpm exec commitlint --verbose
-      # Merge commits (`Merge branch 'main' into …`) are ignored by commitlint's defaults.
-      - name: Every commit of the PR
+      # commitlint's default ignores are off (commitlint.config.mjs). Merge commits (`git merge main`
+      # once review has started) are skipped by their parents, not by their message.
+      - name: Every non-merge commit of the PR
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: pnpm exec commitlint --from "$BASE_SHA" --to "$HEAD_SHA" --verbose
+        run: tools/commitlint-range.sh "$BASE_SHA" "$HEAD_SHA"

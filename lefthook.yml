@@ -2,4 +2,6 @@
 commit-msg:
   commands:
     commitlint:
-      run: pnpm exec commitlint --edit {1}
+      # A commit that concludes a merge (MERGE_HEAD exists) has two parents and is skipped, as in CI
+      # (tools/commitlint-range.sh). Fix-up commits are allowed here only; see commitlint.config.mjs.
+      run: git rev-parse -q --verify MERGE_HEAD >/dev/null || COMMITLINT_ALLOW_AUTOSQUASH=1 pnpm exec commitlint --edit {1}
