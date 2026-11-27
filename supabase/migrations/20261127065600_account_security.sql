@@ -11,8 +11,13 @@ revoke all on schema app from public, anon, authenticated, service_role;
 grant usage, create on schema app to enduva_owner;
 grant usage on schema app to enduva_api, enduva_worker;
 
--- Functions created later by the migration role aren't executable by everyone.
-alter default privileges for role postgres in schema app revoke execute on functions from public;
+-- Functions in `app` are created as enduva_owner. PostgreSQL grants EXECUTE on every new function to PUBLIC by
+-- default, and a schema-scoped ALTER DEFAULT PRIVILEGES can't take away a global default, so the default is changed
+-- for enduva_owner globally. enduva_owner creates nothing outside `app`. Each function still revokes PUBLIC
+-- explicitly, in case it was created by another role.
+alter default privileges for role enduva_owner revoke execute on functions from public;
+
+set role enduva_owner;
 
 -- Identity --------------------------------------------------------------------------------------------------------
 
@@ -25,7 +30,6 @@ create function app.current_user_id() returns uuid
   set search_path = ''
   as $$ select nullif(nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub', '')::uuid $$;
 
-alter function app.current_user_id() owner to enduva_owner;
 revoke all on function app.current_user_id() from public;
 grant execute on function app.current_user_id() to enduva_api, enduva_worker;
 
@@ -51,10 +55,10 @@ begin
 end
 $$;
 
-alter function app.set_updated_at() owner to enduva_owner;
-alter function app.bump_version() owner to enduva_owner;
 revoke all on function app.set_updated_at() from public;
 revoke all on function app.bump_version() from public;
+
+reset role;
 
 create trigger set_updated_at before update on app.profiles for each row execute function app.set_updated_at();
 create trigger bump_version before update on app.profiles for each row execute function app.bump_version();
@@ -106,7 +110,7 @@ create policy api_inserts_users_only on app.profiles as restrictive for insert t
 -- Grants ----------------------------------------------------------------------------------------------------------
 
 revoke all on all tables in schema app from public, anon, authenticated, service_role;
-revoke all on all functions in schema app from anon, authenticated, service_role;
+revoke all on all functions in schema app from public, anon, authenticated, service_role;
 
 -- Request path: reads its own account, edits user-editable columns, never deletes (account deletion and
 -- entitlement changes are jobs). `user_id`, `role`, `version` and timestamps aren't user-editable.
