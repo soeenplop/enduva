@@ -9,8 +9,9 @@
     "dev": "vite dev",
     "build": "node scripts/build.mjs",
     "typecheck": "tsc -p tsconfig.json",
-    "lint": "oxlint -c node_modules/@enduva/config/oxlint.json --type-aware --deny-warnings --ignore-pattern 'src/paraglide/**' --ignore-pattern src/routeTree.gen.ts src test scripts *.mjs",
-    "test": "vitest run"
+    "lint": "oxlint -c node_modules/@enduva/config/oxlint.json --type-aware --deny-warnings --ignore-pattern 'src/paraglide/**' --ignore-pattern src/routeTree.gen.ts src test e2e scripts *.mjs",
+    "test": "vitest run",
+    "test:e2e": "vitest run --config vitest.e2e.config.mjs"
   },
   "dependencies": {
     "@enduva/api-client": "workspace:*",
@@ -36,6 +37,7 @@
     "@vitejs/plugin-react": "6.3.0",
     "oxlint": "catalog:",
     "oxlint-tsgolint": "catalog:",
+    "playwright-core": "1.65.1",
     "tailwindcss": "4.3.5",
     "typescript": "catalog:",
     "vite": "catalog:",

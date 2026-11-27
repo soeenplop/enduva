@@ -16,6 +16,7 @@ Run them through Turbo from the repository root (`pnpm turbo build typecheck lin
 | `pnpm build` | [`scripts/build.mjs`](scripts/build.mjs): `vite build` with prerendering, the route-tree and Paraglide identity check, then the picker at `/`, `sitemap.xml`, `robots.txt`, the manifest and the brand files from `assets/brand/final/web`, then [`scripts/check-static.mjs`](scripts/check-static.mjs) on `dist/client` |
 | `pnpm dev` | Vite dev server. The brand files, `/` and the sitemap only exist in the build |
 | `pnpm test` | Vitest |
+| `pnpm test:e2e` | [`e2e/reflow.test.ts`](e2e/reflow.test.ts): no horizontal overflow at 320 CSS px (WCAG 1.4.10) on `/` and every prerendered page, light and dark, with and without JS, in Chromium via `playwright-core` (setup: [`apps/web/README.md`](../web/README.md#e2e)). Serves `dist/client` like a static file server |
 
 `dist/client` is the whole site. Serve it with any static file server that maps `/de/` to `/de/index.html`.
 

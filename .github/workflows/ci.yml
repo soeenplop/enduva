@@ -79,6 +79,23 @@ jobs:
       - name: Negative tests (tsc and oxlint must fail on the broken fixtures)
         run: pnpm test:negative
 
+  # Browser tests (0.9a): web smoke test and the landing's 320 px reflow check (#113), on the production builds.
+  # playwright-core only, driven from Vitest (apps/web/README.md, E2E). Not yet a required check.
+  e2e:
+    name: e2e
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      # The browser build is the one the pinned playwright-core expects.
+      - name: Install Chromium and its system dependencies
+        run: pnpm --filter @enduva/web exec playwright-core install --with-deps --only-shell chromium
+      - name: E2E (turbo, after the builds)
+        run: pnpm test:e2e
+
   # Required (lead decision on PR #126): the generated Swift client compiles from the committed
   # apps/api/openapi.json, and its middlewares and body decoding pass their tests. No pnpm needed: the build job's
   # drift check keeps the spec in sync with the contracts. It runs on every PR (no path filter), as a required
