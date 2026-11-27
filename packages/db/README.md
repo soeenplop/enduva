@@ -46,9 +46,10 @@ All migrations live in [`supabase/migrations`](../../supabase/migrations) and ar
 
 Every new table in `app` needs, in a hand-written migration: `owner to enduva_owner`, `enable` + `force row level
 security`, an `own_rows` policy on `user_id = (select app.current_user_id())` for `enduva_api, enduva_worker`, and
-explicit grants. Nothing in `app` is ever granted to `anon`, `authenticated` or `service_role`. Create functions
-between `set role enduva_owner;` and `reset role;`, so they get enduva_owner's default privileges (no EXECUTE for
-PUBLIC), and still `revoke all … from public` on each.
+explicit, column-level grants. INSERT grants list only the columns a caller supplies, so `id`, `version` and
+timestamps always start at their defaults. Nothing in `app` is ever granted to `anon`, `authenticated` or
+`service_role`. Create functions between `set role enduva_owner;` and `reset role;`, so they get enduva_owner's
+default privileges (no EXECUTE for PUBLIC), and still `revoke all … from public` on each.
 
 `pnpm --filter @enduva/db db:generate` printing "No schema changes" means the schema and the migrations agree.
 

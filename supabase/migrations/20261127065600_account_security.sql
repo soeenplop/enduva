@@ -102,26 +102,39 @@ create policy own_rows on app.devices for all to enduva_api, enduva_worker
   using (user_id = (select app.current_user_id()))
   with check (user_id = (select app.current_user_id()));
 
--- The API creates a user's profile on their first request (02-architecture → Authentication), always as `user`.
--- Admins are made by an operator, never through the request path.
-create policy api_inserts_users_only on app.profiles as restrictive for insert to enduva_api
-  with check (role = 'user');
-
 -- Grants ----------------------------------------------------------------------------------------------------------
+--
+-- Least privilege, column by column. Server-maintained columns (`id`, `version`, `created_at`, `updated_at`,
+-- `granted_at`, `revoked_at` on insert) are never in an INSERT grant, so they always start at their defaults.
+-- `role` is in no grant at all: profiles start as `user`, and only an operator makes an admin (02-architecture →
+-- Authentication). Nothing but the account-deletion cascade from `profiles` deletes consent or device history.
 
 revoke all on all tables in schema app from public, anon, authenticated, service_role;
 revoke all on all functions in schema app from public, anon, authenticated, service_role;
 
--- Request path: reads its own account, edits user-editable columns, never deletes (account deletion and
--- entitlement changes are jobs). `user_id`, `role`, `version` and timestamps aren't user-editable.
+-- Request path: reads its own account, creates its profile, settings, consents and devices, and edits the
+-- user-editable columns. It never deletes (account deletion is a job) and never writes entitlements.
 grant select on app.profiles, app.user_settings, app.entitlements, app.consents, app.devices to enduva_api;
-grant insert on app.profiles, app.user_settings, app.consents, app.devices to enduva_api;
-grant update (display_name, avatar_path, birth_date, sex, height_cm, locale, time_zone, onboarding_completed_at)
+grant insert (user_id, display_name, avatar_path, birth_date, sex, height_cm, locale, time_zone,
+    onboarding_completed_at),
+  update (display_name, avatar_path, birth_date, sex, height_cm, locale, time_zone, onboarding_completed_at)
   on app.profiles to enduva_api;
-grant update (theme, week_start, notification_prefs, health_sync) on app.user_settings to enduva_api;
-grant update (revoked_at) on app.consents to enduva_api;
-grant update (name, last_seen_at, revoked_at) on app.devices to enduva_api;
+grant insert (user_id, theme, week_start, notification_prefs, health_sync),
+  update (theme, week_start, notification_prefs, health_sync)
+  on app.user_settings to enduva_api;
+grant insert (user_id, purpose, consent_version), update (revoked_at) on app.consents to enduva_api;
+grant insert (user_id, kind, name, auth_session_id, last_seen_at), update (name, last_seen_at, revoked_at)
+  on app.devices to enduva_api;
 
--- Jobs: full DML, still limited to the job's user by RLS.
-grant select, insert, update, delete on app.profiles, app.user_settings, app.entitlements, app.consents, app.devices
-  to enduva_worker;
+-- Jobs: delete accounts (the cascade takes every account table with it), maintain entitlements (store
+-- notifications), revoke consents and devices, and edit what the request path may edit. Still limited to the
+-- job's user by RLS.
+grant select on app.profiles, app.user_settings, app.entitlements, app.consents, app.devices to enduva_worker;
+grant update (display_name, avatar_path, birth_date, sex, height_cm, locale, time_zone, onboarding_completed_at),
+  delete
+  on app.profiles to enduva_worker;
+grant update (theme, week_start, notification_prefs, health_sync) on app.user_settings to enduva_worker;
+grant insert (user_id, tier, source, external_id, valid_from, valid_until), update (tier, valid_from, valid_until)
+  on app.entitlements to enduva_worker;
+grant update (revoked_at) on app.consents to enduva_worker;
+grant update (last_seen_at, revoked_at) on app.devices to enduva_worker;
