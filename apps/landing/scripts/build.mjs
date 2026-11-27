@@ -35,6 +35,25 @@ function snapshot() {
   return hashes;
 }
 
+/**
+ * Turbo restores `generate` outputs into whatever checkout hits its cache, so no generated file may
+ * name this one.
+ */
+function assertCheckoutIndependent() {
+  const checkout = join(app, '..', '..');
+  const leaks = generated
+    .flatMap(files)
+    .filter((file) => readFileSync(file, 'utf8').includes(checkout))
+    .map((file) => relative(app, file));
+  if (leaks.length > 0) {
+    console.error(
+      `Generated files embed the checkout path ${checkout}, so a Turbo cache hit from another checkout would not match:\n  ${leaks.join('\n  ')}`,
+    );
+    process.exit(1);
+  }
+}
+
+assertCheckoutIndependent();
 const before = snapshot();
 const vite = spawnSync(join(app, 'node_modules', '.bin', 'vite'), ['build'], { cwd: app, stdio: 'inherit' });
 if (vite.status !== 0) process.exit(vite.status ?? 1);
@@ -47,6 +66,7 @@ if (drift.length > 0) {
   );
   process.exit(1);
 }
+assertCheckoutIndependent();
 console.log(`ok   route tree and Paraglide output identical after vite build (${after.size} files)`);
 
 writeFileSync(join(outDir, 'index.html'), languagePicker());
