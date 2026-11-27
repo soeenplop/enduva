@@ -49,6 +49,8 @@ let meBody = """
     #expect(transport.request?.path == "/v1/me")
     let ok = try response.ok
     #expect(ok.headers.ETag == "\"2-x\"")
+    // `Cache-Control` is documented but optional: the stub doesn't send it, and the response still decodes.
+    #expect(ok.headers.Cache_hyphen_Control == nil)
     let me = try ok.body.json
     #expect(me.timeZone == "Europe/Berlin")
     #expect(me.displayName == "Synthetic Sam")
@@ -83,9 +85,12 @@ let meBody = """
     #expect(try response.unauthorized.body.application_problem_plus_json.code == "device_revoked")
 }
 
-@Test func reportsNotModified() async throws {
-    let transport = StubTransport(status: .notModified)
+@Test func reportsNotModifiedWithTheValidator() async throws {
+    let headers: HTTPFields = [.eTag: "\"2-x\"", .cacheControl: "no-store"]
+    let transport = StubTransport(status: .notModified, headers: headers)
     let client = Client.enduva(serverURL: server, transport: transport) { "token" }
     let response = try await client.getMe(headers: .init(If_hyphen_None_hyphen_Match: "\"2-x\""))
-    #expect(throws: Never.self) { try response.notModified }
+    let notModified = try response.notModified
+    #expect(notModified.headers.ETag == "\"2-x\"")
+    #expect(notModified.headers.Cache_hyphen_Control == "no-store")
 }
