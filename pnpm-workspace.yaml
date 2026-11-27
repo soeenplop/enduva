@@ -28,6 +28,8 @@ allowBuilds:
   lefthook: false
   # Its postinstall only checks for the native binding, which comes from the platform package.
   '@swc/core': false
+  # Its postinstall only prints an "open collective" notice.
+  '@nestjs/core': false
   # drizzle-kit (via tsx and @esbuild-kit): its postinstall only verifies the native binary,
   # which comes from the platform package (@esbuild/<platform>).
   esbuild: false
@@ -42,4 +44,8 @@ minimumReleaseAgeExclude:
   - '@oxlint-tsgolint/win32-arm64@7.0.2009'
   - '@oxlint-tsgolint/win32-x64@7.0.2009'
   - oxlint-tsgolint@7.0.2009
+  - '@nestjs/common@12.6.3'
+  - '@nestjs/core@12.6.3'
+  - '@nestjs/platform-express@12.6.3'
+  - '@nestjs/testing@12.6.3'
   - vite@8.4.0

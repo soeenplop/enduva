@@ -13,5 +13,6 @@ Shared presets for the TypeScript 7 toolchain ([ADR-0001](../../docs/adr/0001-ty
 | `swc/nest.json` | SWC with `legacyDecorator` + `decoratorMetadata`, for Nest builds and `unplugin-swc` |
 | `oxlint.json` | `oxlint -c node_modules/@enduva/config/oxlint.json --type-aware --deny-warnings src test` |
 | `vitest` | `export { default } from '@enduva/config/vitest';` in `vitest.config.mjs`; runs `test/**/*.test.{ts,tsx}` |
+| `vitest/nest` | Same, plus `unplugin-swc` with the options of `swc/nest.json`, so Nest tests run on the build's emit (decorator metadata) |
 
 Pass explicit paths to oxlint: `ignorePatterns` in a shared config resolve relative to this directory, so the preset has none. The formatter config is the root [`.oxfmtrc.json`](../../.oxfmtrc.json): oxfmt has no `extends` and only discovers `.oxfmtrc.json`, and it formats the whole repository.
