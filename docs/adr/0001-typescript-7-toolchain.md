@@ -1,6 +1,6 @@
 # ADR-0001: TypeScript 7 toolchain
 
-- **Status:** Proposed (spike 0.3, issue [#5](https://github.com/soeenplop/enduva/issues/5)). Becomes Accepted when the owner approves this PR.
+- **Status:** Accepted (spike 0.3, issue [#5](https://github.com/soeenplop/enduva/issues/5), merged in PR #97 with the owner's T1 ruling). Later changes to TS < 7 exceptions are decided by the lead and reviewed (W13).
 - **Date:** 2026-11-26
 - **Decisions affected:** T1, T2, T3, T4, T15, T17, T18 ([`00-decisions.md`](../plan/00-decisions.md)); [`02-architecture.md` → TypeScript 7 toolchain](../plan/02-architecture.md#typescript-7-toolchain-needs-validation-in-spike-03)
 
