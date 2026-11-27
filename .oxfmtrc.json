@@ -13,6 +13,7 @@
     "**/*.yml",
     "spikes/**",
     "supabase/migrations/meta/**",
-    "tools/fixtures/**"
+    "tools/fixtures/**",
+    "apps/api/openapi.json"
   ]
 }

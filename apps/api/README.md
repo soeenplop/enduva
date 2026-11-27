@@ -12,6 +12,7 @@ legacy decorators and decorator metadata, and type-checked by TypeScript 7 `tsc 
 | `pnpm dev` | Builds the workspace packages it depends on (e.g. `@enduva/db`, whose runtime entry is `dist/`) and itself once, then runs `swc --watch` and `node --watch dist/main.js`, reading `apps/api/.env` if it exists |
 | `pnpm start` | `node dist/main.js` (production entrypoint) |
 | `pnpm start:worker` | `node dist/worker.js` (a stub until the worker lands in 0.12c) |
+| `pnpm generate` | Writes [`openapi.json`](openapi.json) from `@enduva/contracts` (needs its build; Turbo builds it first) |
 | `pnpm typecheck` | `tsc -p tsconfig.json` (TS 7, no emit) |
 | `pnpm lint` | oxlint, type-aware, shared config |
 | `pnpm test` | Vitest through SWC (`@enduva/config/vitest/nest`); needs `pnpm build` first, which Turbo does |
@@ -118,6 +119,14 @@ Never point a local process at a hosted project.
   `428 precondition_required`; outdated, another account's, weak (`W/"…"`), `*` or a list of tags →
   `412 precondition_failed`. HTTP allows `*` and lists, but this endpoint deliberately takes only the single form.
   An invalid body is a bare `400 bad_request` that echoes no input. Both use `Cache-Control: no-store`.
+
+## OpenAPI
+
+[`openapi.json`](openapi.json) is the OpenAPI 3.1 spec of this API, generated from the Zod schemas in
+[`@enduva/contracts`](../../packages/contracts) (`zod-openapi`, no Nest decorators or compiler plugin; ADR-0001) and
+committed. `pnpm generate` (Turbo runs it before build, typecheck, lint and test) rewrites it; CI fails when the
+committed file differs from a fresh run. Never edit it by hand: change the contract, regenerate, commit both. The
+handlers use the same schemas: request bodies are parsed with them, and response types are the contracts' types.
 
 ## Tests
 
