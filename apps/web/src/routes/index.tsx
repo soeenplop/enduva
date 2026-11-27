@@ -7,9 +7,11 @@ export const Route = createFileRoute('/')({
 
 function Home() {
   return (
-    <section aria-labelledby="home-title">
-      <h1 id="home-title">{m.home_title()}</h1>
-      <p>{m.home_lead()}</p>
+    <section aria-labelledby="home-title" className="max-w-prose">
+      <h1 id="home-title" className="mb-4 text-heading font-extrabold">
+        {m.home_title()}
+      </h1>
+      <p className="text-lead text-muted">{m.home_lead()}</p>
     </section>
   );
 }
