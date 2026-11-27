@@ -1,0 +1,98 @@
+# Container images (task 0.12a, deploy/README.md): api (also the worker), web and landing from deploy/Dockerfile.
+# Pull requests build every image without pushing. A push to `main` builds and pushes them to GHCR, where deploys
+# reference them by digest (06-deployment.md, "Promote, don't rebuild"). Not a required check (yet): the `main`
+# ruleset lists only ci.yml's jobs, commitlint and cla.
+name: images
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: images-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: image (${{ matrix.image }})
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [api, web, landing]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build (no push)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: deploy/Dockerfile
+          target: ${{ matrix.image }}
+          platforms: linux/amd64
+          push: false
+          # Pull requests read main's layer cache but write only their own scope.
+          cache-from: |
+            type=gha,scope=image-${{ matrix.image }}-refs/heads/main
+            type=gha,scope=image-${{ matrix.image }}-${{ github.ref }}
+          cache-to: type=gha,mode=max,scope=image-${{ matrix.image }}-${{ github.ref }}
+
+  publish:
+    name: publish (${{ matrix.image }})
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    # The only job with write access to packages.
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [api, web, landing]
+    env:
+      IMAGE: ghcr.io/${{ github.repository_owner }}/enduva-${{ matrix.image }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # One tag per commit (`sha-<full sha>`) to find a commit's image; deploys use the digest, never a tag.
+      # No `latest`. Provenance and SBOM are stored as attestations next to the image.
+      - name: Build and push
+        id: push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: deploy/Dockerfile
+          target: ${{ matrix.image }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.IMAGE }}:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.licenses=Elastic-2.0
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha,scope=image-${{ matrix.image }}-refs/heads/main
+          cache-to: type=gha,mode=max,scope=image-${{ matrix.image }}-refs/heads/main
+      - name: Digest
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          echo "${IMAGE}@${DIGEST}"
+          echo "\`${IMAGE}@${DIGEST}\`" >> "$GITHUB_STEP_SUMMARY"
