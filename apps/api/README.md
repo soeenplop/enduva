@@ -30,7 +30,7 @@ process with exit code 1 and a list of the offending variable names (never their
 | `NODE_ENV` | `development` | `development`, `test` or `production` |
 | `HOST` / `PORT` | `0.0.0.0` / `3000` | |
 | `LOG_LEVEL` | `info` | pino level, or `silent` |
-| `TRUST_PROXY` | `0` | Number of trusted reverse proxies (Traefik: `1`), so throttling sees the client IP |
+| `TRUST_PROXY` | empty | Comma-separated IPs/CIDRs of the ingress (Traefik in Dokploy, e.g. its Docker network `10.0.1.0/24`). `X-Forwarded-For` is honoured only from these peers; empty trusts none. No hop counts |
 | `THROTTLE_LIMIT` / `THROTTLE_TTL_SECONDS` | `100` / `60` | Requests per client IP and window |
 
 ## Behaviour

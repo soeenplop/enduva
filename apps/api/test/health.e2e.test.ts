@@ -157,21 +157,42 @@ describe('throttling (e2e)', () => {
   });
 });
 
-describe('throttling behind a trusted proxy (e2e)', () => {
-  let app: NestExpressApplication;
-
-  beforeAll(async () => {
-    app = await createTestApp(testEnv({ THROTTLE_LIMIT: '1', TRUST_PROXY: '1' }));
-  });
+describe('client IPs for throttling (e2e)', () => {
+  const apps: NestExpressApplication[] = [];
+  const boot = async (trustProxy: string) => {
+    const app = await createTestApp(testEnv({ THROTTLE_LIMIT: '1', TRUST_PROXY: trustProxy }));
+    apps.push(app);
+    return (ip: string) => http(app).get('/v1/health').set('x-forwarded-for', ip);
+  };
 
   afterAll(async () => {
-    await app.close();
+    await Promise.all(apps.map((app) => app.close()));
   });
 
-  it('counts each forwarded client IP separately', async () => {
-    const from = (ip: string) => http(app).get('/v1/health').set('x-forwarded-for', ip);
+  // supertest connects from loopback, so loopback plays the ingress here.
+  it('counts each forwarded client IP separately when the peer is a trusted proxy', async () => {
+    const from = await boot('127.0.0.1, ::1');
     expect((await from('203.0.113.1')).status).toBe(200);
     expect((await from('203.0.113.1')).status).toBe(429);
     expect((await from('203.0.113.2')).status).toBe(200);
+  });
+
+  it('ignores X-Forwarded-For from a peer that is not a trusted proxy', async () => {
+    const from = await boot('10.0.0.0/8');
+    expect((await from('203.0.113.1')).status).toBe(200);
+    expect((await from('203.0.113.2')).status).toBe(429);
+  });
+
+  it('ignores X-Forwarded-For when no proxy is configured', async () => {
+    const from = await boot('');
+    expect((await from('203.0.113.1')).status).toBe(200);
+    expect((await from('203.0.113.2')).status).toBe(429);
+  });
+
+  it('stops at the first untrusted hop in a forwarded chain', async () => {
+    const from = await boot('127.0.0.1, ::1, 10.0.0.0/8');
+    // The client spoofs a leftmost entry; the trusted chain ends at 198.51.100.7, the IP the ingress saw.
+    expect((await from('203.0.113.1, 198.51.100.7, 10.0.0.2')).status).toBe(200);
+    expect((await from('203.0.113.9, 198.51.100.7, 10.0.0.2')).status).toBe(429);
   });
 });

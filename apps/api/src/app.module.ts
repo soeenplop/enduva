@@ -49,8 +49,9 @@ export function configureApp(app: NestExpressApplication, env: Env): NestExpress
   // `/v1/…` through URI versioning rather than a global prefix, so unknown paths outside /v1 also get the
   // problem+json 404.
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
-  // Client IPs (throttling) come from X-Forwarded-For only behind this many trusted proxies.
-  app.set('trust proxy', env.TRUST_PROXY);
+  // Client IPs (throttling) come from X-Forwarded-For only if the connecting peer, and every hop Express walks back
+  // through, is a configured proxy (proxy-addr). No proxies configured: the socket peer is the client.
+  app.set('trust proxy', env.TRUST_PROXY.length === 0 ? false : [...env.TRUST_PROXY]);
   app.disable('x-powered-by');
   return app;
 }

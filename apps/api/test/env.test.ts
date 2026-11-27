@@ -9,18 +9,21 @@ describe('loadEnv', () => {
       HOST: '0.0.0.0',
       PORT: 3000,
       LOG_LEVEL: 'info',
-      TRUST_PROXY: 0,
+      TRUST_PROXY: [],
       THROTTLE_LIMIT: 100,
       THROTTLE_TTL_SECONDS: 60,
     });
   });
 
   it('coerces numbers', () => {
-    expect(loadEnv({ PORT: '8080', THROTTLE_LIMIT: '5', TRUST_PROXY: '1' })).toMatchObject({
-      PORT: 8080,
-      THROTTLE_LIMIT: 5,
-      TRUST_PROXY: 1,
+    expect(loadEnv({ PORT: '8080', THROTTLE_LIMIT: '5' })).toMatchObject({ PORT: 8080, THROTTLE_LIMIT: 5 });
+  });
+
+  it('reads trusted proxies as a list of addresses, CIDRs and named ranges', () => {
+    expect(loadEnv({ TRUST_PROXY: ' 10.0.1.5, 172.16.0.0/12,fd00::/8 ,uniquelocal,' })).toMatchObject({
+      TRUST_PROXY: ['10.0.1.5', '172.16.0.0/12', 'fd00::/8', 'uniquelocal'],
     });
+    expect(loadEnv({ TRUST_PROXY: '' })).toMatchObject({ TRUST_PROXY: [] });
   });
 
   it('keeps an explicit PORT=0 for an ephemeral port', () => {
@@ -39,6 +42,12 @@ describe('loadEnv', () => {
     ['HOST', ''],
     ['LOG_LEVEL', 'verbose'],
     ['TRUST_PROXY', 'true'],
+    ['TRUST_PROXY', '1'],
+    ['TRUST_PROXY', '0.0.0.0/0'],
+    ['TRUST_PROXY', '10.0.0.0/33'],
+    ['TRUST_PROXY', '10.0.0.0/8/1'],
+    ['TRUST_PROXY', '10.0.0.0/255.0.0.0'],
+    ['TRUST_PROXY', 'traefik'],
     ['THROTTLE_LIMIT', '-1'],
     ['THROTTLE_TTL_SECONDS', '0'],
   ])('refuses %s=%s', (name, value) => {
