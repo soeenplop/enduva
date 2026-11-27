@@ -80,7 +80,7 @@ jobs:
         run: pnpm test:negative
 
   # Browser tests (0.9a): web smoke test and the landing's 320 px reflow check (#113), on the production builds.
-  # playwright-core only, driven from Vitest (apps/web/README.md, E2E). Not yet a required check.
+  # playwright-core only, driven from Vitest (apps/web/README.md, E2E; lead decision W13 on PR #134). Required check.
   e2e:
     name: e2e
     runs-on: ubuntu-24.04

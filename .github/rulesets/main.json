@@ -36,7 +36,8 @@
           { "context": "gitleaks", "integration_id": 15368 },
           { "context": "commitlint", "integration_id": 15368 },
           { "context": "cla", "integration_id": 15368 },
-          { "context": "swift-client", "integration_id": 15368 }
+          { "context": "swift-client", "integration_id": 15368 },
+          { "context": "e2e", "integration_id": 15368 }
         ]
       }
     }
