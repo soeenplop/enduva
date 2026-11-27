@@ -72,8 +72,9 @@ Never point a local process at a hosted project.
 - **Authentication:** a global guard ([`src/auth`](src/auth)) requires `Authorization: Bearer <access token>` on every
   route not marked `@Public()` (only health is). The token must verify against Supabase's JWKS with exactly
   `AUTH_JWT_ALGORITHM`, carry the exact `AUTH_ISSUER` as `iss`, `aud` and `role` `authenticated`, a valid `exp` and an
-  `iat` not in the future (10 s clock skew), a UUID `sub` and `session_id`, and not be an anonymous user's. jose caches
-  the JWKS for 10 minutes and refetches it, at most every 30 s, when a token names an unknown key ID (rotation).
+  `iat` not in the future (10 s clock skew), a UUID `sub` and `session_id`, and not be an anonymous user's. The JWKS
+  is cached for 10 minutes and refetched when a token names an unknown key ID (rotation); every fetch attempt, a
+  failed one too, starts a 30 s cooldown ([`src/auth/jwks.ts`](src/auth/jwks.ts)).
   Every rejection is the same `401 unauthorized` with `WWW-Authenticate: Bearer`; the reason is neither sent nor
   logged, and neither are tokens or claims. If the JWKS can't be fetched, requests fail closed with `503`
   `auth_unavailable`. The request keeps only `sub`, `role` and `session_id` as its claims. The throttler runs before
@@ -115,6 +116,6 @@ Never point a local process at a hosted project.
 - `test/token-verifier.test.ts` checks token verification with locally generated keys: wrong `iss`/`aud`/`role`,
   HS256 (also with the public key as secret), `none`, the other asymmetric algorithm, unknown or forged keys,
   tampering, expiry and `iat`/`nbf` around the clock skew, missing claims, anonymous users; and the remote JWKS
-  (caching, rotation, fail closed) against a stand-in endpoint. `test/auth-guard.e2e.test.ts` runs the guard on
-  the real `AppModule` against that endpoint: protected and public routes, malformed headers, `503`, throttling
-  first, no token in the logs.
+  (caching, rotation, fail closed, at most one fetch per 30 s cooldown also while fetches fail) against a stand-in
+  endpoint. `test/auth-guard.e2e.test.ts` runs the guard on the real `AppModule` against that endpoint: protected and
+  public routes, malformed and duplicate headers, `503`, throttling first, no token in the logs.

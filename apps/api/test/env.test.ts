@@ -90,6 +90,8 @@ describe('loadEnv', () => {
     ['AUTH_ISSUER', 'https://ABCDEFGHIJKLMNOP.supabase.co/auth/v1'],
     ['AUTH_ISSUER', 'https://abcdefghijklmnop.supabase.co:443/auth/v1'],
     ['AUTH_ISSUER', 'https://abcdefghijklmnop.supabase.co/auth/v1?x=1'],
+    ['AUTH_ISSUER', 'https://abcdefghijklmnop.supabase.co/auth/v1?'],
+    ['AUTH_ISSUER', 'https://abcdefghijklmnop.supabase.co/auth/v1#'],
     ['AUTH_ISSUER', 'https://user:pw@abcdefghijklmnop.supabase.co/auth/v1'],
     ['AUTH_ISSUER', 'not a url'],
     ['AUTH_JWT_ALGORITHM', 'HS256'],

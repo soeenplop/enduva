@@ -1,5 +1,9 @@
 import type { VerifiedClaims } from '@enduva/db';
-import { createRemoteJWKSet, errors, jwtVerify, type JWTVerifyGetKey } from 'jose';
+import { errors, jwtVerify, type JWTVerifyGetKey } from 'jose';
+
+import { AuthUnavailableError } from './jwks.js';
+
+export { AuthUnavailableError, remoteKeys } from './jwks.js';
 
 /** Clock skew tolerated between the Auth server and the API for `exp`, `nbf` and `iat`. Both are NTP-synced servers. */
 export const CLOCK_SKEW_SECONDS = 10;
@@ -25,14 +29,6 @@ export class InvalidTokenError extends Error {
   }
 }
 
-/** The signing keys couldn't be fetched, so the token can't be verified either way (503, fail closed). */
-export class AuthUnavailableError extends Error {
-  override readonly name = 'AuthUnavailableError';
-  constructor() {
-    super('Signing keys unavailable');
-  }
-}
-
 export interface TokenVerifierOptions {
   /** Exact expected `iss`. */
   readonly issuer: string;
@@ -42,18 +38,6 @@ export interface TokenVerifierOptions {
   readonly keys: JWTVerifyGetKey;
   /** Current time in seconds (tests). */
   readonly now?: () => number;
-}
-
-/**
- * Supabase's JWKS, cached by jose: refreshed after 10 minutes, and refetched at most every 30 s when a token names a
- * key ID the cache doesn't have (key rotation). Concurrent refetches share one request; a fetch times out after 5 s.
- */
-export function remoteKeys(issuer: string, options: { readonly cooldownMs?: number } = {}): JWTVerifyGetKey {
-  return createRemoteJWKSet(new URL(`${issuer}/.well-known/jwks.json`), {
-    cacheMaxAge: 600_000,
-    cooldownDuration: options.cooldownMs ?? 30_000,
-    timeoutDuration: 5_000,
-  });
 }
 
 /** jose errors that mean the key set couldn't be loaded, as opposed to a bad token. */
@@ -85,11 +69,14 @@ export class TokenVerifier {
         requiredClaims: ['exp', 'iat', 'sub', 'role', 'session_id'],
       }));
     } catch (error) {
+      // Anything but a jose verdict on the token (the key set failed to load, a bug) fails closed as unavailable.
       if (!(error instanceof errors.JOSEError) || keySetFailures.has(error.code)) throw new AuthUnavailableError();
       throw new InvalidTokenError();
     }
-    const { sub, role, session_id: sessionId, iat, is_anonymous: anonymous } = payload;
+    const { sub, role, session_id: sessionId, iat, is_anonymous: anonymous, aud } = payload;
     const valid =
+      // jose's `audience` accepts any list that contains it; Supabase issues exactly the string.
+      aud === 'authenticated' &&
       typeof sub === 'string' &&
       uuidPattern.test(sub) &&
       role === 'authenticated' &&

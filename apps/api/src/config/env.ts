@@ -77,6 +77,8 @@ const loopbackHosts = new Set(['127.0.0.1', 'localhost', '[::1]']);
 
 /** An exact issuer URL: https (plain http only on a loopback host), no trailing slash, query, fragment or credentials. */
 function isIssuer(value: string): boolean {
+  // An empty `?` or `#` leaves `search`/`hash` empty but would still swallow the appended JWKS path.
+  if (value.includes('?') || value.includes('#')) return false;
   const url = URL.parse(value);
   if (url === null || url.username !== '' || url.password !== '' || url.search !== '' || url.hash !== '') return false;
   // Already in normal form (lower-case host, no default port, no dot segments), so `iss` can be compared as a string.
