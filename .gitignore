@@ -24,3 +24,7 @@ coverage/
 DerivedData/
 xcuserdata/
 *.xcuserstate
+
+# Swift Package Manager
+.build/
+.swiftpm/
