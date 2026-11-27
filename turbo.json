@@ -59,6 +59,10 @@
     "@enduva/tools#test": {
       "cache": false
     },
+    "test:e2e": {
+      "dependsOn": ["build"],
+      "cache": false
+    },
     "//#format:check": {
       "cache": false
     }

@@ -14,6 +14,7 @@ In this directory:
 | `pnpm generate` | Compiles the Paraglide messages (`src/paraglide/`) and the route tree (`src/routeTree.gen.ts`) for `tsc`. Both are git-ignored |
 | `pnpm build` | [`scripts/build.mjs`](scripts/build.mjs): `vite build`, then the same route-tree and Paraglide identity check as the landing page ([`apps/landing/README.md`](../landing/README.md#identity-check)) |
 | `pnpm dev` | Vite dev server (talks to the local API at `http://127.0.0.1:3000` unless `ENDUVA_API_URL` is set) |
+| `pnpm test:e2e` | Browser tests in `e2e/` against `vite preview` of the build (see E2E) |
 | `pnpm test` | Vitest. Turbo builds first: `test/ssr*.test.ts` render through the production SSR bundle |
 
 `dist/server/server.js` exports the SSR fetch handler; the Node server preset is pinned in 0.12a.
@@ -63,3 +64,17 @@ switch with the theme. Tailwind's default palette is removed, so only token colo
 `negative/*.tsx` must fail `tsc` with exactly the diagnostic they name (`pnpm test:negative` from the repository root):
 a wrong component prop, a `Link` to a missing route, an undeclared search param, a misspelled message, a misspelled
 router-context field, a loader-data field that doesn't exist and a misspelled field of the API status query data.
+
+## E2E
+
+[`e2e/shell.test.ts`](e2e/shell.test.ts) drives Chromium with [`playwright-core`](https://playwright.dev/docs/library)
+(exact pin) from Vitest: the language switch (cookie, reload, `<html lang>`), hydration in the server's locale when the
+browser prefers another one, client-side navigation to `/status` with the API down, the localized 404 and 320 px
+reflow in light and dark. Uncaught page errors, hydration errors included, fail a test.
+[`e2e/preview.ts`](e2e/preview.ts) starts `vite preview` on port 0 and uses the address its own process reports, so the
+tests can never reach another server. The landing page's reflow check lives in [`apps/landing/e2e`](../landing/e2e).
+
+We use the library, not `@playwright/test`: its runner (`playwright`) bundles a Babel TypeScript loader for test
+files, and `playwright-core` contains neither a loader nor TypeScript compiler code. Vitest transforms the tests with
+Vite, like every other test. Install the matching browser once with `pnpm exec playwright-core install chromium`, then
+run `pnpm turbo test:e2e` from the repository root (it builds first). CI runs the `e2e` job.

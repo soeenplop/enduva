@@ -363,6 +363,9 @@ importers:
       parse5:
         specifier: 8.1.1
         version: 8.1.1
+      playwright-core:
+        specifier: 1.65.1
+        version: 1.65.1
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -439,6 +442,9 @@ importers:
       oxlint-tsgolint:
         specifier: 'catalog:'
         version: 7.0.2009
+      playwright-core:
+        specifier: 1.65.1
+        version: 1.65.1
       tailwindcss:
         specifier: 4.3.5
         version: 4.3.5
@@ -4390,6 +4396,11 @@ packages:
   piscina@4.9.4:
     resolution: {integrity: sha512-RyBDr2VheQ8ZfH3N8SzQZHztqVyOtadTwLnUYof6gdj5161/eu2wNhCbGl5GHnNKDpnkicJYpKtL2J+y/gk6XA==}
 
+  playwright-core@1.65.1:
+    resolution: {integrity: sha512-hqPpz7blSMPxWVdoeE1yiBSzXsKiVOd2k+kjCvmUywD2GPO2Dd9HfcWnq9NN0GHbNZDFgZ9JfBFr+X5/BLo0qw==}
+    engines: {node: '>=20'}
+    hasBin: true
+
   postcss@8.5.33:
     resolution: {integrity: sha512-RVHEU9/Pp1Fnjr/MpAJsZoADukCKhfIi15OunEYiGktIkYLkPVvC1sioWolGDS7XByMTx9m/IGbro0Js13zhnQ==}
     engines: {node: ^10 || ^12 || >=14}
@@ -8238,6 +8249,8 @@ snapshots:
   piscina@4.9.4:
     optionalDependencies:
       '@napi-rs/nice': 1.1.1
+
+  playwright-core@1.65.1: {}
 
   postcss@8.5.33:
     dependencies:
