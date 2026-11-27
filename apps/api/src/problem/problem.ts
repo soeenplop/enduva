@@ -12,8 +12,12 @@ export const problemStatus = {
   forbidden: 403,
   not_found: 404,
   method_not_allowed: 405,
+  /** `If-Match` names an outdated version: reload, then retry. */
+  precondition_failed: 412,
   payload_too_large: 413,
   unsupported_media_type: 415,
+  /** The write needs `If-Match` with the resource's ETag. */
+  precondition_required: 428,
   rate_limited: 429,
   internal_error: 500,
   database_unavailable: 503,

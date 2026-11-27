@@ -104,7 +104,13 @@ Never point a local process at a hosted project.
   expired and that its user exists, isn't deleted and isn't banned; otherwise `401 unauthorized`. A revoked device for
   the session answers `401 device_revoked`, on which clients wipe their local account data. A user's first request
   creates their profile and settings with defaults.
-- **`GET /v1/me`:** the user's profile (`Cache-Control: no-store`).
+- **`/v1/me`:** `GET` returns the user's profile with a strong `ETag` (`"<version>"`). `PATCH` updates the
+  user-editable fields (JSON merge semantics: a missing field stays, `null` clears it), validated by a Zod schema
+  ([`src/me/me.schema.ts`](src/me/me.schema.ts); request schemas move to `@enduva/contracts` in 0.8c). Unknown
+  fields, `role` among them, are refused, and `onboardingCompleted: true` stamps the time once. It requires
+  `If-Match` with the current ETag: missing → `428 precondition_required`, outdated or malformed → `412
+  precondition_failed`, an invalid body → a bare `400 bad_request` that echoes no input. Both use
+  `Cache-Control: no-store`.
 
 ## Tests
 
@@ -128,4 +134,5 @@ Never point a local process at a hosted project.
 - `test/auth.e2e.test.ts` signs in through the **local** Auth server and covers `/v1/me`, profile creation, a
   foreign issuer, and the unexpired tokens of signed-out, deleted, soft-deleted and banned accounts (reads and
   writes) and of a revoked device right after a successful request. Skipped without a running stack, like the
-  database tests.
+  database tests. `test/me.e2e.test.ts` covers `PATCH /v1/me` there (ETags, 428/412 without writing, invalid bodies),
+  and `test/me-schema.test.ts` the body schema.
