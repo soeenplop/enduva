@@ -1,15 +1,20 @@
 # CodeQL configuration (task 0.5), used by .github/workflows/codeql.yml.
 # Only real product code and our own tooling are analysed. Excluded:
 # - spikes/**: throwaway spikes, removed after their decision (ADR-0001).
-# - tools/fixtures/**: synthetic vendored bundles (fake TS 6 compilers) for the audit self-tests.
-# - **/negative/**: deliberately broken fixtures that tsc/oxlint must reject (test:negative).
+# - tools/fixtures/bundled-typescript/**: synthetic vendored bundles (fake TS 6 compilers) for the
+#   audit self-tests.
+# - <package>/negative/**: deliberately broken fixtures that tsc/oxlint must reject (test:negative).
 # - build output and dependencies: never checked in, listed in case a future job builds first.
+# Fixture directories are listed one by one, not by glob, so a future source directory with the
+# same name is still analysed. A new fixture directory must be added here explicitly.
 name: enduva-codeql
 
 paths-ignore:
   - spikes/**
-  - tools/fixtures/**
-  - '**/negative/**'
+  - tools/fixtures/bundled-typescript/**
+  - apps/api/negative/**
+  - apps/landing/negative/**
+  - packages/domain/negative/**
   - '**/node_modules/**'
   - '**/dist/**'
   - '**/build/**'
