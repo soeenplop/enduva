@@ -49,6 +49,7 @@ The lead's merge procedure: merge only when all of these hold **for the current 
 - `Verdict: LGTM @ <head-sha>`; open nits are turned into follow-up issues.
 - All `blocker`/`major` threads resolved, no `needs-arbiter` label.
 - All required status checks green on that head.
+- Until CLA.1 (interim CLA gate): the PR's head repository is `soeenplop/enduva`, its base is `main` and its opener is the owner or an allowlisted bot (check with `gh pr view <n> --json headRepository,baseRefName,author`).
 - **Owner approval** is **not** required when Sol's verdict is LGTM and the lead agrees (owner ruling W12, 2026-11-27). Exceptions, each with its own record:
   - **Owner-only decisions** (legal texts such as the privacy policy, imprint and the final CLA text, licence changes, accounts, costs or contracts with third parties): owner approval for the exact head SHA.
   - **Gates G1/G2:** a gate is passed **only** by the owner's sign-off **in the gate issue** (#93 for G1, #94 for G2). PRs that contribute to a gate need no owner approval themselves. A PR that records a gate decision links to that sign-off comment.

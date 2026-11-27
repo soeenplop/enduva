@@ -1,0 +1,54 @@
+# Interim CLA gate (roadmap 0.5, T24, owner ruling 2026-11-27), logic in tools/cla-gate.mjs. While
+# CLA.md is a draft, it passes only same-repository PRs into main whose opener and every commit's
+# author and committer are the owner or a listed bot, with GitHub-verified signatures. It also fails
+# while another open PR on the same head SHA breaks the opener rules: the result belongs to the SHA.
+# The job name is a required status check of the `main` ruleset (.github/rulesets/main.json). Task
+# CLA.1 replaces it with the full signature check.
+#
+# Trigger: `pull_request`, not `pull_request_target` (blocked by default in public repositories from
+# 2026-12-02 unless an Actions event policy allows it). It runs the workflow file and script of the
+# PR's merge ref, which is trusted only because of who can produce a run:
+# - Same-repository branches can only be pushed by the owner and the allowlisted bots.
+# - Fork PR workflows need approval for all external contributors (repository setting, 2026-11-27),
+#   and the maintainer never approves them. A fork PR therefore never gets a `cla` result, and the
+#   required check stays missing: blocked, fail-closed. The same holds for a fork workflow that
+#   defines its own job named `cla` (the required context names only the Actions app).
+# The script's checks (opener, head repository, verified commits, complete commit set, shared heads)
+# stay as defense in depth. Read-only token, no secrets, no install, actions pinned by SHA.
+#
+# `branches: [main]`: only PRs into main produce `cla`, so a stacked PR can't publish a result for
+# a smaller commit set; a PR retargeted to main is re-checked through `edited`. No `if:` anywhere: a
+# skipped job would count as a passing `cla` check on that head.
+name: cla
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: cla-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  cla:
+    name: cla
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      # No install: the script has no dependencies.
+      - name: Interim CLA gate (owner and listed bots only)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node tools/cla-gate.mjs
