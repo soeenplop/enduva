@@ -1,9 +1,18 @@
-// Single source for the site's pages. Read by vite.config.mjs (prerender list) and by
-// scripts/build.mjs (picker, static checks).
+// Single source for the site's pages and URLs. Read by vite.config.mjs (prerender list), by the
+// app's head tags (src/seo.ts) and by scripts/build.mjs (picker, sitemap, static checks).
 import settings from './project.inlang/settings.json' with { type: 'json' };
+
+/** Production origin (T4). Canonical, hreflang, Open Graph and sitemap URLs are absolute on it. */
+export const siteOrigin = 'https://enduva.soeenplop.dev';
+
+/** The public repository, linked from the licence note. */
+export const repositoryUrl = 'https://github.com/soeenplop/enduva';
 
 /** @type {readonly string[]} */
 export const locales = settings.locales;
+
+/** The locale that `x-default` points to on every page except the picker at `/`. */
+export const baseLocale = settings.baseLocale;
 
 /**
  * Every page as the router sees it (without a locale prefix). Each one is prerendered under
@@ -17,3 +26,9 @@ export const localizedPath = (locale, path) => `/${locale}${path}`;
 
 /** The concrete URLs the prerenderer renders: every page in every locale. */
 export const prerenderPaths = locales.flatMap((locale) => pagePaths.map((path) => localizedPath(locale, path)));
+
+/** Absolute URL of a page in a locale: canonical, hreflang and sitemap entry. */
+export const pageUrl = (path, locale) => `${siteOrigin}${localizedPath(locale, path)}`;
+
+/** `x-default`: the language picker for the home page, the base locale's page for every other page. */
+export const xDefaultUrl = (path) => (path === '/' ? `${siteOrigin}/` : pageUrl(path, baseLocale));

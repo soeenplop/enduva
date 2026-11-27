@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router';
 import { m } from '../paraglide/messages.js';
+import { repositoryUrl } from '../../site.mjs';
 
 export function SiteFooter() {
   return (
@@ -24,6 +25,9 @@ export function SiteFooter() {
             </li>
           </ul>
         </nav>
+        <p className="licence">
+          {m.footer_licence()} <a href={repositoryUrl}>{m.footer_source_link()}</a>
+        </p>
       </div>
     </footer>
   );
