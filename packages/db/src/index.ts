@@ -3,3 +3,5 @@ export function qualifiedName(schema: string, table: string): string {
   const quote = (identifier: string) => `"${identifier.replaceAll('"', '""')}"`;
   return `${quote(schema)}.${quote(table)}`;
 }
+
+export * from './schema/index.js';
