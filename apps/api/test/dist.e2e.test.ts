@@ -47,7 +47,7 @@ describe('dist/main.js (SWC build, plain node)', () => {
   it('boots and serves /v1/health', async () => {
     const port = await freePort();
     api = spawn(process.execPath, [dist('main.js')], {
-      env: { ...cleanEnv, HOST: '127.0.0.1', PORT: String(port) },
+      env: { ...cleanEnv, HOST: '127.0.0.1', PORT: String(port), LOG_LEVEL: 'warn' },
       stdio: 'ignore',
     });
     let res: Response | undefined;
@@ -57,6 +57,7 @@ describe('dist/main.js (SWC build, plain node)', () => {
     }
     expect(res?.status).toBe(200);
     expect(await res?.json()).toEqual({ status: 'ok' });
+    expect(res?.headers.get('x-request-id')).toMatch(/^[0-9a-f-]{36}$/);
   });
 
   it('has a worker entrypoint', () => {

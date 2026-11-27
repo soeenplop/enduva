@@ -17,7 +17,7 @@ function envOrExit(): Env {
 }
 
 const env = envOrExit();
-const app = await NestFactory.create<NestExpressApplication>(AppModule.register(env));
+const app = await NestFactory.create<NestExpressApplication>(AppModule.register(env), { bufferLogs: true });
 configureApp(app, env);
 // SIGTERM/SIGINT close the app gracefully.
 app.enableShutdownHooks();

@@ -4,7 +4,12 @@ import { InvalidEnvError, loadEnv } from '../src/config/env.js';
 
 describe('loadEnv', () => {
   it('applies the defaults', () => {
-    expect(loadEnv({})).toEqual({ NODE_ENV: 'development', HOST: '0.0.0.0', PORT: 3000 });
+    expect(loadEnv({})).toEqual({
+      NODE_ENV: 'development',
+      HOST: '0.0.0.0',
+      PORT: 3000,
+      LOG_LEVEL: 'info',
+    });
   });
 
   it('coerces numbers', () => {
@@ -16,6 +21,7 @@ describe('loadEnv', () => {
     ['PORT', '70000'],
     ['NODE_ENV', 'staging'],
     ['HOST', ''],
+    ['LOG_LEVEL', 'verbose'],
   ])('refuses %s=%s', (name, value) => {
     expect(() => loadEnv({ [name]: value })).toThrow(new RegExp(`^Invalid environment:\\n  ${name}: `));
   });
@@ -23,14 +29,14 @@ describe('loadEnv', () => {
   it('lists every offending variable but never a value', () => {
     let error: unknown;
     try {
-      loadEnv({ PORT: 's3cret-port', NODE_ENV: 's3cret-env' });
+      loadEnv({ PORT: 's3cret-port', LOG_LEVEL: 's3cret-level' });
     } catch (caught) {
       error = caught;
     }
     expect(error).toBeInstanceOf(InvalidEnvError);
     const { message } = error as Error;
     expect(message).toContain('PORT');
-    expect(message).toContain('NODE_ENV');
+    expect(message).toContain('LOG_LEVEL');
     expect(message).not.toContain('s3cret');
   });
 });
