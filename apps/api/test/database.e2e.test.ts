@@ -1,19 +1,20 @@
 import { setTimeout as delay } from 'node:timers/promises';
 
-import { type CanActivate, Controller, type ExecutionContext, Get, Injectable, Post } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { Controller, Get, Post } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { createDatabase, type Database, profiles, type Transaction } from '@enduva/db';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { Public } from '../src/auth/auth.guard.js';
 import { DATABASE } from '../src/db/database.js';
-import { type IdentifiedRequest, RequestTx } from '../src/db/request-transaction.js';
+import { RequestTx } from '../src/db/request-transaction.js';
+import { LOCAL_POOLER_URL, localAuth, signIn } from './local-supabase.js';
 import { createTestApp, http, logCapture, testEnv } from './support.js';
 
 // Local Supabase only (`pnpm --filter @enduva/db db:start` + `db:reset`): the transaction pooler and the API login
-// with its local development password from supabase/seed.sql. Never a hosted project.
-const LOCAL_POOLER_URL = 'postgresql://enduva_api_login.pooler-dev:enduva-local-api@127.0.0.1:54329/postgres';
+// with its local development password from supabase/seed.sql, and real sign-ins through the local Auth server.
+// Never a hosted project.
 const USER_A = '0000000a-0000-4000-8000-00000000000a';
 
 async function localSupabaseRunning(): Promise<boolean> {
@@ -28,19 +29,16 @@ async function localSupabaseRunning(): Promise<boolean> {
   }
 }
 
-const available = await localSupabaseRunning();
+const auth = localAuth();
+const available = auth !== undefined && (await localSupabaseRunning());
 if (!available)
   console.warn('[skipped] local Supabase is not running: database e2e tests need `db:start` + `db:reset`');
 
-/** Stand-in for the 0.8b auth guard: it puts verified claims on the request, as the JWKS check will. */
-@Injectable()
-class FakeAuthGuard implements CanActivate {
-  canActivate(context: ExecutionContext): boolean {
-    const request = context.switchToHttp().getRequest<IdentifiedRequest>();
-    if (request.headers['x-test-user'] === USER_A) request.claims = { sub: USER_A, role: 'authenticated' };
-    return true;
-  }
-}
+/** Athlete A's access token from a real sign-in. */
+const bearerA = available
+  ? `Bearer ${(await signIn(auth, 'athlete.a@example.com', 'enduva-local-a')).accessToken}`
+  : '';
+const authEnv = { AUTH_ISSUER: auth?.issuer ?? '' };
 
 @Controller('probe')
 class ProbeController {
@@ -63,6 +61,13 @@ class ProbeController {
     throw new Error('unreachable');
   }
 
+  /** A route without an identity can't have a request transaction. */
+  @Public()
+  @Get('public')
+  unscoped(@RequestTx() _tx: Transaction): never {
+    throw new Error('unreachable');
+  }
+
   /** Writes inside the request transaction, then fails: nothing may persist. */
   @Post()
   async failAfterWrite(@RequestTx() tx: Transaction): Promise<never> {
@@ -76,10 +81,9 @@ describe.skipIf(!available)(`database (e2e, local Supabase${available ? '' : ': 
   let app: NestExpressApplication;
 
   beforeAll(async () => {
-    app = await createTestApp(testEnv({ DATABASE_URL: LOCAL_POOLER_URL, LOG_LEVEL: 'info' }), {
+    app = await createTestApp(testEnv({ ...authEnv, DATABASE_URL: LOCAL_POOLER_URL, LOG_LEVEL: 'info' }), {
       logDestination: logs,
       controllers: [ProbeController],
-      providers: [{ provide: APP_GUARD, useClass: FakeAuthGuard }],
     });
   });
 
@@ -95,7 +99,7 @@ describe.skipIf(!available)(`database (e2e, local Supabase${available ? '' : ': 
 
   it('is not ready when the pool logs in as another role', async () => {
     // The env check refuses such a URL; this stands in for a login node-postgres or the pooler changed anyway.
-    const other = await createTestApp(testEnv({ DATABASE_URL: LOCAL_POOLER_URL }));
+    const other = await createTestApp(testEnv({ ...authEnv, DATABASE_URL: LOCAL_POOLER_URL }));
     try {
       other.get<Database>(DATABASE).$client.options.connectionString = LOCAL_POOLER_URL.replace(
         'enduva_api_login.pooler-dev:enduva-local-api',
@@ -110,21 +114,21 @@ describe.skipIf(!available)(`database (e2e, local Supabase${available ? '' : ': 
   });
 
   it('runs a request with verified claims in one transaction as enduva_api, scoped by RLS', async () => {
-    const res = await http(app).get('/v1/probe').set('x-test-user', USER_A);
+    const res = await http(app).get('/v1/probe').set('authorization', bearerA);
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ role: 'enduva_api', user_id: USER_A, profiles: [{ userId: USER_A }] });
   });
 
   it('rolls the request transaction back when the handler fails', async () => {
-    const before = await http(app).get('/v1/probe').set('x-test-user', USER_A);
-    expect((await http(app).post('/v1/probe').set('x-test-user', USER_A)).status).toBe(500);
-    const after = await http(app).get('/v1/probe').set('x-test-user', USER_A);
+    const before = await http(app).get('/v1/probe').set('authorization', bearerA);
+    expect((await http(app).post('/v1/probe').set('authorization', bearerA)).status).toBe(500);
+    const after = await http(app).get('/v1/probe').set('authorization', bearerA);
     expect(after.body).toEqual(before.body);
     expect(JSON.stringify(after.body)).not.toContain('rolled back');
   });
 
   it('logs a failed query without its parameters', async () => {
-    const res = await http(app).get('/v1/probe/bad-query').set('x-test-user', USER_A);
+    const res = await http(app).get('/v1/probe/bad-query').set('authorization', bearerA);
     expect(res.status).toBe(500);
     expect(logs.lines()).toContainEqual(
       expect.objectContaining({
@@ -137,7 +141,7 @@ describe.skipIf(!available)(`database (e2e, local Supabase${available ? '' : ': 
   });
 
   it('gives a route without verified claims no transaction (500, nothing runs unscoped)', async () => {
-    const res = await http(app).get('/v1/probe');
+    const res = await http(app).get('/v1/probe/public');
     expect(res.status).toBe(500);
     expect(res.body).toMatchObject({ code: 'internal_error' });
   });
@@ -166,9 +170,8 @@ describe.skipIf(!available)('a request whose connection is lost (e2e, local Post
   let app: NestExpressApplication;
 
   beforeAll(async () => {
-    app = await createTestApp(testEnv({ DATABASE_URL: LOCAL_DIRECT_URL, DATABASE_POOL_MAX: '1' }), {
+    app = await createTestApp(testEnv({ ...authEnv, DATABASE_URL: LOCAL_DIRECT_URL, DATABASE_POOL_MAX: '1' }), {
       controllers: [LoseConnectionController, ProbeController],
-      providers: [{ provide: APP_GUARD, useClass: FakeAuthGuard }],
     });
   });
 
@@ -178,10 +181,10 @@ describe.skipIf(!available)('a request whose connection is lost (e2e, local Post
   });
 
   it('fails the request, not the process, and frees the pool slot', async () => {
-    const res = await http(app).get('/v1/lose').set('x-test-user', USER_A);
+    const res = await http(app).get('/v1/lose').set('authorization', bearerA);
     expect(res.status).toBe(500);
     expect(app.get<Database>(DATABASE).$client.totalCount).toBe(0);
-    const next = await http(app).get('/v1/probe').set('x-test-user', USER_A);
+    const next = await http(app).get('/v1/probe').set('authorization', bearerA);
     expect(next.status).toBe(200);
     expect(next.body).toMatchObject({ role: 'enduva_api', user_id: USER_A });
   });
