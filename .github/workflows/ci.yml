@@ -30,6 +30,16 @@ jobs:
       - uses: ./.github/actions/setup
       - name: Build, typecheck, lint and test (turbo)
         run: pnpm turbo build typecheck lint test
+      # Turbo's `generate` tasks ran above. A committed generated file (apps/api/openapi.json from the Zod contracts)
+      # that differs from the fresh output, or a generated file missing from git, fails here.
+      - name: Generated files are committed and up to date
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git status --porcelain
+            git --no-pager diff --stat
+            echo "::error::Generated files are stale. Run 'pnpm turbo run generate' and commit the result."
+            exit 1
+          fi
 
   format:
     name: format

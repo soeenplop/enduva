@@ -1,7 +1,8 @@
 import { Controller, Get, Header } from '@nestjs/common';
+import type { HealthStatus } from '@enduva/contracts';
 
 import { Public } from '../auth/auth.guard.js';
-import { HealthService, type Status } from './health.service.js';
+import { HealthService } from './health.service.js';
 
 @Controller('health')
 export class HealthController {
@@ -12,7 +13,7 @@ export class HealthController {
   @Public()
   @Get()
   @Header('Cache-Control', 'no-store')
-  live(): Status {
+  live(): HealthStatus {
     return this.health.live();
   }
 
@@ -20,7 +21,7 @@ export class HealthController {
   @Public()
   @Get('ready')
   @Header('Cache-Control', 'no-store')
-  ready(): Promise<Status> {
+  ready(): Promise<HealthStatus> {
     return this.health.ready();
   }
 }

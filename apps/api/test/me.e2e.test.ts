@@ -1,3 +1,4 @@
+import { Me, PROBLEM_CONTENT_TYPE, Problem } from '@enduva/contracts';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -67,6 +68,8 @@ describe.skipIf(auth === undefined)(`/v1/me (e2e, local Supabase${auth ? '' : ':
     const after = await get(user);
     expect(after.body).toEqual(res.body);
     expect(after.headers.etag).toBe(res.headers.etag);
+    // Both bodies are exactly what the OpenAPI contract describes, no field more.
+    for (const body of [before.body, res.body]) expect(Me.strict().parse(body)).toEqual(body);
   });
 
   it('keeps the first onboarding time and clears fields with null', async () => {
@@ -94,7 +97,8 @@ describe.skipIf(auth === undefined)(`/v1/me (e2e, local Supabase${auth ? '' : ':
     ] as const) {
       const res = await patch(user, { displayName: 'Lost update' }, ifMatch);
       expect(res.status).toBe(status);
-      expect(res.body).toMatchObject({ code });
+      expect(res.headers['content-type']).toContain(PROBLEM_CONTENT_TYPE);
+      expect(Problem.strict().parse(res.body)).toMatchObject({ code });
     }
     expect((await get(user)).body).toEqual(current.body);
   });
@@ -109,7 +113,12 @@ describe.skipIf(auth === undefined)(`/v1/me (e2e, local Supabase${auth ? '' : ':
     const conditional = await get(second).set('if-none-match', firstTag);
     expect(conditional.status).toBe(200);
     expect(conditional.body).toMatchObject({ id: second.userId });
-    expect((await get(first).set('if-none-match', firstTag)).status).toBe(304);
+    const notModified = await get(first).set('if-none-match', firstTag);
+    expect(notModified.status).toBe(304);
+    // Bodyless, with the strong tag and no-store the spec documents for the 304.
+    expect(notModified.text).toBe('');
+    expect(notModified.headers.etag).toBe(firstTag);
+    expect(notModified.headers['cache-control']).toBe('no-store');
     const res = await patch(second, { displayName: 'Wrong account' }, firstTag);
     expect(res.status).toBe(412);
     expect((await get(second)).body).toEqual(secondRes.body);

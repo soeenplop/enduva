@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "swc src -d dist --strip-leading-paths --delete-dir-on-start --config-file node_modules/@enduva/config/swc/nest.json",
+    "generate": "node scripts/generate-openapi.mjs",
     "dev": "pnpm --filter @enduva/api^... build && pnpm build && (swc src -d dist --strip-leading-paths --config-file node_modules/@enduva/config/swc/nest.json --watch & node --watch --enable-source-maps --env-file-if-exists=.env dist/main.js)",
     "start": "node --enable-source-maps dist/main.js",
     "start:worker": "node --enable-source-maps dist/worker.js",
@@ -14,6 +15,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@enduva/contracts": "workspace:*",
     "@enduva/db": "workspace:*",
     "@nestjs/common": "12.6.3",
     "@nestjs/core": "12.6.3",

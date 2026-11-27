@@ -1,0 +1,700 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Enduva API",
+    "version": "1",
+    "description": "Generated from the Zod contracts in `@enduva/contracts`. Do not edit `openapi.json` by hand."
+  },
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "paths": {
+    "/v1/health": {
+      "get": {
+        "operationId": "getHealth",
+        "summary": "Liveness",
+        "security": [],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "description": "ETag of a cached copy",
+              "type": "string"
+            },
+            "description": "ETag of a cached copy"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The process serves requests",
+            "headers": {
+              "ETag": {
+                "description": "Weak entity tag of the body. Opaque",
+                "schema": {
+                  "description": "Weak entity tag of the body. Opaque",
+                  "example": "W/\"f-VaSQ4oDUiZblZNAEkkN+sX+q3Sg\"",
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "Always `no-store`",
+                "schema": {
+                  "description": "Always `no-store`",
+                  "example": "no-store",
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthStatus"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "The cached copy named by `If-None-Match` is current. No body",
+            "headers": {
+              "ETag": {
+                "description": "Weak entity tag of the body. Opaque",
+                "schema": {
+                  "description": "Weak entity tag of the body. Opaque",
+                  "example": "W/\"f-VaSQ4oDUiZblZNAEkkN+sX+q3Sg\"",
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "Always `no-store`",
+                "schema": {
+                  "description": "Always `no-store`",
+                  "example": "no-store",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "description": "Seconds to wait",
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds to wait"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/health/ready": {
+      "get": {
+        "operationId": "getReadiness",
+        "summary": "Readiness: the database is reachable",
+        "security": [],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "description": "ETag of a cached copy",
+              "type": "string"
+            },
+            "description": "ETag of a cached copy"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ready",
+            "headers": {
+              "ETag": {
+                "description": "Weak entity tag of the body. Opaque",
+                "schema": {
+                  "description": "Weak entity tag of the body. Opaque",
+                  "example": "W/\"f-VaSQ4oDUiZblZNAEkkN+sX+q3Sg\"",
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "Always `no-store`",
+                "schema": {
+                  "description": "Always `no-store`",
+                  "example": "no-store",
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthStatus"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "The cached copy named by `If-None-Match` is current. No body",
+            "headers": {
+              "ETag": {
+                "description": "Weak entity tag of the body. Opaque",
+                "schema": {
+                  "description": "Weak entity tag of the body. Opaque",
+                  "example": "W/\"f-VaSQ4oDUiZblZNAEkkN+sX+q3Sg\"",
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "Always `no-store`",
+                "schema": {
+                  "description": "Always `no-store`",
+                  "example": "no-store",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "description": "Seconds to wait",
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds to wait"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`database_unavailable`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/me": {
+      "get": {
+        "operationId": "getMe",
+        "summary": "The signed-in user's profile",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "description": "ETag of a cached copy",
+              "type": "string"
+            },
+            "description": "ETag of a cached copy"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The profile",
+            "headers": {
+              "ETag": {
+                "required": true,
+                "description": "Strong entity tag of the returned version. Opaque: send it back unchanged, never parse it.",
+                "schema": {
+                  "type": "string",
+                  "description": "Strong entity tag of the returned version. Opaque: send it back unchanged, never parse it.",
+                  "example": "\"3-Yk1oQ2J4dE9wN3F1cjVzVg\""
+                }
+              },
+              "Cache-Control": {
+                "description": "Always `no-store`",
+                "schema": {
+                  "description": "Always `no-store`",
+                  "example": "no-store",
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "The cached copy named by `If-None-Match` is current. No body",
+            "headers": {
+              "ETag": {
+                "required": true,
+                "description": "Strong entity tag of the returned version. Opaque: send it back unchanged, never parse it.",
+                "schema": {
+                  "type": "string",
+                  "description": "Strong entity tag of the returned version. Opaque: send it back unchanged, never parse it.",
+                  "example": "\"3-Yk1oQ2J4dE9wN3F1cjVzVg\""
+                }
+              },
+              "Cache-Control": {
+                "description": "Always `no-store`",
+                "schema": {
+                  "description": "Always `no-store`",
+                  "example": "no-store",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: missing, invalid or revoked token or session. `device_revoked`: wipe local data",
+            "headers": {
+              "WWW-Authenticate": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "Bearer"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "description": "Seconds to wait",
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds to wait"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`database_unavailable` or `auth_unavailable`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other error, e.g. `internal_error`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateMe",
+        "summary": "Update the user-editable profile fields",
+        "description": "JSON merge semantics: a missing field stays, `null` clears it. Needs the current ETag from `GET` in `If-Match`.",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "If-Match",
+            "schema": {
+              "type": "string",
+              "description": "Exactly one strong ETag: the current one. No `*`, no list"
+            },
+            "required": true,
+            "description": "Exactly one strong ETag: the current one. No `*`, no list"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MeUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated profile",
+            "headers": {
+              "ETag": {
+                "required": true,
+                "description": "Strong entity tag of the returned version. Opaque: send it back unchanged, never parse it.",
+                "schema": {
+                  "type": "string",
+                  "description": "Strong entity tag of the returned version. Opaque: send it back unchanged, never parse it.",
+                  "example": "\"3-Yk1oQ2J4dE9wN3F1cjVzVg\""
+                }
+              },
+              "Cache-Control": {
+                "description": "Always `no-store`",
+                "schema": {
+                  "description": "Always `no-store`",
+                  "example": "no-store",
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`bad_request`: the body is invalid. Echoes no input",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: missing, invalid or revoked token or session. `device_revoked`: wipe local data",
+            "headers": {
+              "WWW-Authenticate": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "Bearer"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "`precondition_failed`: `If-Match` is outdated or not a single strong tag of this user",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "`precondition_required`: `If-Match` is missing",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "description": "Seconds to wait",
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds to wait"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`database_unavailable` or `auth_unavailable`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other error, e.g. `internal_error`",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "MeUpdate": {
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Trimmed first (leading and trailing white space); then 1 to 100 characters, no control characters",
+            "pattern": "\\S"
+          },
+          "birthDate": {
+            "format": "date",
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "sex": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "female",
+              "male",
+              null
+            ]
+          },
+          "heightCm": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 50,
+            "maximum": 300
+          },
+          "locale": {
+            "type": "string",
+            "enum": [
+              "de",
+              "en"
+            ]
+          },
+          "timeZone": {
+            "description": "IANA time zone (`Area/Location` in any letter case, or `UTC`); stored as ICU's canonical ID",
+            "example": "Europe/Berlin",
+            "type": "string",
+            "maxLength": 64
+          },
+          "onboardingCompleted": {
+            "type": "boolean",
+            "const": true
+          }
+        },
+        "additionalProperties": false,
+        "minProperties": 1
+      },
+      "HealthStatus": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "Problem": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "`about:blank`: `title` is the status phrase and `code` tells errors apart"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer",
+            "minimum": 400,
+            "maximum": 599
+          },
+          "code": {
+            "type": "string",
+            "description": "Stable error code: bad_request, unauthorized, device_revoked, forbidden, not_found, method_not_allowed, precondition_failed, payload_too_large, unsupported_media_type, precondition_required, rate_limited, internal_error, database_unavailable, auth_unavailable"
+          },
+          "detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code"
+        ]
+      },
+      "Me": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "displayName": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "birthDate": {
+            "format": "date",
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "sex": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "female",
+              "male",
+              null
+            ]
+          },
+          "heightCm": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 50,
+            "maximum": 300
+          },
+          "locale": {
+            "type": "string",
+            "enum": [
+              "de",
+              "en"
+            ]
+          },
+          "timeZone": {
+            "type": "string",
+            "description": "IANA time zone, as ICU's canonical ID"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "user",
+              "admin"
+            ]
+          },
+          "onboardingCompletedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "version": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "id",
+          "displayName",
+          "birthDate",
+          "sex",
+          "heightCm",
+          "locale",
+          "timeZone",
+          "role",
+          "onboardingCompletedAt",
+          "version"
+        ]
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Supabase access token"
+      }
+    }
+  }
+}

@@ -5,6 +5,10 @@
     "generate": {
       "outputs": ["src/routeTree.gen.ts", "src/paraglide/**"]
     },
+    "@enduva/api#generate": {
+      "dependsOn": ["^build"],
+      "outputs": ["openapi.json"]
+    },
     "build": {
       "dependsOn": ["^build", "generate"],
       "outputs": ["dist/**"]

@@ -1,6 +1,7 @@
+import { Problem } from '@enduva/contracts';
 import { describe, expect, it } from 'vitest';
 
-import { codeForStatus, problem, ProblemException } from '../src/problem/problem.js';
+import { codeForStatus, problem, ProblemException, problemStatus } from '../src/problem/problem.js';
 
 describe('problem details', () => {
   it('builds an RFC 9457 body with the status phrase as title', () => {
@@ -22,5 +23,12 @@ describe('problem details', () => {
     expect(codeForStatus(503)).toBe('database_unavailable');
     expect(codeForStatus(406)).toBe('bad_request');
     expect(codeForStatus(502)).toBe('internal_error');
+  });
+
+  it('builds bodies the OpenAPI contract describes, for every code', () => {
+    for (const code of Object.keys(problemStatus) as (keyof typeof problemStatus)[]) {
+      expect(Problem.strict().parse(problem(code))).toEqual(problem(code));
+      expect(Problem.strict().parse(problem(code, 400, 'why'))).toEqual(problem(code, 400, 'why'));
+    }
   });
 });
