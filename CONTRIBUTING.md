@@ -9,7 +9,15 @@ Enduva is **source-available** under the [Elastic License 2.0](LICENSE) (ELv2). 
 Because ELv2 alone wouldn't let the maintainer run contributed code as the hosted Enduva service or relicense it, **every external contributor must sign the [Contributor License Agreement](CLA.md)** before a pull request can be merged. The CLA lets the maintainer use, relicense (including commercially) and host your contributions; you keep the copyright.
 
 > [!IMPORTANT]
-> **External contributions can't be merged yet.** The CLA is still a draft awaiting legal review and the maintainer's approval, and there is no CLA check yet. Automated enforcement (signing on the pull request, verified per GitHub account and bound to the CLA version) arrives with roadmap task 0.5. Until then, please don't sign anything; you're welcome to open issues.
+> **External contributions can't be merged yet.** The CLA is still a draft awaiting legal review and the maintainer's approval. Until it is final, please don't sign anything; you're welcome to open issues.
+
+### Interim CLA gate
+
+Until the CLA is final, the required `cla` check on every pull request is an **interim gate**. It passes only if the pull request was opened from this repository by the maintainer or one of the listed bots (Renovate, GitHub Actions), and every commit has a signature verified by GitHub and an author and committer linked to one of those GitHub accounts (GitHub's `web-flow` is also accepted as committer). Accounts are matched by GitHub account ID, never by name or email, and a commit whose author isn't linked to a GitHub account fails. Because a check result belongs to a commit, not to a pull request, the gate also fails while any other open pull request with the same head commit doesn't meet these rules. Pull requests from anyone else fail the check and can't be merged.
+
+**Maintainer note:** the gate runs on `pull_request` for pull requests into `main` (`pull_request_target` is blocked by default in public repositories from 2026-12-02), so it runs the workflow file of the pull request itself. That is safe only because of who can trigger a run: branches in this repository can only be pushed by the maintainer and the listed bots, and the repository's Actions setting requires approval for workflows from **all external contributors** (set 2026-11-27). Fork workflows are never approved while the interim gate is active, so a fork pull request never gets a `cla` result and stays blocked by the missing required check, even if its own workflow defines a job named `cla`. Until CLA.1, every merge also checks the exact pull request: head repository `soeenplop/enduva`, base `main`, opener the maintainer or a listed bot (`gh pr view <n> --json headRepository,baseRefName,author`), and the reviewed head is pinned with `gh pr merge --match-head-commit`.
+
+Once the CLA is final, the gate is replaced by the full signature check (signing on the pull request, verified per GitHub account and bound to the CLA version, roadmap task CLA.1). Its implementation is kept on branch `ci/0.5b-cla-check` ([#112](https://github.com/soeenplop/enduva/pull/112)) for reactivation.
 
 ## Before you start
 
