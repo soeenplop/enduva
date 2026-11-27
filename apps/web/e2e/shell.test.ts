@@ -1,58 +1,22 @@
 // Smoke test of the production build in Chromium (`vite preview` serves dist/). The API is deliberately unreachable,
 // so /status must render "down" instead of failing.
-import { type ChildProcess, spawn } from 'node:child_process';
-import { once } from 'node:events';
-import { createServer } from 'node:http';
-import type { AddressInfo } from 'node:net';
-import { setTimeout as delay } from 'node:timers/promises';
 import { type Browser, chromium, type Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { startPreview } from './preview';
 
 let origin = '';
-let preview: ChildProcess;
+let stopPreview = () => {};
 let browser: Browser;
 
-/** A port that was free a moment ago, so no other server (another build, another run) answers on it. */
-async function freePort() {
-  const probe = createServer().listen(0, '127.0.0.1');
-  await once(probe, 'listening');
-  const { port } = probe.address() as AddressInfo;
-  probe.close();
-  await once(probe, 'close');
-  return port;
-}
-
 beforeAll(async () => {
-  const port = await freePort();
-  origin = `http://127.0.0.1:${port}`;
-  preview = spawn(
-    'node_modules/.bin/vite',
-    ['preview', '--host', '127.0.0.1', '--port', String(port), '--strictPort'],
-    {
-      cwd: new URL('..', import.meta.url),
-      // Port 9 (discard) refuses connections: the API is down.
-      env: { ...process.env, ENDUVA_API_URL: 'http://127.0.0.1:9' },
-      stdio: 'inherit',
-    },
-  );
-  let exit: number | null | undefined;
-  preview.on('exit', (code) => (exit = code));
-  for (let attempt = 0, ready = false; !ready; attempt++) {
-    // Fail instead of testing whatever else might answer if our server died (for example, port taken after all).
-    if (exit !== undefined) throw new Error(`vite preview exited with code ${String(exit)}`);
-    if (attempt === 150) throw new Error(`vite preview did not answer on ${origin} within 30 s`);
-    ready = await fetch(origin).then(
-      (r) => r.ok,
-      () => false,
-    );
-    if (!ready) await delay(200);
-  }
+  // Port 9 (discard) refuses connections: the API is down.
+  ({ origin, stop: stopPreview } = await startPreview({ ENDUVA_API_URL: 'http://127.0.0.1:9' }));
   browser = await chromium.launch();
 });
 
 afterAll(async () => {
   await browser?.close();
-  preview?.kill();
+  stopPreview();
 });
 
 /** A page whose uncaught errors (hydration errors included) fail the test. */

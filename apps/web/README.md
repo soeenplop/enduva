@@ -68,10 +68,11 @@ router-context field, a loader-data field that doesn't exist and a misspelled fi
 ## E2E
 
 [`e2e/shell.test.ts`](e2e/shell.test.ts) drives Chromium with [`playwright-core`](https://playwright.dev/docs/library)
-(exact pin) from Vitest: the language switch (cookie, reload, `<html lang>`), hydration in the
-server's locale when the browser prefers another one, client-side navigation to `/status` with
-the API down, the localized 404 and 320 px reflow in light and dark. Uncaught page errors, hydration errors included,
-fail a test. The landing page's reflow check lives in [`apps/landing/e2e`](../landing/e2e).
+(exact pin) from Vitest: the language switch (cookie, reload, `<html lang>`), hydration in the server's locale when the
+browser prefers another one, client-side navigation to `/status` with the API down, the localized 404 and 320 px
+reflow in light and dark. Uncaught page errors, hydration errors included, fail a test.
+[`e2e/preview.ts`](e2e/preview.ts) starts `vite preview` on port 0 and uses the address its own process reports, so the
+tests can never reach another server. The landing page's reflow check lives in [`apps/landing/e2e`](../landing/e2e).
 
 We use the library, not `@playwright/test`: its runner (`playwright`) bundles a Babel TypeScript loader for test
 files, and `playwright-core` contains neither a loader nor TypeScript compiler code. Vitest transforms the tests with
