@@ -2,7 +2,7 @@
 //
 // - Exactly the expected HTML files: every page under each locale prefix plus the picker at `/`,
 //   and no unprefixed duplicate such as dist/client/imprint/index.html.
-// - Each page: the opening <html> tag's own `lang`, the translated heading, a canonical URL,
+// - Each page: the <html> element's `lang`, the translated heading, a canonical URL,
 //   hreflang alternates for every locale plus x-default, Open Graph / Twitter tags, links to the
 //   page in the other locale, the ELv2 note with the repository link, and internal links that all
 //   carry a locale prefix.
@@ -16,6 +16,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runInNewContext } from 'node:vm';
+import { parse } from 'parse5';
 import { pagePaths, pageUrl, repositoryUrl, siteOrigin, xDefaultUrl } from '../site.mjs';
 import { brandFiles } from './static-pages.mjs';
 
@@ -33,44 +34,35 @@ const expectedPages = {
 };
 const ogLocales = { de: 'de_DE', en: 'en_US' };
 
-/** Strips tags (until none are left) and decodes the entities React emits: the text a page shows. */
-function stripTags(text) {
-  let previous;
-  do {
-    previous = text;
-    text = text.replace(/<[^>]*>/g, '');
-  } while (text !== previous);
-  return text;
+// Every check reads the page through parse5, a spec-compliant HTML parser, so it sees the same
+// elements, attributes and text a browser does (no regex over markup).
+
+/** Every node below `node`, depth-first, including the contents of `<template>`. */
+function* descendants(node) {
+  for (const child of [...(node.childNodes ?? []), ...(node.content ? [node.content] : [])]) {
+    yield child;
+    yield* descendants(child);
+  }
 }
 
-const decode = (text) =>
-  stripTags(text)
-    .replace(/&#x27;|&#39;/g, "'")
-    .replace(/&quot;/g, '"')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&amp;/g, '&');
+const elements = (document, tagName) => [...descendants(document)].filter((node) => node.tagName === tagName);
 
-/** The attributes (lower-cased names) of every opening `<name …>` tag. */
-function tags(html, name) {
-  return [...html.matchAll(new RegExp(`<${name}(\\s[^>]*)?>`, 'gi'))].map(([, attrs = '']) => {
-    const parsed = [...attrs.matchAll(/\s([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g)];
-    return parsed.map(([, key, a, b, c]) => [key.toLowerCase(), decode(a ?? b ?? c ?? '')]);
-  });
-}
+/** An attribute value; parse5, like a browser, keeps only the first of duplicate attributes. */
+const attr = (element, name) => element.attrs.find((a) => a.name === name)?.value;
 
-const attr = (tag, key) => {
-  const values = tag.filter(([k]) => k === key);
-  return values.length === 1 ? values[0][1] : undefined;
-};
-const metas = (html, key, value) => tags(html, 'meta').filter((tag) => attr(tag, key) === value);
-const content = (html, key, value) => metas(html, key, value).map((tag) => attr(tag, 'content'));
+/** The decoded text below a node. */
+const text = (node) => [...descendants(node)].map((child) => (child.nodeName === '#text' ? child.value : '')).join('');
+
+const content = (document, key, value) =>
+  elements(document, 'meta')
+    .filter((meta) => attr(meta, key) === value)
+    .map((meta) => attr(meta, 'content'));
 
 /** `hreflang` alternates: one per locale plus `x-default`, all absolute, nothing else. */
 function checkAlternates(links, path, fail) {
   const alternates = links
-    .filter((tag) => attr(tag, 'rel') === 'alternate')
-    .map((tag) => `${attr(tag, 'hreflang')} ${attr(tag, 'href')}`)
+    .filter((link) => attr(link, 'rel') === 'alternate')
+    .map((link) => `${attr(link, 'hreflang')} ${attr(link, 'href')}`)
     .sort();
   const want = [...locales.map((other) => `${other} ${pageUrl(path, other)}`), `x-default ${xDefaultUrl(path)}`].sort();
   if (alternates.join('|') !== want.join('|'))
@@ -83,28 +75,27 @@ function checkPage(outDir, path, locale, failures) {
   const label = relative(process.cwd(), file);
   const fail = (message) => failures.push(`${label}: ${message}`);
   if (!existsSync(file)) return fail('missing');
-  const html = readFileSync(file, 'utf8');
+  const document = parse(readFileSync(file, 'utf8'));
   const before = failures.length;
 
-  const htmlTags = tags(html, 'html');
-  const lang = htmlTags.length === 1 ? attr(htmlTags[0], 'lang') : undefined;
-  if (lang !== locale) fail(`expected <html lang="${locale}">, got ${lang ?? 'no single lang attribute'}`);
+  const lang = attr(elements(document, 'html')[0], 'lang');
+  if (lang !== locale) fail(`expected <html lang="${locale}">, got ${lang ?? 'no lang attribute'}`);
 
   const heading = expectedPages[path].heading(locale);
-  const h1 = [...html.matchAll(/<h1(?:\s[^>]*)?>(.*?)<\/h1>/gs)].map(([, text]) => decode(text));
+  const h1 = elements(document, 'h1').map(text);
   if (h1.length !== 1 || h1[0] !== heading) fail(`expected one <h1> "${heading}", got ${JSON.stringify(h1)}`);
   const task = expectedPages[path].task;
-  if (task && !decode(html).includes(m.placeholder_notice({ task }, { locale })))
+  if (task && !text(document).includes(m.placeholder_notice({ task }, { locale })))
     fail(`placeholder notice for ${task} missing`);
 
   const url = pageUrl(path, locale);
-  const links = tags(html, 'link');
-  const canonical = links.filter((tag) => attr(tag, 'rel') === 'canonical').map((tag) => attr(tag, 'href'));
+  const links = elements(document, 'link');
+  const canonical = links.filter((link) => attr(link, 'rel') === 'canonical').map((link) => attr(link, 'href'));
   if (canonical.length !== 1 || canonical[0] !== url) fail(`expected canonical ${url}, got ${canonical.join(', ')}`);
   checkAlternates(links, path, fail);
 
-  const title = [...html.matchAll(/<title>(.*?)<\/title>/gs)].map(([, text]) => decode(text));
-  const description = content(html, 'name', 'description');
+  const title = elements(document, 'title').map(text);
+  const description = content(document, 'name', 'description');
   if (title.length !== 1 || !title[0]) fail('expected one non-empty <title>');
   if (description.length !== 1 || !description[0]) fail('expected one non-empty meta description');
   const og = {
@@ -115,23 +106,23 @@ function checkPage(outDir, path, locale, failures) {
     'og:locale': ogLocales[locale],
   };
   for (const [property, value] of Object.entries(og)) {
-    const got = content(html, 'property', property);
+    const got = content(document, 'property', property);
     if (got.length !== 1 || got[0] !== value) fail(`expected ${property} "${value}", got ${JSON.stringify(got)}`);
   }
   for (const [name, value] of Object.entries({
     'twitter:card': 'summary_large_image',
     'twitter:image': og['og:image'],
   })) {
-    const got = content(html, 'name', name);
+    const got = content(document, 'name', name);
     if (got.length !== 1 || got[0] !== value) fail(`expected ${name} "${value}", got ${JSON.stringify(got)}`);
   }
 
-  const anchors = tags(html, 'a').map((tag) => attr(tag, 'href') ?? '');
+  const anchors = elements(document, 'a').map((a) => attr(a, 'href') ?? '');
   for (const other of locales.filter((l) => l !== locale)) {
     const otherHref = localizeHref(path, { locale: other });
     if (!anchors.includes(otherHref)) fail(`link to ${otherHref} missing`);
   }
-  if (!anchors.includes(repositoryUrl) || !decode(html).includes(m.footer_licence({}, { locale })))
+  if (!anchors.includes(repositoryUrl) || !text(document).includes(m.footer_licence({}, { locale })))
     fail(`ELv2 licence note with a link to ${repositoryUrl} missing`);
   const unprefixed = anchors.filter(
     (href) => href.startsWith('/') && !locales.some((l) => href.startsWith(localizeHref('/', { locale: l }))),
@@ -145,19 +136,21 @@ function checkPicker(outDir, failures) {
   const file = join(outDir, 'index.html');
   const fail = (message) => failures.push(`${relative(process.cwd(), file)}: ${message}`);
   if (!existsSync(file)) return fail('missing (the language picker at /)');
-  const html = readFileSync(file, 'utf8');
+  const document = parse(readFileSync(file, 'utf8'));
   const before = failures.length;
-  const links = tags(html, 'link');
-  const canonical = links.filter((tag) => attr(tag, 'rel') === 'canonical').map((tag) => attr(tag, 'href'));
+  const links = elements(document, 'link');
+  const canonical = links.filter((link) => attr(link, 'rel') === 'canonical').map((link) => attr(link, 'href'));
   if (canonical.join() !== `${siteOrigin}/`) fail(`expected canonical ${siteOrigin}/, got ${canonical.join(', ')}`);
   checkAlternates(links, '/', fail);
-  const anchors = tags(html, 'a').map((tag) => attr(tag, 'href'));
+  const anchors = elements(document, 'a').map((a) => attr(a, 'href'));
   for (const locale of locales) {
     const home = localizeHref('/', { locale });
     if (!anchors.includes(home)) fail(`link to ${home} missing`);
   }
-  const scripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script\s*>/gi)].map(([, code]) => code);
-  if (scripts.length !== 1) return fail(`expected one inline redirect script, got ${scripts.length}`);
+  const scripts = elements(document, 'script');
+  if (scripts.length !== 1 || attr(scripts[0], 'src') !== undefined)
+    return fail(`expected one inline redirect script, got ${scripts.length} script elements`);
+  const redirect = text(scripts[0]);
   const cases = [
     [['de-AT', 'en'], 'de'],
     [['de'], 'de'],
@@ -168,7 +161,7 @@ function checkPicker(outDir, failures) {
   ];
   for (const [languages, locale] of cases) {
     let target;
-    runInNewContext(scripts[0], {
+    runInNewContext(redirect, {
       navigator: { languages, language: languages[0] },
       location: { replace: (url) => (target = url) },
     });
