@@ -160,6 +160,16 @@ Task 0.4 ([PR #101](https://github.com/soeenplop/enduva/pull/101)) built the roo
 - **CI.** [`ci.yml`](../../.github/workflows/ci.yml) runs a frozen root install, `pnpm format:check` and `pnpm audit:ts` on every PR. 0.5 adds build, lint, typecheck and test and makes these checks required.
 - **Route generation and negative tests stay in the spike.** The real workspace has no route tree and no app yet. `tsr.config.json` with Start's footer, the route-tree identity check and the web/landing negative fixtures (criterion 4) move with `apps/web` (0.9a) and `apps/landing` (0.10), and the API fixtures (criteria 1, 2, 5) move with `apps/api` (0.8a). 0.5 adds the negative-test runner to the root CI so that each of these tasks only adds its fixtures. `spike-ts7.yml` keeps running them until 0.9a and 0.10 have taken them over. The apps copy the configs and fixtures from the spike, and the spike is deleted in the PR that completes that handoff (see Consequences).
 
+## Handoff in 0.5
+
+Task 0.5a ([#7](https://github.com/soeenplop/enduva/issues/7)) made the root checks required:
+
+- **Required checks.** [`ci.yml`](../../.github/workflows/ci.yml) runs `build-typecheck-lint-test` (`pnpm turbo build typecheck lint test`), `format`, `ts7-audits` (`pnpm audit:ts`), `negative-tests` and `gitleaks`; [`commitlint.yml`](../../.github/workflows/commitlint.yml) runs `commitlint` on the PR title and every commit. The [`main` ruleset](../../.github/rulesets/main.json) requires all six on the latest commit.
+- **`pnpm why typescript`** is now a gate, not just a printout: [`tools/audit-why-typescript.mjs`](../../tools/audit-why-typescript.mjs) fails on any `typescript` < 7 in the resolved graph.
+- **Negative-test runner.** [`tools/negative-tests.mjs`](../../tools/negative-tests.mjs) (`pnpm test:negative`) is the spike's script, generalised to every workspace package with a `negative/` directory. [`packages/domain/negative/`](../../packages/domain/negative) holds one type and one lint fixture so the runner always has work; 0.8a, 0.9a and 0.10 add the app fixtures from the spike.
+- **Spike.** Its lockfile audit checks only its own lockfile now, and `spike-ts7.yml` no longer runs on root lockfile changes.
+- **CodeQL is not enabled yet.** Its JavaScript/TypeScript extractor (CodeQL CLI 2.27.6) runs its own bundled TypeScript 5.9.2, calling `ts.createProgram` per file (`noResolve`, no type checker) to parse our code. It is a standalone analysis tool outside our build toolchain, so it is a TS < 7 exception for the lead to decide (W13); the finding and options are in the 0.5a PR.
+
 ## Consequences
 
 - 0.4 can scaffold the monorepo with the stack above. Copy `tsconfig.base.json`, `.swcrc`, `.oxlintrc.json`, `.oxfmtrc.json`, `tsr.config.json` (with the footer), the negative-test script, both audit scripts and the bundled-TS allowlist into `packages/config` / CI. 0.4 copied the presets, `.oxfmtrc.json`, both audit scripts and the allowlist; `tsr.config.json` and the negative-test script move with the apps ([Handoff in 0.4](#handoff-in-04)). Use Node 24 in CI and pin `@types/node` (plus an `overrides` entry) to the same major as the minimum supported or deployed Node.
