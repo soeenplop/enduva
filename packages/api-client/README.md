@@ -19,5 +19,13 @@ else if (res.status === 401 && res.data.code === 'device_revoked') wipeLocalData
 Every call goes through the mutator [`src/fetcher.ts`](src/fetcher.ts), which takes everything per call (base URL,
 the user's access token as `Authorization: Bearer …`, an optional `fetch`) and keeps nothing in module state, so one
 SSR process can serve several users at once. Errors are not thrown: the result is `{ data, status, headers }`, and
-`status` narrows `data` to the documented body (a `Problem` for every error). Only network failures and a call
-without `baseUrl` throw.
+`status` narrows `data` to the documented body, which it always is:
+
+- `304` and `204` have no body.
+- Every other status from 300 up carries a `Problem`. If the response has no problem body (a proxy's HTML page,
+  malformed JSON), the client makes one up with `code: UNEXPECTED_RESPONSE` (`'unexpected_response'`, never sent by
+  the API) and the response's status, so `res.data.code` is always readable.
+- Other success statuses carry their parsed JSON body (not validated against the schema). Without one, the call
+  rejects with `ApiResponseError` (status only, no body).
+
+So a call throws only on network failures, without `baseUrl`, and with `ApiResponseError`.

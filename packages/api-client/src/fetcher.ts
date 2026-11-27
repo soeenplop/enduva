@@ -15,9 +15,60 @@ export interface ApiRequestInit extends RequestInit {
 const JSON_TYPES = /^application\/(?:problem\+)?json(?:;|$)/i;
 
 /**
+ * The `code` of the problem this client makes up when an error response carries no problem body (a proxy's HTML 502,
+ * a truncated body). The API never sends it.
+ */
+export const UNEXPECTED_RESPONSE = 'unexpected_response';
+
+/** A success response without the JSON body its generated type promises. Holds no part of the body. */
+export class ApiResponseError extends Error {
+  override readonly name = 'ApiResponseError';
+
+  constructor(readonly status: number) {
+    super(`apiFetch: ${status} response without a JSON body`);
+  }
+}
+
+interface ProblemBody {
+  readonly type: string;
+  readonly title: string;
+  readonly status: number;
+  readonly code: string;
+  readonly detail?: string;
+}
+
+const isProblem = (body: unknown): body is ProblemBody => {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) return false;
+  const { type, title, status, code, detail } = body as Record<string, unknown>;
+  return (
+    typeof type === 'string' &&
+    typeof title === 'string' &&
+    typeof code === 'string' &&
+    Number.isInteger(status) &&
+    (detail === undefined || typeof detail === 'string')
+  );
+};
+
+function parseJson(text: string, contentType: string | null): { ok: true; value: unknown } | { ok: false } {
+  if (text === '' || !JSON_TYPES.test(contentType ?? '')) return { ok: false };
+  try {
+    return { ok: true, value: JSON.parse(text) };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/**
  * Orval mutator: every generated call goes through here. Returns `{ data, status, headers }`, which the generated
- * per-status response types discriminate on `status` (errors are `Problem` bodies, not exceptions). Only network
- * failures throw.
+ * per-status response types discriminate on `status`, and `data` always has the type they promise:
+ *
+ * - 304 and 204 have no body (`undefined`).
+ * - Every other status from 300 up carries a `Problem`: the response's problem body, or, if it has none (an HTML page
+ *   from a proxy, malformed JSON), a made-up one with `code: UNEXPECTED_RESPONSE` and the response's status.
+ * - Any other success status carries its parsed JSON body (not validated against the schema). Without one, the call
+ *   rejects with `ApiResponseError`.
+ *
+ * So a call throws only on network failures, without `baseUrl`, and with `ApiResponseError`.
  */
 export async function apiFetch<T>(path: string, init: ApiRequestInit = {}): Promise<T> {
   const { baseUrl, accessToken, fetch: fetchFn = fetch, ...request } = init;
@@ -26,8 +77,15 @@ export async function apiFetch<T>(path: string, init: ApiRequestInit = {}): Prom
   if (accessToken !== undefined) headers.set('Authorization', `Bearer ${accessToken}`);
   const url = new URL(path.replace(/^\//, ''), baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`);
   const res = await fetchFn(url, { ...request, headers });
-  const text = await res.text();
-  const data: unknown =
-    text !== '' && JSON_TYPES.test(res.headers.get('content-type') ?? '') ? JSON.parse(text) : undefined;
-  return { data, status: res.status, headers: res.headers } as T;
+  const { status } = res;
+  const result = (data: unknown) => ({ data, status, headers: res.headers }) as T;
+  if (status === 304 || status === 204) return result(undefined);
+  const body = parseJson(await res.text(), res.headers.get('content-type'));
+  if (status >= 300) {
+    if (body.ok && isProblem(body.value)) return result(body.value);
+    const title = res.statusText === '' ? 'Unexpected response' : res.statusText;
+    return result({ type: 'about:blank', title, status, code: UNEXPECTED_RESPONSE } satisfies ProblemBody);
+  }
+  if (!body.ok) throw new ApiResponseError(status);
+  return result(body.value);
 }

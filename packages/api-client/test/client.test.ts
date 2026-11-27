@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { getHealth, getMe, type Me, updateMe } from '../src/index.js';
+import { ApiResponseError, getHealth, getMe, type Me, UNEXPECTED_RESPONSE, updateMe } from '../src/index.js';
 
 const me: Me = {
   id: '0b5f8f6e-6c1e-4b7a-9d6a-3d1f1f3b2c4a',
@@ -15,13 +15,13 @@ const me: Me = {
   version: 2,
 };
 
-/** A fetch stand-in that records the request and answers with one response. */
-function stub(status: number, body?: unknown, headers: Record<string, string> = {}) {
+/** A fetch stand-in that records the request and answers with one response. A string body is sent as is. */
+function stub(status: number, body?: unknown, headers: Record<string, string> = {}, statusText = '') {
   const calls: Request[] = [];
   const fetch = vi.fn(async (url: URL | RequestInfo, init?: RequestInit) => {
     calls.push(new Request(url, init));
-    const json = body === undefined ? null : JSON.stringify(body);
-    return new Response(json, { status, headers });
+    const text = body === undefined ? null : typeof body === 'string' ? body : JSON.stringify(body);
+    return new Response(text, { status, headers, statusText });
   });
   return { fetch, calls };
 }
@@ -56,12 +56,47 @@ describe('generated client', () => {
     expect(res.data.code).toBe('precondition_failed');
   });
 
-  it('returns no body for a 304 or a non-JSON answer', async () => {
-    const notModified = stub(304);
-    expect((await getMe({}, { baseUrl: 'http://h', fetch: notModified.fetch })).data).toBeUndefined();
-    const html = stub(502, undefined, { 'content-type': 'text/html' });
-    const res = await getHealth({ baseUrl: 'http://h', fetch: html.fetch });
-    expect(res).toMatchObject({ status: 502, data: undefined });
+  it('returns no body for a 304', async () => {
+    const notModified = stub(304, undefined, { etag: '"2-x"' });
+    const res = await getMe({ 'If-None-Match': '"2-x"' }, { baseUrl: 'http://h', fetch: notModified.fetch });
+    expect(res).toMatchObject({ status: 304, data: undefined });
+  });
+
+  it.each([
+    ['an HTML page from a proxy', 502, '<html>Bad Gateway</html>', 'text/html', 'Bad Gateway'],
+    ['malformed problem JSON', 500, '{"type":"about:bl', 'application/problem+json', ''],
+    ['a JSON body that is no problem', 400, '{"error":"nope"}', 'application/json', 'Bad Request'],
+    ['no body', 503, undefined, 'text/plain', ''],
+  ])('makes up a Problem for an error with %s, instead of throwing or returning undefined', async (...args) => {
+    const [, status, body, contentType, statusText] = args;
+    const { fetch } = stub(status, body, { 'content-type': contentType }, statusText);
+    const res = await getHealth({ baseUrl: 'http://h', fetch });
+    if (res.status === 200) throw new Error('unexpected 200');
+    // The generated type promises a Problem for every error status, and it is one.
+    expect(res.data.code).toBe(UNEXPECTED_RESPONSE);
+    expect(res.data).toEqual({
+      type: 'about:blank',
+      title: statusText === '' ? 'Unexpected response' : statusText,
+      status,
+      code: UNEXPECTED_RESPONSE,
+    });
+  });
+
+  it('passes a real problem body through unchanged', async () => {
+    const problem = { type: 'about:blank', title: 'Too Many Requests', status: 429, code: 'rate_limited', detail: 'x' };
+    const { fetch } = stub(429, problem, { 'content-type': 'application/problem+json' });
+    expect((await getHealth({ baseUrl: 'http://h', fetch })).data).toEqual(problem);
+  });
+
+  it.each([
+    ['HTML', '<html>Hi</html>', 'text/html'],
+    ['malformed JSON', '{"status":', 'application/json'],
+    ['an empty body', '', 'application/json'],
+  ])('rejects a success response with %s with ApiResponseError', async (_case, body, contentType) => {
+    const { fetch } = stub(200, body, { 'content-type': contentType });
+    const call = getHealth({ baseUrl: 'http://h', fetch });
+    await expect(call).rejects.toBeInstanceOf(ApiResponseError);
+    await expect(call).rejects.toMatchObject({ status: 200 });
   });
 
   it('refuses a call without baseUrl before any request', async () => {
