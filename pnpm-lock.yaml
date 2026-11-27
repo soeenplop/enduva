@@ -238,6 +238,9 @@ importers:
       drizzle-orm:
         specifier: 0.45.4
         version: 0.45.4(@types/pg@8.23.1)(kysely@0.28.20)(pg@8.23.1)
+      jose:
+        specifier: 6.2.18
+        version: 6.2.18
       nestjs-pino:
         specifier: 5.3.2
         version: 5.3.2(@nestjs/common@12.6.3(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.6.3)(pino-http@11.0.0)(pino@10.4.0)(rxjs@7.8.2)

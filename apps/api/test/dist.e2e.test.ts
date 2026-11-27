@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 import { afterAll, describe, expect, it } from 'vitest';
 
-import { UNREACHABLE_DATABASE_URL } from './support.js';
+import { UNREACHABLE_DATABASE_URL, UNREACHABLE_ISSUER } from './support.js';
 
 // The production build: plain `node` on SWC's output, as in the container (`node dist/main.js`). Turbo builds the
 // package before its tests (turbo.json).
@@ -56,6 +56,7 @@ describe('dist/main.js (SWC build, plain node)', () => {
         PORT: String(port),
         LOG_LEVEL: 'warn',
         DATABASE_URL: UNREACHABLE_DATABASE_URL,
+        AUTH_ISSUER: UNREACHABLE_ISSUER,
       },
       stdio: 'ignore',
     });

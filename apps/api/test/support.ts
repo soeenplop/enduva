@@ -12,8 +12,17 @@ import { type Env, loadEnv } from '../src/config/env.js';
 /** Nothing listens on port 1: the pool fails fast, as with a database that is down. */
 export const UNREACHABLE_DATABASE_URL = 'postgresql://enduva_api_login:unused@127.0.0.1:1/postgres';
 
+/** No Auth server there either: token checks fail with `auth_unavailable` unless a test provides its own keys. */
+export const UNREACHABLE_ISSUER = 'http://127.0.0.1:1/auth/v1';
+
 export function testEnv(overrides: Readonly<Record<string, string>> = {}): Env {
-  return loadEnv({ NODE_ENV: 'test', LOG_LEVEL: 'silent', DATABASE_URL: UNREACHABLE_DATABASE_URL, ...overrides });
+  return loadEnv({
+    NODE_ENV: 'test',
+    LOG_LEVEL: 'silent',
+    DATABASE_URL: UNREACHABLE_DATABASE_URL,
+    AUTH_ISSUER: UNREACHABLE_ISSUER,
+    ...overrides,
+  });
 }
 
 export interface TestAppOptions {
