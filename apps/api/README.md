@@ -45,9 +45,11 @@ process with exit code 1 and a list of the offending variable names (never their
   `err` serializer ([`src/logging/safe-error.ts`](src/logging/safe-error.ts)) never logs messages, causes, stacks
   or other properties, since those can carry request input.
 - **Logging:** pino JSON on stdout. The request logger is the first middleware, ahead of the body parser, so every
-  request gets an ID: a safe incoming `x-request-id` is reused, otherwise one is generated, and it is echoed in the
-  `x-request-id` response header. Request logs hold only ID, method, path (no query string), status and duration:
-  no headers, tokens, bodies, client IPs or health data. Nest's own logs go through the same logger (nestjs-pino).
+  request gets a server-generated ID, echoed in the `x-request-id` response header. An incoming `x-request-id` is
+  ignored: it is client-controlled. Request logs hold only ID, method, the matched route template (e.g.
+  `/v1/items/:id`; `(unmatched)` when the request ended before routing), status and duration: no raw paths or query
+  strings, headers, tokens, bodies, client IPs or health data. Nest's own logs go through the same logger
+  (nestjs-pino).
 - **Throttling:** `@nestjs/throttler`, per client IP on every route, in memory per process. Over the limit: `429`
   `rate_limited` with `Retry-After`. Per-user limits follow with auth (0.8b).
 

@@ -18,6 +18,11 @@ class BoomController {
     throw Object.assign(new Error('message-secret', { cause }), { token: 'prop-secret' });
   }
 
+  @Get('items/:id')
+  item(): { readonly ok: true } {
+    return { ok: true };
+  }
+
   @Post()
   accept(): { readonly ok: true } {
     return { ok: true };
@@ -49,15 +54,12 @@ describe('GET /v1/health (e2e, SWC)', () => {
     expect(res.headers['x-powered-by']).toBeUndefined();
   });
 
-  it('echoes a safe x-request-id and replaces an unsafe one', async () => {
-    const kept = await http(app).get('/v1/health').set('x-request-id', 'trace-abc.123');
-    expect(kept.headers['x-request-id']).toBe('trace-abc.123');
-
-    for (const unsafe of ['a b {"level":60}', 'x'.repeat(129)]) {
-      const replaced = await http(app).get('/v1/health').set('x-request-id', unsafe);
-      expect(replaced.headers['x-request-id']).toMatch(/^[0-9a-f-]{36}$/);
+  it('generates every x-request-id and ignores the client one', async () => {
+    for (const incoming of ['trace-abc.123', '8f14e45f-ceea-467f-a0e6-0b5b6f3a3c1d', 'a b {"level":60}']) {
+      const res = await http(app).get('/v1/health').set('x-request-id', incoming);
+      expect(res.headers['x-request-id']).toMatch(/^[0-9a-f-]{36}$/);
+      expect(res.headers['x-request-id']).not.toBe(incoming);
     }
-
     const generated = await http(app).get('/v1/health');
     expect(generated.headers['x-request-id']).toMatch(/^[0-9a-f-]{36}$/);
   });
@@ -99,21 +101,37 @@ describe('GET /v1/health (e2e, SWC)', () => {
     expect(logs.text()).not.toMatch(/message-secret|cause-secret|cause-prop-secret|prop-secret|"stack"/);
   });
 
-  it('logs requests with their ID but without headers, query strings or bodies', async () => {
-    await http(app)
+  it('logs requests with their ID and route template but without paths, headers, query strings or bodies', async () => {
+    const res = await http(app)
       .post('/v1/boom?token=query-secret')
-      .set('x-request-id', 'log-check')
       .set('authorization', 'Bearer header-secret')
       .set('cookie', 'sb=cookie-secret')
       .send({ heartRate: 'body-secret' });
+    const item = await http(app).get('/v1/boom/items/path-secret');
+    const missing = await http(app).get('/v1/users/unmatched-secret');
+    const malformed = await http(app)
+      .post('/v1/boom/malformed-secret')
+      .set('content-type', 'application/json')
+      .send('{"oops');
 
-    const line = logs.lines().find((l) => (l.req as { id?: string } | undefined)?.id === 'log-check');
-    expect(line).toMatchObject({
-      req: { id: 'log-check', method: 'POST', path: '/v1/boom' },
+    const completion = (id: unknown) => logs.lines().find((l) => l.res !== undefined && reqId(l) === id);
+    expect(completion(res.headers['x-request-id'])).toMatchObject({
+      req: { id: res.headers['x-request-id'], method: 'POST' },
       res: { statusCode: 201 },
+      route: '/v1/boom',
     });
-    expect(Object.keys(line?.req ?? {})).toEqual(['id', 'method', 'path']);
-    expect(logs.text()).not.toMatch(/query-secret|header-secret|cookie-secret|body-secret/);
+    expect(Object.keys(completion(res.headers['x-request-id'])?.req ?? {})).toEqual(['id', 'method']);
+    expect(completion(item.headers['x-request-id'])).toMatchObject({ route: '/v1/boom/items/:id' });
+    // Nest answers unknown paths from its own catch-all route.
+    expect(completion(missing.headers['x-request-id'])).toMatchObject({ route: '/{*splat}', res: { statusCode: 404 } });
+    // The body parser rejects before routing.
+    expect(completion(malformed.headers['x-request-id'])).toMatchObject({
+      route: '(unmatched)',
+      res: { statusCode: 400 },
+    });
+    expect(logs.text()).not.toMatch(
+      /query-secret|header-secret|cookie-secret|body-secret|path-secret|unmatched-secret|malformed-secret/,
+    );
   });
 });
 
