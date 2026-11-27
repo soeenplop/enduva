@@ -37,4 +37,4 @@ Closes #<!-- issue number -->
 - [ ] OpenAPI/client regenerated if the API changed
 - [ ] No secrets, credentials or real personal data committed
 - [ ] Commits follow Conventional Commits and are signed
-- [ ] Owner approval requested if this changes `docs/plan/`, ADRs, licence/CLA or security-relevant config
+- [ ] Owner approval requested **only** if needed under W12: owner-only decisions (legal texts, final CLA, licence, accounts, costs, third-party contracts), gate sign-offs (G1/G2), or the owner asked to review. Plan/ADR changes and TS exceptions (W13) don't need it
