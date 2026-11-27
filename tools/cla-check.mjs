@@ -29,7 +29,7 @@
 // - One complete commit set for the evaluated revisions: the comparison of the PR's base and head
 //   SHAs (immutable), every page read, its count equal to the PR's commit count, the head included.
 // - A commit counts for account X only if GitHub links its author to X and verifies its signature
-//   with X (or GitHub's own web-flow) as committer. A git name
+//   with X as committer, or with GitHub's own web-flow as committer when X opened the PR. A git name
 //   or email alone is never trusted.
 // - Every commit's attribution is checked first. Only then are exemptions (account IDs, per commit)
 //   and signatures applied. The PR opener must be exempt or have signed too.
@@ -222,14 +222,19 @@ export function signedByApprover(commit, approvers) {
 }
 
 /** The account a commit is attributed to, or why it can't be attributed. */
-export function attribute(commit) {
+export function attribute(commit, opener) {
   const { author, committer } = commit;
   if (!Number.isSafeInteger(author?.id)) return { problem: 'its author is not linked to a GitHub account' };
   if (commit.commit?.verification?.verified !== true) {
     return { problem: 'its signature is not verified by GitHub' };
   }
   const account = { account: { id: author.id, login: author.login } };
-  if (committer?.id === author.id || committer?.id === IDS.webFlow) return account;
+  if (committer?.id === author.id) return account;
+  if (committer?.id === IDS.webFlow) {
+    // GitHub signs web and API commits itself; that only shows who was signed in for the PR opener.
+    if (author.id === opener.id) return account;
+    return { problem: 'GitHub signed it (web-flow) for another account than the one that opened the PR' };
+  }
   return { problem: 'it was committed by another account than its author' };
 }
 
@@ -453,7 +458,7 @@ export async function evaluate({ api, repo, pr, policy, sleep }) {
   const problems = [];
   const accounts = new Map();
   for (const commit of commits) {
-    const { account, problem } = attribute(commit);
+    const { account, problem } = attribute(commit, pr.user);
     if (problem) problems.push(`commit ${commit.sha.slice(0, 7)}: ${problem}`);
     else accounts.set(account.id, account);
   }

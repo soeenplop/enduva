@@ -829,6 +829,38 @@ describe('the commit set is bound to immutable revisions', () => {
   });
 });
 
+describe('commit attribution through GitHub (web-flow)', () => {
+  test("a commit GitHub signed counts only for the PR's opener", async () => {
+    const own = fakeGitHub({
+      opener: ALICE,
+      policy: V1_FILES,
+      commits: [commit(0, ALICE, { committer: WEB_FLOW })],
+      comments: [sign(ALICE, V1)],
+    });
+    assert.equal((await settleHead(own)).state, 'success');
+    const foreign = fakeGitHub({
+      opener: BOB,
+      policy: V1_FILES,
+      commits: [commit(0, ALICE, { committer: WEB_FLOW })],
+      comments: [sign(ALICE, V1), sign(BOB, V1)],
+    });
+    const status = await settleHead(foreign);
+    assert.equal(status.state, 'failure');
+    assert.match(status.result.problems[0], /web-flow/);
+    const owner = fakeGitHub({
+      opener: ALICE,
+      policy: V1_FILES,
+      commits: [commit(0, OWNER, { committer: WEB_FLOW })],
+      comments: [sign(ALICE, V1)],
+    });
+    assert.equal(
+      (await settleHead(owner)).state,
+      'failure',
+      'a GitHub-signed commit claiming the exempt owner is not exempt',
+    );
+  });
+});
+
 describe('comment-triggered runs and the status quota', () => {
   test('the workflow starts no runner for comments that are no signing phrase or are from bots', () => {
     const workflow = readFileSync(new URL('../.github/workflows/cla.yml', import.meta.url), 'utf8');
