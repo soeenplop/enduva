@@ -6,6 +6,7 @@ import type { DestinationStream, LevelWithSilent } from 'pino';
 import { type HttpLogger, type Options, pinoHttp } from 'pino-http';
 
 import type { Env } from '../config/env.js';
+import { safeError } from './safe-error.js';
 
 export const REQUEST_ID_HEADER = 'x-request-id';
 
@@ -28,11 +29,14 @@ interface LoggedRequest {
 
 /**
  * Only the request ID, method and path are logged: no headers (tokens, cookies), no query string, no body and no
- * client IP (06-deployment → Logs). Health data must never reach the logs.
+ * client IP (06-deployment → Logs). Health data must never reach the logs. The serializers get the raw objects
+ * (`wrapSerializers: false`), so nothing else is picked up by accident. `err` is serialized the same way for every
+ * log line, including Nest's own (nestjs-pino shares this logger).
  */
 export const serializers = {
   req: ({ id, method, url }: LoggedRequest) => ({ id, method, path: url?.split('?', 1)[0] }),
   res: ({ statusCode }: { readonly statusCode?: number }) => ({ statusCode }),
+  err: safeError,
 };
 
 const level = (_req: IncomingMessage, res: ServerResponse, error?: Error): LevelWithSilent =>
@@ -44,7 +48,13 @@ const level = (_req: IncomingMessage, res: ServerResponse, error?: Error): Level
  * logs JSON to stdout.
  */
 export function createHttpLogger(env: Env, destination?: DestinationStream): HttpLogger {
-  const options: Options = { level: env.LOG_LEVEL, genReqId: requestId, serializers, customLogLevel: level };
+  const options: Options = {
+    level: env.LOG_LEVEL,
+    genReqId: requestId,
+    serializers,
+    wrapSerializers: false,
+    customLogLevel: level,
+  };
   return pinoHttp(options, destination);
 }
 

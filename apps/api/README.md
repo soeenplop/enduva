@@ -41,7 +41,9 @@ process with exit code 1 and a list of the offending variable names (never their
 - **Errors:** every error is RFC 9457 problem details (`application/problem+json`) with `type: about:blank`, the
   status phrase as `title`, `status` and a stable `code` from [`src/problem/problem.ts`](src/problem/problem.ts).
   Throw `ProblemException(code)` for expected errors. Messages of Nest and Express exceptions are not passed on.
-  Unexpected errors become `500` `internal_error`; their message is logged, never sent.
+  Unexpected errors become `500` `internal_error` and are logged with the request ID and their class only: the
+  `err` serializer ([`src/logging/safe-error.ts`](src/logging/safe-error.ts)) never logs messages, causes, stacks
+  or other properties, since those can carry request input.
 - **Logging:** pino JSON on stdout. The request logger is the first middleware, ahead of the body parser, so every
   request gets an ID: a safe incoming `x-request-id` is reused, otherwise one is generated, and it is echoed in the
   `x-request-id` response header. Request logs hold only ID, method, path (no query string), status and duration:

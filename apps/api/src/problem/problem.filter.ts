@@ -13,7 +13,8 @@ function exposedClientStatus(error: unknown): number | undefined {
 /**
  * Answers every error with RFC 9457 problem details (`application/problem+json`) and a stable `code`. Messages of
  * Nest and Express exceptions are not passed on: they can echo request input. Unexpected errors become a bare 500
- * and are logged with the request ID, never sent to the client.
+ * and are logged with the request ID and their class only (the `err` serializer, `safeError`), never sent to the
+ * client.
  */
 @Catch()
 export class ProblemFilter implements ExceptionFilter {
@@ -22,7 +23,7 @@ export class ProblemFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost): void {
     const response = host.switchToHttp().getResponse<Response>();
     const body = this.toProblem(exception);
-    if (body.code === 'internal_error') this.logger.error({ err: exception }, 'unexpected error');
+    if (body.code === 'internal_error') this.logger.error({ err: exception, code: body.code }, 'unexpected error');
     if (response.headersSent) {
       response.end();
       return;

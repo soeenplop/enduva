@@ -8,11 +8,14 @@ import { createTestApp, http, logCapture, testEnv } from './support.js';
 
 const problemType = /^application\/problem\+json/;
 
+const reqId = (line: Record<string, unknown>): unknown => (line.req as { id?: unknown } | undefined)?.id;
+
 @Controller('boom')
 class BoomController {
   @Get()
   fail(): never {
-    throw new Error('internal detail');
+    const cause = Object.assign(new Error('cause-secret'), { password: 'cause-prop-secret' });
+    throw Object.assign(new Error('message-secret', { cause }), { token: 'prop-secret' });
   }
 
   @Post()
@@ -77,8 +80,8 @@ describe('GET /v1/health (e2e, SWC)', () => {
     expect(res.headers['x-request-id']).toBeDefined();
   });
 
-  it('hides unexpected errors behind internal_error and logs them with the request ID', async () => {
-    const res = await http(app).get('/v1/boom').set('x-request-id', 'boom-check');
+  it('hides unexpected errors behind internal_error and logs only their class and the request ID', async () => {
+    const res = await http(app).get('/v1/boom');
     expect(res.status).toBe(500);
     expect(res.body).toEqual({
       type: 'about:blank',
@@ -86,15 +89,14 @@ describe('GET /v1/health (e2e, SWC)', () => {
       status: 500,
       code: 'internal_error',
     });
-    expect(res.text).not.toContain('internal detail');
-    expect(logs.lines()).toContainEqual(
-      expect.objectContaining({
-        level: 50,
-        context: 'ProblemFilter',
-        req: expect.objectContaining({ id: 'boom-check' }) as unknown,
-        err: expect.objectContaining({ message: 'internal detail' }) as unknown,
-      }),
-    );
+    expect(res.text).not.toContain('secret');
+    const id = res.headers['x-request-id'];
+    const filterLine = logs.lines().find((l) => l.context === 'ProblemFilter' && reqId(l) === id);
+    expect(filterLine).toMatchObject({ level: 50, code: 'internal_error', err: { type: 'Error' } });
+    expect(filterLine?.err).toEqual({ type: 'Error' });
+    const completion = logs.lines().find((l) => l.res !== undefined && reqId(l) === id);
+    expect(completion?.err).toEqual({ type: 'Error' });
+    expect(logs.text()).not.toMatch(/message-secret|cause-secret|cause-prop-secret|prop-secret|"stack"/);
   });
 
   it('logs requests with their ID but without headers, query strings or bodies', async () => {
