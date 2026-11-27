@@ -9,7 +9,10 @@
 # and no bypass actors (a bypass for admins would be a bypass for every agent).
 # The `cla` check is a commit status that .github/workflows/cla.yml sets on the PR head.
 #
-# cla-signatures.json: the CLA signature store branch is append-only (no force pushes, no deletion).
+# cla-signatures.json: the CLA signature store branch keeps its history (no force pushes, no
+# deletion). Every writer of the shared account could still append to it, so a record is only a
+# pointer: tools/cla-check.mjs counts it only while the comment it names is an unedited signing
+# comment by that account.
 set -euo pipefail
 
 dir="$(cd "$(dirname "$0")" && pwd)"

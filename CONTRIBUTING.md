@@ -16,20 +16,31 @@ Because ELv2 alone wouldn't let the maintainer run contributed code as the hoste
 The `cla` status check ([`.github/workflows/cla.yml`](.github/workflows/cla.yml), logic in [`tools/cla-check.mjs`](tools/cla-check.mjs)) is required on `main`. Once the CLA is final:
 
 - Every account that authored a commit in your pull request, and the account that opened it, must sign. Exempt are only the maintainer's account and the bots listed in [`.github/cla.json`](.github/cla.json), matched by GitHub account ID for each commit.
-- Commits are attributed by **GitHub account**, not by git name or email: each commit's author must be linked to your account, and the commit must be **signed with your own key** and committed by you, so GitHub shows it as *Verified* (see [Commits](#commits)). Commits that fail this block the check before any signature is looked at.
-- To sign, post the exact comment that the check's prompt on your pull request shows, from your own account. It names the CLA version and the SHA-256 of its text, and the prompt links to that exact text at a fixed commit. The check records your signature (account ID, login, pull request, version, hash, time) on the `cla-signatures` branch and reuses it for later pull requests.
+- Commits are attributed by **GitHub account**, not by git name or email: each commit's author must be linked to your account, and the commit must be **signed with your own key** and committed by you, so GitHub shows it as *Verified* (see [Commits](#commits)). Commits that GitHub signs itself (web edits, the API) count only for the account that opened the pull request. Commits that fail this block the check before any signature is looked at.
+- To sign, post the exact comment that the check's prompt on your pull request shows, from your own account. It names the CLA version and the SHA-256 of its text, and the prompt links to that exact text at a fixed commit. **Edited comments don't count**, so post a new comment instead of fixing an old one. The check records your signature (account ID, login, pull request, version, hash, time and a link to your comment) on the `cla-signatures` branch and reuses it for later pull requests as long as that comment stays unedited; if it is edited or deleted, you sign again.
 - A new CLA version has a new phrase and hash: everyone signs again before further contributions can be merged.
-- If the check can't read your pull request completely (for example more than 250 commits), it fails rather than guess.
-- GitHub attaches the `cla` status to your pull request's **head commit**, so every open pull request to `main` with the same head commit shares it. It turns green only when **all** of them pass. If another account opens a pull request with the same head commit and hasn't signed, yours stays blocked until that account signs or that pull request is closed (also while the CLA is a draft, when only the maintainer can close it).
+- If the check can't read your pull request completely (for example more than 250 commits or 300 changed files), it fails rather than guess. The check runs again on every push, on a new signing comment and once an hour; a maintainer can also re-run it for one pull request (`cla` workflow, *Run workflow*).
+- GitHub attaches the `cla` status to your pull request's **head commit**, so every open pull request to `main` with the same head commit shares it. It turns green only when **all** of them pass, and its description names them. If another account opens a pull request with the same head commit and hasn't signed, yours stays blocked until that account signs or that pull request is closed (also while the CLA is a draft, when only the maintainer can close it).
+- A pull request that changes the CLA check or its policy (the files listed in [`.github/CODEOWNERS`](.github/CODEOWNERS)) fails the check unless its head commit is signed with an **owner approval key** listed in [`.github/cla-approvers`](.github/cla-approvers).
 
 ### Activating the CLA (maintainer only)
 
-Approving the final CLA text is an owner-only decision. Activation is one pull request, merged only with the owner's approval for its exact head SHA, that:
+Approving the final CLA text is an owner-only decision. Activation is one pull request that:
 
-1. replaces `CLA.md` with the approved text, without the draft notice;
-2. sets `.github/cla.json` to `"status": "final"`, `"version"` to the new version (e.g. `"1.0"`) and `"sha256"` to the output of `node tools/cla-check.mjs --hash`.
+1. replaces `CLA.md` with the approved text, without the draft notice, and with exactly one `Version <version>` line;
+2. sets `.github/cla.json` to `"status": "final"`, `"version"` to that version (e.g. `"1.0"`) and `"sha256"` to the output of `node tools/cla-check.mjs --hash`.
 
-The check refuses a final config whose hash doesn't match `CLA.md` or whose text is still marked as a draft. Any later change to `CLA.md` needs a new version and hash. Merging re-evaluates every open pull request; a check that was still running with the previous CLA doesn't post its result (or replaces it with a failure if it already did).
+Because it changes protected files, it can only pass the `cla` check when the owner signs its head commit with an approval key, which is the owner's sign-off for that exact head. The check refuses a final config whose hash doesn't match `CLA.md`, whose version differs from the `Version` line, or whose text is still marked as a draft. Any later change to `CLA.md` needs a new version and hash.
+
+Merging a policy change sets every open pull request whose `cla` status was made with the previous policy to *pending* first, then re-evaluates it. A sweep that is interrupted is finished by the hourly run, and a check that was still running with the previous policy re-evaluates instead of posting its result.
+
+#### Owner approval key (one-time setup, owner only)
+
+All agents work through the owner's GitHub account, so neither approvals nor code-owner reviews can tell the owner from an agent. The approval key can: it is an SSH key that **only the owner holds** (for example in a password manager that asks before each use), never the agents' repository signing key.
+
+1. Create the key and add it to the GitHub account as a **signing key**, so that GitHub shows commits signed with it as *Verified*.
+2. Add it to `.github/cla-approvers` (`owner <key type> <public key>`). This pull request changes a protected file while no key is listed yet, so it can't pass `cla`: merge it before `cla` is a required check, or with the ruleset temporarily disabled by the owner.
+3. To approve a protected change, the owner signs the pull request's head commit with that key, for example `git -c user.signingkey=<key> commit --allow-empty -S -m "chore: approve CLA policy change"`, and pushes it. Any later push needs a new approval.
 
 ## Before you start
 
