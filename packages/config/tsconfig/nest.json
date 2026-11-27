@@ -1,0 +1,8 @@
+{
+  "$comment": "NestJS on SWC (legacy decorators + metadata, see swc/nest.json). Needs `@types/node` in the package.",
+  "extends": "./node.json",
+  "compilerOptions": {
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true
+  }
+}

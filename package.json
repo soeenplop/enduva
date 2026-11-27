@@ -2,17 +2,29 @@
   "name": "enduva",
   "private": true,
   "license": "Elastic-2.0",
+  "type": "module",
   "packageManager": "pnpm@12.21.0",
   "engines": {
     "node": ">=24"
   },
   "scripts": {
     "prepare": "lefthook install",
-    "commitlint": "commitlint"
+    "commitlint": "commitlint",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check .",
+    "audit:lockfile": "node tools/audit-lockfile.mjs --self-test && node tools/audit-lockfile.mjs pnpm-lock.yaml",
+    "audit:bundled-ts": "node tools/audit-bundled-typescript.mjs --self-test && node tools/audit-bundled-typescript.mjs --allowlist tools/ts-bundled-allowlist.json node_modules",
+    "audit:ts": "pnpm audit:lockfile && pnpm audit:bundled-ts && pnpm why typescript -r"
   },
   "devDependencies": {
     "@commitlint/cli": "21.2.4",
     "@commitlint/config-conventional": "21.2.4",
-    "lefthook": "2.2.2"
+    "lefthook": "2.2.2",
+    "oxfmt": "0.80.0",
+    "turbo": "2.11.13"
   }
 }

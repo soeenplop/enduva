@@ -1,0 +1,7 @@
+{
+  "$comment": "Node.js libraries and services (ESM, `module: nodenext`). Needs `@types/node` in the package.",
+  "extends": "./base.json",
+  "compilerOptions": {
+    "types": ["node"]
+  }
+}

@@ -1,0 +1,38 @@
+# Root workspace checks (ADR-0001). Task 0.5 adds build, lint, typecheck and test and makes the
+# checks required; until then this job covers formatting and the TypeScript 7 audits.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  root:
+    name: Root format and TS 7 audits
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # --ignore-scripts skips the root `prepare` (lefthook install), which CI doesn't need.
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Format check (oxfmt)
+        run: pnpm format:check
+      - name: TS 7 audits (lockfile, bundled TypeScript, pnpm why typescript)
+        run: pnpm audit:ts

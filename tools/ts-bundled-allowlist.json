@@ -1,0 +1,16 @@
+{
+  "$comment": "TypeScript < 7 compiler code that third-party tools bundle purely for parsing or formatting, tolerated by the T1 clarification (owner ruling on PR #97). Checked by tools/audit-bundled-typescript.mjs (root workspace; spikes/ts7-toolchain has its own list): every field is required and non-empty; an unlisted copy, or any change of the package version, the detected bundled TypeScript version, the files or their sha256 digests, or the direct consumers in the pnpm graph, fails until this list is updated on purpose. `bundledTypeScript` is exactly what the audit can read from the installed files, no more. The audit cannot check `usage` and `reason`: whoever changes an entry must confirm the use is still parsing/formatting only. Never add a copy that type-checks, provides a language service or emits/transpiles. See ADR-0001.",
+  "entries": [
+    {
+      "package": "oxfmt",
+      "version": "0.80.0",
+      "bundledTypeScript": "6.0",
+      "files": {
+        "dist/typescript-DQUs9PXr.js": "sha256:92d0b8d2a2ba01021ecd183ec44248fb22e98418241910a50aed9bced7dc5935"
+      },
+      "consumers": ["workspace:enduva"],
+      "usage": "Our formatter (`pnpm format` / `pnpm format:check`). The file is a lazy-loaded, re-bundled copy of Prettier 3.10.1's `typescript` parser plugin (its `//#region` comment names `prettier@3.10.1/.../plugins/typescript.mjs`; the audit reads only `6.0` from it), used for the languages oxfmt delegates to Prettier and for its Tailwind class sorter. JS/TS/JSON are formatted by oxfmt's native (Rust) formatter: `format:check` on the spike (ADR-0001) passes with this file removed, so our check does not load it.",
+      "reason": "Ships inside every current oxfmt release; it cannot be dropped as a dependency. Parsing and printing only: no type checking, language service or emit."
+    }
+  ]
+}
