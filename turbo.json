@@ -6,13 +6,19 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },
+    "transit": {
+      "dependsOn": ["^transit"]
+    },
     "typecheck": {
+      "dependsOn": ["transit"],
       "outputs": []
     },
     "lint": {
+      "dependsOn": ["transit"],
       "outputs": []
     },
     "test": {
+      "dependsOn": ["^build", "transit"],
       "outputs": []
     },
     "@enduva/tools#test": {
