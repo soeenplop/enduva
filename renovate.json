@@ -1,0 +1,89 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Dependency updates (task 0.5). Exact pins, weekly, grouped, never automerged: every update PR goes through CI and review like any other PR.",
+  "extends": ["config:recommended", ":pinAllExceptPeerDependencies", "helpers:pinGitHubActionDigests"],
+  "rangeStrategy": "pin",
+  "timezone": "Europe/Berlin",
+  "schedule": ["* 0-5 * * 1"],
+  "automerge": false,
+  "platformAutomerge": false,
+  "labels": ["type:chore", "area:deps"],
+  "semanticCommits": "enabled",
+  "semanticCommitType": "chore",
+  "semanticCommitScope": "deps",
+  "minimumReleaseAge": "3 days",
+  "prConcurrentLimit": 5,
+  "ignorePaths": ["**/node_modules/**", "spikes/**"],
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["* 0-5 1 * *"],
+    "automerge": false
+  },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "gitleaks release in ci.yml. Renovate bumps only the version: copy the new GITLEAKS_SHA256 from the release's checksums file into the same PR (the gitleaks check fails until then).",
+      "managerFilePatterns": ["/^\\.github/workflows/ci\\.yml$/"],
+      "matchStrings": ["GITLEAKS_VERSION: (?<currentValue>\\d+\\.\\d+\\.\\d+)"],
+      "depNameTemplate": "gitleaks/gitleaks",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.+)$"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "T1: TypeScript stays on 7.x. Anything below 7 is never proposed.",
+      "matchPackageNames": ["typescript"],
+      "allowedVersions": ">=7.0.0"
+    },
+    {
+      "description": "@types/node follows the minimum supported Node major (engines, CI), pinned with an override (ADR-0001).",
+      "matchPackageNames": ["@types/node"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    },
+    {
+      "description": "Packages on the bundled-TypeScript allowlist: the audit fails on every update until the lead approves a new entry (T1, W13).",
+      "matchPackageNames": ["oxfmt", "prettier", "@tanstack/router-generator"],
+      "prBodyNotes": [
+        "**Bundled-TypeScript allowlist (T1):** this package is on `tools/ts-bundled-allowlist.json`. The `ts7-audits` check fails on purpose until the allowlist entry is updated. Only the lead decides that change; the reviewer checks it (W13, AGENTS.md, ADR-0001)."
+      ]
+    },
+    {
+      "groupName": "TanStack",
+      "matchPackageNames": ["@tanstack/**"]
+    },
+    {
+      "groupName": "NestJS",
+      "matchPackageNames": ["@nestjs/**"]
+    },
+    {
+      "groupName": "Supabase",
+      "matchPackageNames": ["@supabase/**", "supabase"]
+    },
+    {
+      "groupName": "Swift packages",
+      "matchManagers": ["swift"]
+    },
+    {
+      "groupName": "oxc toolchain",
+      "matchPackageNames": ["oxlint", "oxlint-tsgolint", "@oxlint-tsgolint/**"]
+    },
+    {
+      "groupName": "SWC",
+      "matchPackageNames": ["@swc/**"]
+    },
+    {
+      "groupName": "Vite and Vitest",
+      "matchPackageNames": ["vite", "vitest", "@vitest/**"]
+    },
+    {
+      "groupName": "commitlint",
+      "matchPackageNames": ["@commitlint/**"]
+    },
+    {
+      "groupName": "GitHub Actions",
+      "matchManagers": ["github-actions"]
+    }
+  ]
+}
