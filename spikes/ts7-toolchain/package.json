@@ -12,7 +12,7 @@
     "db:generate": "pnpm --filter @spike/api run db:generate",
     "typecheck": "pnpm -r run typecheck",
     "test:negative": "node scripts/negative-tests.mjs",
-    "audit:lockfile": "node scripts/audit-lockfile.mjs --self-test && node scripts/audit-lockfile.mjs pnpm-lock.yaml ../../pnpm-lock.yaml",
+    "audit:lockfile": "node scripts/audit-lockfile.mjs --self-test && node scripts/audit-lockfile.mjs pnpm-lock.yaml",
     "audit:bundled-ts": "node scripts/audit-bundled-typescript.mjs --self-test && node scripts/audit-bundled-typescript.mjs --allowlist ts-bundled-allowlist.json node_modules",
     "lint": "oxlint --type-aware --deny-warnings",
     "format": "oxfmt .",

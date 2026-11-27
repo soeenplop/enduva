@@ -1,4 +1,5 @@
 # Spike 0.3: TypeScript 7 toolchain (ADR-0001). Throwaway: removed together with spikes/ts7-toolchain.
+# It audits only the spike's own lockfile and install; the root workspace is covered by ci.yml.
 name: spike-ts7
 
 on:
@@ -7,16 +8,12 @@ on:
       - 'spikes/**'
       - 'docs/adr/**'
       - '.github/workflows/spike-ts7.yml'
-      # The spike's lockfile audit also checks the root lockfile. The root audits run in ci.yml.
-      - 'pnpm-lock.yaml'
   push:
     branches: [main]
     paths:
       - 'spikes/**'
       - 'docs/adr/**'
       - '.github/workflows/spike-ts7.yml'
-      # The spike's lockfile audit also checks the root lockfile. The root audits run in ci.yml.
-      - 'pnpm-lock.yaml'
 
 permissions:
   contents: read
