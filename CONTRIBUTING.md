@@ -9,7 +9,13 @@ Enduva is **source-available** under the [Elastic License 2.0](LICENSE) (ELv2). 
 Because ELv2 alone wouldn't let the maintainer run contributed code as the hosted Enduva service or relicense it, **every external contributor must sign the [Contributor License Agreement](CLA.md)** before a pull request can be merged. The CLA lets the maintainer use, relicense (including commercially) and host your contributions; you keep the copyright.
 
 > [!IMPORTANT]
-> **External contributions can't be merged yet.** The CLA is still a draft awaiting legal review and the maintainer's approval, and there is no CLA check yet. Automated enforcement (signing on the pull request, verified per GitHub account and bound to the CLA version) arrives with roadmap task 0.5. Until then, please don't sign anything; you're welcome to open issues.
+> **External contributions can't be merged yet.** The CLA is still a draft awaiting legal review and the maintainer's approval. Until it is final, please don't sign anything; you're welcome to open issues.
+
+### Interim CLA gate
+
+Until the CLA is final, the required `cla` check on every pull request is an **interim gate**. It passes only if the pull request was opened by the maintainer or one of the listed bots (Renovate, GitHub Actions), and the author and committer of every commit are linked to one of those GitHub accounts (GitHub's `web-flow` is also accepted as committer). Accounts are matched by GitHub account ID, never by name or email, and a commit whose author isn't linked to a GitHub account fails. Pull requests from anyone else fail the check and can't be merged.
+
+Once the CLA is final, the gate is replaced by the full signature check (signing on the pull request, verified per GitHub account and bound to the CLA version, roadmap task CLA.1). Its implementation is kept on branch `ci/0.5b-cla-check` ([#112](https://github.com/soeenplop/enduva/pull/112)) for reactivation.
 
 ## Before you start
 
