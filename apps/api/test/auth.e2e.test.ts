@@ -4,6 +4,7 @@ import { type Database, type Transaction, withUserTx } from '@enduva/db';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { createFirstProfile } from '../src/auth/account-status.js';
 import { DATABASE } from '../src/db/database.js';
 import { RequestTx } from '../src/db/request-transaction.js';
 import {
@@ -136,6 +137,24 @@ describe.skipIf(auth === undefined)(`auth (e2e, local Supabase${auth ? '' : ': S
       expect(res.status).toBe(401);
       expect(res.body).toEqual({ type: 'about:blank', title: 'Unauthorized', status: 401, code: 'device_revoked' });
     }
+  });
+
+  // A request that passed the check before its account was disabled (and purged) reaches the profile insert after it.
+  it('creates no profile once the account is disabled, even after the check passed', async () => {
+    const db = app.get<Database>(DATABASE);
+    const claimsOf = (session: Session) =>
+      ({ sub: session.userId, role: 'authenticated', session_id: session.sessionId }) as const;
+    const profiles = (session: Session) =>
+      withUserTx(db, claimsOf(session), async (tx) => (await tx.execute(sql`select 1 from app.profiles`)).rows.length);
+
+    const active = await newUser();
+    await withUserTx(db, claimsOf(active), createFirstProfile);
+    expect(await profiles(active)).toBe(1);
+
+    const banned = await newUser();
+    await banUser(auth!, banned.userId);
+    await expect(withUserTx(db, claimsOf(banned), createFirstProfile)).rejects.toMatchObject({ code: 'unauthorized' });
+    expect(await profiles(banned)).toBe(0);
   });
 
   it('logs neither tokens nor user data', () => {
