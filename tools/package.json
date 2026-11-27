@@ -2,11 +2,11 @@
   "name": "@enduva/tools",
   "version": "0.0.0",
   "private": true,
-  "description": "Repository audits (TypeScript 7 only, T1). Run them from the root: `pnpm audit:ts`.",
+  "description": "Repository audits (TypeScript 7 only, T1) and the negative-test runner. Run them from the root: `pnpm audit:ts`, `pnpm test:negative`.",
   "type": "module",
   "scripts": {
     "lint": "oxlint -c node_modules/@enduva/config/oxlint.json --deny-warnings *.mjs",
-    "test": "node audit-lockfile.mjs --self-test && node audit-bundled-typescript.mjs --self-test && node audit-why-typescript.mjs --self-test"
+    "test": "node audit-lockfile.mjs --self-test && node audit-bundled-typescript.mjs --self-test && node audit-why-typescript.mjs --self-test && node negative-tests.mjs --self-test"
   },
   "devDependencies": {
     "@enduva/config": "workspace:*",
