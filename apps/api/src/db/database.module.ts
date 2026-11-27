@@ -7,10 +7,12 @@ import {
   Module,
   type OnApplicationShutdown,
 } from '@nestjs/common';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { createDatabase, type Database } from '@enduva/db';
 
 import type { Env } from '../config/env.js';
 import { DATABASE } from './database.js';
+import { TransactionInterceptor } from './request-transaction.js';
 
 export { DATABASE } from './database.js';
 
@@ -51,6 +53,7 @@ export class DatabaseModule {
           },
         },
         DatabaseShutdown,
+        { provide: APP_INTERCEPTOR, useClass: TransactionInterceptor },
       ],
       exports: [DATABASE],
     };

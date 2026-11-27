@@ -18,7 +18,7 @@ export function testEnv(overrides: Readonly<Record<string, string>> = {}): Env {
 
 export interface TestAppOptions {
   readonly logDestination?: DestinationStream;
-  /** Extra controllers and providers for a test. */
+  /** Extra controllers and providers, e.g. a stand-in for the 0.8b auth guard. */
   readonly controllers?: Type[];
   readonly providers?: Provider[];
 }

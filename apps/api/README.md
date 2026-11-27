@@ -55,15 +55,21 @@ Never point a local process at a hosted project.
 - **Throttling:** `@nestjs/throttler`, per client IP on every route, in memory per process. Over the limit: `429`
   `rate_limited` with `Retry-After`. Per-user limits follow with auth (0.8b).
 - **Database:** one pg pool on `DATABASE_URL` ([ADR-0002](../../docs/adr/0002-db-access-and-rls.md)). It connects
-  lazily, so the API starts and stays live while the database is down.
+  lazily, so the API starts and stays live while the database is down. A request whose `claims` were set by the
+  auth guard (0.8b) runs its handler in **one** `withUserTx` transaction as `enduva_api`, with the claims set
+  transaction-locally, so it works with the transaction pooler. The transaction commits before the response is sent
+  and rolls back if the handler throws. Handlers take it with the `@RequestTx()` parameter decorator and pass it to
+  services; using it on a route without verified claims fails with a `500`. Requests without claims get no
+  transaction.
 
 ## Tests
 
-- Unit tests for the env schema, and the problem mapping.
+- Unit tests for the env schema, the problem mapping and the transaction interceptor.
 - `test/health.e2e.test.ts` boots the real `AppModule` under SWC: DI through decorator metadata, liveness,
   readiness without a database, request IDs, problem bodies (404 inside and outside `/v1`, malformed body,
   unexpected error), log redaction and throttling.
 - `test/dist.e2e.test.ts` runs the SWC build with plain `node`: it boots, serves `/v1/health`, and refuses to boot
   with an invalid environment. The worker entrypoint runs and exits.
-- `test/database.e2e.test.ts` runs against the **local** Supabase stack through the transaction pooler: readiness.
+- `test/database.e2e.test.ts` runs against the **local** Supabase stack through the transaction pooler: readiness, a
+  request transaction as `enduva_api` under RLS, and rollback.
   Without a running stack its tests are reported as skipped (`SKIPPED, not running` in the suite name), as in CI.
