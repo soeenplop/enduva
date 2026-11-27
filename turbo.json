@@ -9,6 +9,11 @@
       "dependsOn": ["^build"],
       "outputs": ["openapi.json"]
     },
+    "@enduva/api-client#generate": {
+      "dependsOn": ["@enduva/api#generate"],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/apps/api/openapi.json"],
+      "outputs": ["src/generated/**"]
+    },
     "build": {
       "dependsOn": ["^build", "generate"],
       "outputs": ["dist/**"]
