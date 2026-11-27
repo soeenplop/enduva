@@ -23,6 +23,10 @@ Run them through Turbo from the repository root (`pnpm turbo build typecheck lin
 
 `tsc` checks the route tree and Paraglide output that `pnpm generate` wrote. The build hashes both before and after `vite build` and fails if Start's or Paraglide's Vite plugin wrote anything different, so `tsc` can't pass on a different app than the one we ship. Keep `tsr.config.json`'s footer in sync with Start (it changes once a `src/start.ts` exists) and keep [`paraglide.options.mjs`](paraglide.options.mjs) the only place for compiler options.
 
+### Negative tests
+
+Each `negative/*.tsx` starts with `// @expect TS<code> at <line>:<col>` and must fail `tsc` with exactly that one diagnostic: a wrong component prop, a `Link` to a route that doesn't exist, a misspelled Paraglide message and a search param the route doesn't declare. The root runner [`tools/negative-tests.mjs`](../../tools/negative-tests.mjs) finds them on its own (`pnpm test:negative` from the repository root, which runs `generate` first).
+
 ## Messages
 
 `messages/{de,en}.json`, compiled by Paraglide JS. They live in the app, not in `@enduva/i18n`, because the landing copy is used nowhere else and the landing build stays self-contained; the locales must match `@enduva/i18n` (unit test). The plugin is pinned in `devDependencies` and loaded from `node_modules`; a missing plugin only warns and yields empty messages, which the tests and the static check catch. Every key must exist in both catalogs.

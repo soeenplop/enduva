@@ -6,3 +6,5 @@ project.inlang/.gitignore
 project.inlang/README.md
 # Scratch directory of the TanStack Start build.
 .tanstack/
+# Temporary config written by the root negative-test runner (tools/negative-tests.mjs).
+tsconfig.negative.json
