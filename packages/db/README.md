@@ -81,5 +81,9 @@ const mine = await withUserTx(db, claims, (tx) => tx.select().from(profiles));
 - `withUserTx(db, claims, fn)` (API) and `withWorkerTx(db, userId, fn)` (jobs) open one transaction, set
   `request.jwt.claims` and the role **transaction-locally**, and run `fn` in it. Row-level security limits every
   query in `fn` to that user. Outside them, the login roles can't read any table.
+- Both run on a client checked out for exactly the transaction (`leasedTransaction`): it always goes back to the
+  pool, even if `BEGIN` fails, has an `error` listener for the whole lease, so a lost connection fails the
+  transaction rather than the process, and is destroyed unless the transaction committed or rolled back cleanly.
+  Drizzle's own pool transaction does neither.
 - Don't call `.prepare('name')` on Drizzle queries: named prepared statements are what a transaction pooler can't
   be relied on to keep (ADR-0002).

@@ -1,5 +1,7 @@
 import 'reflect-metadata';
 
+import { EventEmitter } from 'node:events';
+
 import type { CallHandler, ExecutionContext } from '@nestjs/common';
 import { ROUTE_ARGS_METADATA } from '@nestjs/common/constants.js';
 import type { Database, Transaction, VerifiedClaims } from '@enduva/db';
@@ -10,30 +12,22 @@ import { type IdentifiedRequest, RequestTx, TransactionInterceptor } from '../sr
 
 const claims: VerifiedClaims = { sub: '0000000a-0000-4000-8000-00000000000a', role: 'authenticated' };
 
-/** A stand-in Database: records the statements and whether the transaction committed or rolled back. */
+/**
+ * A stand-in Database: a pool whose one client records the statements Drizzle sends (BEGIN, the identity, COMMIT or
+ * ROLLBACK) and how it was given back to the pool.
+ */
 function fakeDatabase() {
   const events: string[] = [];
-  const tx = {
-    // withUserTx's only statement: set_config of the claims and the role.
-    execute: () => {
-      events.push('set identity');
-      return Promise.resolve();
+  const label = (text: string) => (text.startsWith('select set_config') ? 'set identity' : text);
+  const client = Object.assign(new EventEmitter(), {
+    query: (query: { readonly text: string }) => {
+      events.push(label(query.text));
+      return Promise.resolve({ rows: [], rowCount: 0, command: '', fields: [] });
     },
-  } as unknown as Transaction;
-  const db = {
-    transaction: async <T>(fn: (tx: Transaction) => Promise<T>) => {
-      events.push('begin');
-      try {
-        const result = await fn(tx);
-        events.push('commit');
-        return result;
-      } catch (error) {
-        events.push('rollback');
-        throw error;
-      }
-    },
-  } as unknown as Database;
-  return { db, tx, events };
+    release: (destroy?: boolean) => void events.push(destroy === true ? 'destroy' : 'release'),
+  });
+  const db = { $client: { connect: () => Promise.resolve(client) } } as unknown as Database;
+  return { db, events };
 }
 
 function httpContext(request: Partial<IdentifiedRequest>): ExecutionContext {
@@ -59,7 +53,7 @@ function resolveRequestTx(context: ExecutionContext): Transaction {
 
 describe('TransactionInterceptor', () => {
   it('runs the handler inside withUserTx when the request has verified claims', async () => {
-    const { db, tx, events } = fakeDatabase();
+    const { db, events } = fakeDatabase();
     const request: Partial<IdentifiedRequest> = { claims };
     const context = httpContext(request);
     let seen: Transaction | undefined;
@@ -72,8 +66,8 @@ describe('TransactionInterceptor', () => {
     };
 
     await expect(lastValueFrom(new TransactionInterceptor(db).intercept(context, next))).resolves.toBe('body');
-    expect(events).toEqual(['begin', 'set identity', 'handler', 'commit']);
-    expect(seen).toBe(tx);
+    expect(events).toEqual(['begin', 'set identity', 'handler', 'commit', 'release']);
+    expect(seen).toBeDefined();
     expect(() => resolveRequestTx(context)).toThrow('No request transaction');
   });
 
@@ -84,7 +78,7 @@ describe('TransactionInterceptor', () => {
     await expect(
       lastValueFrom(new TransactionInterceptor(db).intercept(httpContext({ claims }), next)),
     ).rejects.toThrow('handler failed');
-    expect(events).toEqual(['begin', 'set identity', 'rollback']);
+    expect(events).toEqual(['begin', 'set identity', 'rollback', 'release']);
   });
 
   it('opens nothing until the response is subscribed', () => {

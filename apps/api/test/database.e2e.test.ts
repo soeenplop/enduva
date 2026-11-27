@@ -1,3 +1,5 @@
+import { setTimeout as delay } from 'node:timers/promises';
+
 import { type CanActivate, Controller, type ExecutionContext, Get, Injectable, Post } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
@@ -138,5 +140,49 @@ describe.skipIf(!available)(`database (e2e, local Supabase${available ? '' : ': 
     const res = await http(app).get('/v1/probe');
     expect(res.status).toBe(500);
     expect(res.body).toMatchObject({ code: 'internal_error' });
+  });
+});
+
+// Straight to Postgres, where terminating a backend closes the API's connection (the pooler would keep it open).
+const LOCAL_DIRECT_URL = 'postgresql://enduva_api_login:enduva-local-api@127.0.0.1:54322/postgres';
+
+/** Same login, outside any transaction: allowed to terminate its own role's backends. */
+const killer = available ? createDatabase({ connectionString: LOCAL_DIRECT_URL, max: 1 }) : undefined;
+
+@Controller('lose')
+class LoseConnectionController {
+  /** Loses its connection between two queries of the request transaction. */
+  @Get()
+  async lose(@RequestTx() tx: Transaction): Promise<never> {
+    const [backend] = (await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)).rows;
+    await killer?.execute(sql`select pg_terminate_backend(${backend?.pid ?? 0})`);
+    await delay(200);
+    await tx.execute(sql`select 1`);
+    throw new Error('unreachable');
+  }
+}
+
+describe.skipIf(!available)('a request whose connection is lost (e2e, local Postgres)', () => {
+  let app: NestExpressApplication;
+
+  beforeAll(async () => {
+    app = await createTestApp(testEnv({ DATABASE_URL: LOCAL_DIRECT_URL, DATABASE_POOL_MAX: '1' }), {
+      controllers: [LoseConnectionController, ProbeController],
+      providers: [{ provide: APP_GUARD, useClass: FakeAuthGuard }],
+    });
+  });
+
+  afterAll(async () => {
+    await app?.close();
+    await killer?.$client.end();
+  });
+
+  it('fails the request, not the process, and frees the pool slot', async () => {
+    const res = await http(app).get('/v1/lose').set('x-test-user', USER_A);
+    expect(res.status).toBe(500);
+    expect(app.get<Database>(DATABASE).$client.totalCount).toBe(0);
+    const next = await http(app).get('/v1/probe').set('x-test-user', USER_A);
+    expect(next.status).toBe(200);
+    expect(next.body).toMatchObject({ role: 'enduva_api', user_id: USER_A });
   });
 });
