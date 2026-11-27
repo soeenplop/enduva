@@ -1,0 +1,11 @@
+{
+  "$comment": "React/DOM code bundled by Vite. `verbatimModuleSyntax` is off as TanStack Start advises (ADR-0001, pitfall 5).",
+  "extends": "./base.json",
+  "compilerOptions": {
+    "lib": ["es2024", "dom", "dom.iterable"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "verbatimModuleSyntax": false
+  }
+}

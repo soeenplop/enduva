@@ -1,0 +1,13 @@
+{
+  "name": "@enduva/config",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Shared tsconfig, SWC, oxlint, oxfmt and Vitest presets (ADR-0001).",
+  "type": "module",
+  "exports": {
+    "./tsconfig/*.json": "./tsconfig/*.json",
+    "./swc/*.json": "./swc/*.json",
+    "./oxlint.json": "./oxlint.json",
+    "./vitest": "./vitest.preset.mjs"
+  }
+}

@@ -1,6 +1,41 @@
-# pnpm settings only. Workspace packages are added in task 0.4.
+# Root workspace. spikes/ts7-toolchain is a separate workspace with its own lockfile (ADR-0001)
+# and is deliberately not listed here.
+packages:
+  - apps/*
+  - packages/*
+
+# Exact versions shared by the workspace packages (`catalog:` in their package.json).
+catalog:
+  '@types/node': 24.19.2
+  '@swc/cli': 0.8.2
+  '@swc/core': 1.16.22
+  oxlint: 1.95.0
+  oxlint-tsgolint: 7.0.2009
+  typescript: 7.0.2
+  vite: 8.4.0
+  vitest: 5.1.2
+
+# One @types/node for the whole graph, matching the minimum supported Node major (engines, CI).
+# Transitive @types/* packages ask for `@types/node: '*'`, which would otherwise pull the latest major.
+overrides:
+  '@types/node': 24.19.2
+
 # Dependency build scripts are denied unless listed here with `true`.
 allowBuilds:
   # Its postinstall only installs the git hooks, which the root
   # `prepare` script already does with `lefthook install`.
   lefthook: false
+  # Its postinstall only checks for the native binding, which comes from the platform package.
+  '@swc/core': false
+
+# Pinned versions younger than pnpm's minimum release age (same as the spike, ADR-0001).
+# Remove an entry once its release is older than the limit.
+minimumReleaseAgeExclude:
+  - '@oxlint-tsgolint/darwin-arm64@7.0.2009'
+  - '@oxlint-tsgolint/darwin-x64@7.0.2009'
+  - '@oxlint-tsgolint/linux-arm64@7.0.2009'
+  - '@oxlint-tsgolint/linux-x64@7.0.2009'
+  - '@oxlint-tsgolint/win32-arm64@7.0.2009'
+  - '@oxlint-tsgolint/win32-x64@7.0.2009'
+  - oxlint-tsgolint@7.0.2009
+  - vite@8.4.0
