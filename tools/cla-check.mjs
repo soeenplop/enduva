@@ -124,7 +124,11 @@ export function parseConfig(config, claBytes, approvers = '') {
     fail('sha256 does not match CLA.md: a changed CLA needs a new version and hash');
   }
   const text = claBytes.toString('utf8');
-  if (/not yet in force/i.test(text)) fail('CLA.md is still marked as a draft');
+  if (/not yet in force|\bDRAFT\b|-draft\b/i.test(text)) fail('CLA.md is still marked as a draft');
+  const markers = [...text.matchAll(/^Version (\S+)[ \t]*\r?$/gm)].map((m) => m[1]);
+  if (markers.length !== 1 || markers[0] !== config.version) {
+    fail(`CLA.md must contain exactly one "Version ${config.version}" line, found: ${markers.join(', ') || 'none'}`);
+  }
   return { status: 'final', version: config.version, sha256: config.sha256, ...base };
 }
 

@@ -1102,7 +1102,7 @@ describe('signature phrase', () => {
 });
 
 describe('config', () => {
-  test('final requires a numeric version, the exact hash of a non-draft CLA.md', () => {
+  test('final requires a numeric version, the exact hash and a matching version marker in a non-draft CLA.md', () => {
     const text = Buffer.from(TEXT_V1);
     const good = { status: 'final', version: '1.0', sha256: sha256(text), exempt: [] };
     assert.equal(parseConfig(good, text).status, 'final');
@@ -1112,6 +1112,15 @@ describe('config', () => {
     assert.throws(() => parseConfig({ ...good, sha256: sha256(draftText) }, draftText), /draft/);
     assert.throws(() => parseConfig({ ...good, status: 'active' }, text), /status/);
     assert.throws(() => parseConfig({ ...good, exempt: [{ login: 'soeenplop' }] }, text), /account id/);
+  });
+
+  test('the version marker in CLA.md must exist once and equal the configured version, without a draft suffix', () => {
+    const config = (text) => ({ status: 'final', version: '1.0', sha256: sha256(Buffer.from(text)), exempt: [] });
+    for (const text of ['# CLA\n\nVersion 2.0\n', '# CLA\n\nno marker\n', '# CLA\n\nVersion 1.0\n\nVersion 1.0\n']) {
+      assert.throws(() => parseConfig(config(text), Buffer.from(text)), /exactly one "Version 1\.0" line/, text);
+    }
+    const suffixed = '# CLA\n\nVersion 1.0-draft\n';
+    assert.throws(() => parseConfig(config(suffixed), Buffer.from(suffixed)), /draft/);
   });
 
   test('the repository config is a valid draft that exempts the owner by id and has no approver key yet', async () => {
