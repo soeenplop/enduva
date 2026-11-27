@@ -1,6 +1,6 @@
 // Interim CLA gate (roadmap 0.5, T24, owner ruling 2026-11-27), run by .github/workflows/cla.yml.
 // While CLA.md is a draft, only the owner and the listed bots may contribute. A PR passes only if:
-// - its opener, and the opener of every other open PR with the same head SHA, is allowlisted and
+// - it targets main, and its opener, and the opener of every other open PR with the same head SHA, is allowlisted and
 //   the PR comes from this repository (the `cla` result belongs to the SHA, not to one PR);
 // - every commit has a GitHub-verified signature and a GitHub-linked author and committer that are
 //   allowlisted (committer `web-flow` also allowed), matched by numeric account ID only;
@@ -23,18 +23,20 @@ export const ALLOWED = new Map([
 export const WEB_FLOW = 19864447;
 const MAX_COMMITS = 250;
 const PAGE = 100;
-const MAX_PR_PAGES = 10;
+/** The protected branch the gate reports for. */
+const BASE_REF = 'main';
 
 /**
  * `pr` and `prAfter` are the PR read before and after reading the comparison of its base and head
  * SHAs (`total` = its total_commits, `commits` = every page), `eventHead` the head SHA the run
- * reports on, `openPrs` every open PR of the repository.
+ * reports on, `openPrs` every open PR of the repository (one page, a consistent snapshot).
  */
 export function judge({ eventHead, pr, total, commits, prAfter, openPrs }) {
   const problems = [];
   const who = (u) => (u ? `${u.login} (ID ${u.id})` : 'not linked to a GitHub account');
   const head = pr.head.sha;
   if (head !== eventHead) problems.push('the PR head is not the head this run reports on');
+  if (pr.base.ref !== BASE_REF || prAfter.base.ref !== BASE_REF) problems.push(`the PR does not target ${BASE_REF}`);
   if (prAfter.head.sha !== head || prAfter.base.sha !== pr.base.sha || prAfter.commits !== pr.commits) {
     problems.push('the PR changed during evaluation');
   }
@@ -76,7 +78,7 @@ function selfTest() {
     user,
     commits: 2,
     head: { sha: 'h1', repo },
-    base: { sha: 'b1', repo },
+    base: { sha: 'b1', ref: 'main', repo },
     ...over,
   });
   const input = (over = {}) => {
@@ -122,7 +124,22 @@ function selfTest() {
     ['fails an empty set', input({ commits: [], pr: { commits: 0 } }), true],
     ['fails when the event head differs', input({ eventHead: 'h0' }), true],
     ['fails when the head moved', input({ prAfter: mkPr(1, owner, { head: { sha: 'h2', repo } }) }), true],
-    ['fails a same-head base change', input({ prAfter: mkPr(1, owner, { base: { sha: 'b2', repo } }) }), true],
+    [
+      'fails a same-head base change',
+      input({ prAfter: mkPr(1, owner, { base: { sha: 'b2', ref: 'main', repo } }) }),
+      true,
+    ],
+    ['fails a stacked PR (base not main)', input({ pr: { base: { sha: 'b1', ref: 'feat/x', repo } } }), true],
+    [
+      'fails a PR retargeted away from main',
+      input({ prAfter: mkPr(1, owner, { base: { sha: 'b1', ref: 'feat/x', repo } }) }),
+      true,
+    ],
+    [
+      'passes with a stacked owner PR on the same head',
+      input({ openPrs: [other(owner)].map((p) => ({ ...p, base: { sha: 'b0', ref: 'feat/x', repo } })) }),
+      false,
+    ],
     ['fails a changed commit count', input({ prAfter: mkPr(1, owner, { commits: 3 }) }), true],
   ];
   let failed = 0;
@@ -157,13 +174,9 @@ async function run() {
     commits.push(...cmp.commits);
     if (cmp.commits.length < PAGE || commits.length >= total) break;
   }
-  const openPrs = [];
-  for (let page = 1; ; page++) {
-    if (page > MAX_PR_PAGES) throw new Error(`more than ${MAX_PR_PAGES * PAGE} open PRs`);
-    const batch = await api(`/pulls?state=open&per_page=${PAGE}&page=${page}`);
-    openPrs.push(...batch);
-    if (batch.length < PAGE) break;
-  }
+  // One page only: numbered pages of a changing collection can skip a row, a single response can't.
+  const openPrs = await api(`/pulls?state=open&per_page=${PAGE}`);
+  if (openPrs.length >= PAGE) throw new Error(`${PAGE} or more open PRs: the shared-head scan needs fewer`);
   const prAfter = await api(`/pulls/${n}`);
   const problems = judge({ eventHead: event.pull_request.head.sha, pr, total, commits, prAfter, openPrs });
   if (problems.length === 0) {

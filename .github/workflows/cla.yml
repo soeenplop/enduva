@@ -1,24 +1,30 @@
 # Interim CLA gate (roadmap 0.5, T24, owner ruling 2026-11-27), logic in tools/cla-gate.mjs. While
-# CLA.md is a draft, it passes only same-repository PRs whose opener and every commit's author and
-# committer are the owner or a listed bot, with GitHub-verified signatures. It also fails while
-# another open PR on the same head SHA breaks the opener rules: the result belongs to the SHA. The
-# job name is a required status check of the `main` ruleset (.github/rulesets/main.json). Task
+# CLA.md is a draft, it passes only same-repository PRs into main whose opener and every commit's
+# author and committer are the owner or a listed bot, with GitHub-verified signatures. It also fails
+# while another open PR on the same head SHA breaks the opener rules: the result belongs to the SHA.
+# The job name is a required status check of the `main` ruleset (.github/rulesets/main.json). Task
 # CLA.1 replaces it with the full signature check.
 #
-# Security: pull_request_target runs this file and the script from the base branch with a read-only
-# token. The only checkout is the base commit (github.sha, the default for this event): PR code is
-# never checked out, installed or run. PR data is read through the API inside the script and never
-# interpolated into a shell. Actions pinned by SHA. The required context names only the Actions
-# app, so fork `pull_request` workflows (which could report a job named `cla`) need approval for
-# all external contributors (repository setting, 2026-11-27) and are never approved.
+# Trigger: `pull_request`, not `pull_request_target` (blocked by default in public repositories from
+# 2026-12-02 unless an Actions event policy allows it). It runs the workflow file and script of the
+# PR's merge ref, which is trusted only because of who can produce a run:
+# - Same-repository branches can only be pushed by the owner and the allowlisted bots.
+# - Fork PR workflows need approval for all external contributors (repository setting, 2026-11-27),
+#   and the maintainer never approves them. A fork PR therefore never gets a `cla` result, and the
+#   required check stays missing: blocked, fail-closed. The same holds for a fork workflow that
+#   defines its own job named `cla` (the required context names only the Actions app).
+# The script's checks (opener, head repository, verified commits, complete commit set, shared heads)
+# stay as defense in depth. Read-only token, no secrets, no install, actions pinned by SHA.
 #
-# No `if:` anywhere: a skipped job would count as a passing `cla` check on that head. `edited`
-# re-checks a PR whose base branch changed (and, harmlessly, title or body edits).
+# `branches: [main]`: only PRs into main produce `cla`, so a stacked PR can't publish a result for
+# a smaller commit set; a PR retargeted to main is re-checked through `edited`. No `if:` anywhere: a
+# skipped job would count as a passing `cla` check on that head.
 name: cla
 
 on:
-  pull_request_target:
+  pull_request:
     types: [opened, synchronize, reopened, edited]
+    branches: [main]
 
 permissions: {}
 
@@ -35,7 +41,6 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      # The base commit, never the PR head.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
