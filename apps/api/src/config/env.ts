@@ -50,7 +50,7 @@ export const envSchema = z.object({
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   /** Trusted ingress proxies (addresses/CIDRs). Empty: `X-Forwarded-For` is ignored and the socket peer is the client. */
   TRUST_PROXY: trustedProxies.default([]),
-  /** Requests per client IP and window. */
+  /** Requests per client IP, endpoint and window. */
   THROTTLE_LIMIT: positiveInt.default(100),
   THROTTLE_TTL_SECONDS: positiveInt.default(60),
 });

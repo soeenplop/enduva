@@ -26,7 +26,9 @@ export class AppModule {
       module: AppModule,
       imports: [
         LoggerModule.forRoot(loggerParams(http)),
-        // Per client IP; per-user limits follow with auth (0.8b).
+        // One bucket per client IP and endpoint (the default key includes controller and handler). The guard runs after
+        // body parsing and routing, so unmatched routes and rejected bodies are not counted. Per-user limits follow
+        // with auth (0.8b).
         ThrottlerModule.forRoot({
           throttlers: [{ ttl: seconds(env.THROTTLE_TTL_SECONDS), limit: env.THROTTLE_LIMIT }],
         }),

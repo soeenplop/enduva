@@ -30,8 +30,8 @@ process with exit code 1 and a list of the offending variable names (never their
 | `NODE_ENV` | `development` | `development`, `test` or `production` |
 | `HOST` / `PORT` | `0.0.0.0` / `3000` | |
 | `LOG_LEVEL` | `info` | pino level, or `silent` |
-| `TRUST_PROXY` | empty | Comma-separated IPs/CIDRs of the ingress (Traefik in Dokploy, e.g. its Docker network `10.0.1.0/24`). `X-Forwarded-For` is honoured only from these peers; empty trusts none. No hop counts |
-| `THROTTLE_LIMIT` / `THROTTLE_TTL_SECONDS` | `100` / `60` | Requests per client IP and window |
+| `TRUST_PROXY` | empty | Comma-separated IPs/CIDRs of the ingress (Traefik in Dokploy, e.g. the CIDR of its Docker network). `X-Forwarded-For` is honoured only from these peers; empty trusts none. No hop counts |
+| `THROTTLE_LIMIT` / `THROTTLE_TTL_SECONDS` | `100` / `60` | Requests per client IP **and endpoint** per window (see Throttling) |
 
 ## Behaviour
 
@@ -50,8 +50,11 @@ process with exit code 1 and a list of the offending variable names (never their
   `/v1/items/:id`; `(unmatched)` when the request ended before routing), status and duration: no raw paths or query
   strings, headers, tokens, bodies, client IPs or health data. Nest's own logs go through the same logger
   (nestjs-pino).
-- **Throttling:** `@nestjs/throttler`, per client IP on every route, in memory per process. Over the limit: `429`
-  `rate_limited` with `Retry-After`. Per-user limits follow with auth (0.8b).
+- **Throttling:** `@nestjs/throttler` as a global guard, in memory per process. Each matched endpoint (controller and
+  handler) has its own bucket per client IP, so the limit is not an API-wide or ingress-wide request limit. The
+  guard runs after the body parser and routing: requests to unmatched routes and requests whose body is rejected are
+  never counted. Over the limit: `429` `rate_limited` with `Retry-After`. Per-user limits follow with auth (0.8b);
+  an overall request limit belongs to the ingress.
 
 ## Tests
 
