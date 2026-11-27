@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto';
-
 import { Body, Controller, Get, Header, Headers, Patch, Req, Res } from '@nestjs/common';
 import { profiles, type Transaction } from '@enduva/db';
 import { and, eq, sql } from 'drizzle-orm';
@@ -7,6 +5,7 @@ import type { Response } from 'express';
 
 import { type IdentifiedRequest, RequestTx } from '../db/request-transaction.js';
 import { ProblemException } from '../problem/problem.js';
+import { etag, ifMatchVersion } from './etag.js';
 import { meUpdateSchema } from './me.schema.js';
 
 /** The signed-in user's profile. `role` is read-only for clients: it is changed only by an operator (ADR-0002). */
@@ -37,28 +36,6 @@ const meColumns = {
 };
 
 const ownProfile = eq(profiles.userId, sql`app.current_user_id()`);
-
-/**
- * A strong ETag for one user's profile at one version: `"<version>-<digest>"`, the digest an opaque hash of user and
- * version. Two accounts at the same version get different tags, so a tag left over from an account switch can't
- * match: not in a conditional GET (Express answers 304 only for this exact tag) and not in `If-Match`.
- */
-function etag(userId: string, version: number): string {
-  const digest = createHash('sha256').update(`enduva.me:${userId}:${version}`).digest('base64url').slice(0, 22);
-  return `"${version}-${digest}"`;
-}
-
-/**
- * The version a single strong `If-Match` names, if it is this user's tag. Anything else names none: another user's
- * tag, a weak tag, `*` or a list, although HTTP allows the last two (the endpoint takes exactly one current tag).
- */
-function ifMatchVersion(header: string, userId: string): number | undefined {
-  const value = header.trim();
-  const match = /^"([1-9]\d{0,15})-[\w-]{22}"$/.exec(value);
-  if (match?.[1] === undefined) return undefined;
-  const version = Number(match[1]);
-  return value === etag(userId, version) ? version : undefined;
-}
 
 @Controller('me')
 export class MeController {

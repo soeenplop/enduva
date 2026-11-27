@@ -110,8 +110,10 @@ Never point a local process at a hosted project.
   a tag left over from an account switch gets neither a `304` nor a write. `PATCH` updates the user-editable fields
   (JSON merge semantics: a missing field stays, `null` clears it), validated by a Zod schema
   ([`src/me/me.schema.ts`](src/me/me.schema.ts); request schemas move to `@enduva/contracts` in 0.8c). Unknown
-  fields, `role` among them, are refused; names may not contain control characters; time zones must be IANA names
-  (tzdb aliases included, ICU-only IDs such as `SystemV/EST5` refused). `onboardingCompleted: true` stamps the time
+  fields, `role` among them, are refused; names may not contain control characters; time zones must have the IANA
+  area form (`Area/Location`, any case) or be `UTC`, and are stored as ICU's canonical ID for them (`Europe/berlin` →
+  `Europe/Berlin`, `Asia/Kolkata` → `Asia/Calcutta`); links outside the areas (`US/Eastern`) and ICU-only IDs
+  (`SystemV/EST5`, `PST`) are refused. `onboardingCompleted: true` stamps the time
   once. `PATCH` requires `If-Match` with **exactly one strong tag, the current one**: missing →
   `428 precondition_required`; outdated, another account's, weak (`W/"…"`), `*` or a list of tags →
   `412 precondition_failed`. HTTP allows `*` and lists, but this endpoint deliberately takes only the single form.

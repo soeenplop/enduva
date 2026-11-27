@@ -48,7 +48,7 @@ describe.skipIf(auth === undefined)(`/v1/me (e2e, local Supabase${auth ? '' : ':
     expect(before.headers.etag).toMatch(/^"1-[\w-]{22}"$/);
     const res = await patch(
       user,
-      { displayName: ' Synthetic Sam ', timeZone: 'europe/vienna', heightCm: 181, onboardingCompleted: true },
+      { displayName: ' Synthetic Sam ', timeZone: 'europe/VIENNA', heightCm: 181, onboardingCompleted: true },
       before.headers.etag,
     );
     expect(res.status).toBe(200);

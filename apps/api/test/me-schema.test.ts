@@ -16,10 +16,20 @@ describe('PATCH /v1/me body', () => {
   });
 
   it('takes IANA time zones as the runtime spells them, and nothing else', () => {
-    expect(parse({ timeZone: 'europe/berlin' }).data).toEqual({ timeZone: 'Europe/Berlin' });
-    expect(parse({ timeZone: 'UTC' }).data).toEqual({ timeZone: 'UTC' });
-    for (const timeZone of ['Asia/Kolkata', 'Asia/Calcutta', 'America/Argentina/Buenos_Aires', 'Etc/GMT+1'])
-      expect(parse({ timeZone }).data).toEqual({ timeZone });
+    // Stored as ICU's canonical ID: case normalised (also within the location) and aliases mapped.
+    for (const [input, stored] of [
+      ['Europe/Berlin', 'Europe/Berlin'],
+      ['europe/berlin', 'Europe/Berlin'],
+      ['Europe/berlin', 'Europe/Berlin'],
+      ['America/port-au-prince', 'America/Port-au-Prince'],
+      ['Asia/Kolkata', 'Asia/Calcutta'],
+      ['Asia/Calcutta', 'Asia/Calcutta'],
+      ['America/Argentina/Buenos_Aires', 'America/Buenos_Aires'],
+      ['Etc/UTC', 'UTC'],
+      ['UTC', 'UTC'],
+      ['Etc/GMT+1', 'Etc/GMT+1'],
+    ])
+      expect(parse({ timeZone: input }).data).toEqual({ timeZone: stored });
     // ICU-only IDs, legacy abbreviations and offsets that Intl accepts but IANA tzdb consumers may not.
     for (const timeZone of ['SystemV/EST5', 'PST', 'EST5EDT', 'US/Eastern', '+01:00', 'Mars/Olympus', ''])
       expect(parse({ timeZone }).success).toBe(false);

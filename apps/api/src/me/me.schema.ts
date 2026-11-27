@@ -4,10 +4,18 @@ import * as z from 'zod';
 const ianaZone =
   /^(?:UTC|(?:Africa|America|Antarctica|Arctic|Asia|Atlantic|Australia|Europe|Indian|Pacific|Etc)\/[A-Za-z0-9_+-]+(?:\/[A-Za-z0-9_+-]+)*)$/;
 
+/** The zones ICU lists as canonical (CLDR IDs, all of them tzdb names), with the `Etc/` zones ICU doesn't list. */
+const canonicalZones = new Set(Intl.supportedValuesOf('timeZone'));
+const isCanonical = (name: string) => canonicalZones.has(name) || name === 'UTC' || name.startsWith('Etc/');
+
 /**
- * An IANA time zone the runtime (ICU) knows, including tzdb aliases such as `Asia/Calcutta`. Stored as sent when it
- * is spelled correctly, otherwise as ICU spells it (`europe/berlin` → `Europe/Berlin`), and only if that is an IANA
- * name too.
+ * A time zone, stored as **ICU's canonical ID** for it, so the stored spelling is always one ICU produced:
+ *
+ * - The input must have the IANA area form (`Area/Location`) or be `UTC`, in any letter case. tzdb links outside the
+ *   areas (`US/Eastern`, `EST5EDT`) and ICU-only IDs (`SystemV/EST5`, `PST`) are refused.
+ * - ICU must resolve it to a canonical zone that has the area form too. Case is normalised (`Europe/berlin` →
+ *   `Europe/Berlin`) and aliases map to their canonical zone (`Europe/Kyiv` → `Europe/Kiev`, `Asia/Kolkata` →
+ *   `Asia/Calcutta`, `Etc/UTC` → `UTC`). CLDR keeps some older names as canonical; they are tzdb links as well.
  */
 const timeZone = z
   .string()
@@ -20,8 +28,7 @@ const timeZone = z
     } catch {
       resolved = undefined;
     }
-    if (resolved !== undefined && ianaZone.test(name)) return name;
-    if (resolved !== undefined && ianaZone.test(resolved)) return resolved;
+    if (resolved !== undefined && ianaZone.test(resolved) && isCanonical(resolved)) return resolved;
     context.addIssue({ code: 'custom', message: 'unknown time zone' });
     return z.NEVER;
   });
