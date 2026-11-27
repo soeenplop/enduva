@@ -25,7 +25,8 @@
 //      The most precise of these is the detected version (`6.0.3` if a notice names it, else `6.0`).
 //      No version, or two conflicting ones, fails: T1 requires the bundled version to be explicit.
 //   5. Every file is attributed to the nearest enclosing package.json with a `name` and `version`,
-//      and its SHA-256 digest is recorded.
+//      and its SHA-256 digest is recorded per installed copy: pnpm can install one name and version
+//      more than once (peer variants, bundled dependencies), and every copy is judged on its own.
 //   6. The consumers of each such package (the packages and workspace importers that depend on it
 //      directly) are read from the installed dependency graph with `pnpm why <name> -r --json`, run
 //      in the workspace that owns each scanned `node_modules`.
@@ -38,8 +39,9 @@
 //     file, and a non-empty list of distinct consumers.
 //   - Any other package that contains compiler code must have an entry with exactly this package
 //     name and version, the detected bundled TypeScript version (string equality, so `6.0` and
-//     `6.0.3` are different), the exact file list with matching digests, and exactly the consumers
-//     found in the graph (`<name>@<version>`, or `workspace:<name>` for an importer).
+//     `6.0.3` are different), the exact file list with matching digests in every installed copy,
+//     and exactly the consumers found in the graph (`<name>@<version>`, or `workspace:<name>` for
+//     an importer).
 //   - Allowlist entries that match no installed package fail as stale. So any change of an
 //     allowlisted package's version, of the bytes of a file that carries the compiler, of the set of
 //     such files, or of a consumer's name or version fails until the allowlist is updated on purpose.
@@ -133,7 +135,9 @@ function readManifest(dir) {
 
 /** Finds every installed package that contains TypeScript compiler code. */
 export function scan(roots) {
-  const hits = new Map(); // `${name}@${version}` -> { name, version, dir, files: Map<path, digest>, versions: Set }
+  // `${name}@${version}` -> { name, version, copies: [{ dir, files: Map<path, digest> }], versions: Set }
+  const hits = new Map();
+  const copies = new Map(); // package dir -> copy
 
   function walk(dir, owner) {
     const manifest = readManifest(dir);
@@ -152,10 +156,16 @@ export function scan(roots) {
       const key = `${owner.name}@${owner.version}`;
       let hit = hits.get(key);
       if (!hit) {
-        hit = { name: owner.name, version: owner.version, dir: owner.dir, files: new Map(), versions: new Set() };
+        hit = { name: owner.name, version: owner.version, copies: [], versions: new Set() };
         hits.set(key, hit);
       }
-      hit.files.set(relative(owner.dir, path).split('\\').join('/'), sha256(bytes));
+      let copy = copies.get(owner.dir);
+      if (!copy) {
+        copy = { dir: owner.dir, files: new Map() };
+        copies.set(owner.dir, copy);
+        hit.copies.push(copy);
+      }
+      copy.files.set(relative(owner.dir, path).split('\\').join('/'), sha256(bytes));
       for (const v of versionsInCode(text)) hit.versions.add(v);
     }
   }
@@ -163,7 +173,9 @@ export function scan(roots) {
     if (!existsSync(root)) throw new Error(`not found: ${root}`);
     walk(root, null);
   }
-  for (const hit of hits.values()) for (const v of versionsInNotices(hit.dir)) hit.versions.add(v);
+  for (const hit of hits.values())
+    for (const copy of hit.copies) for (const v of versionsInNotices(copy.dir)) hit.versions.add(v);
+  for (const hit of hits.values()) hit.copies.sort((a, b) => a.dir.localeCompare(b.dir));
   return [...hits.values()].sort((a, b) => `${a.name}@${a.version}`.localeCompare(`${b.name}@${b.version}`));
 }
 
@@ -240,7 +252,7 @@ export function judge(hits, allowlist) {
       }
       continue;
     }
-    const files = [...hit.files.keys()].sort(byText);
+    const files = [...new Set(hit.copies.flatMap((c) => [...c.files.keys()]))].sort(byText);
     const entry = entries.find((e) => isObject(e) && e.package === hit.name && e.version === hit.version);
     if (!entry) {
       problems.push(
@@ -257,15 +269,20 @@ export function judge(hits, allowlist) {
         `${id}: detected bundled TypeScript ${detected.version}, allowlist says ${entry.bundledTypeScript}`,
       );
     }
+    // Every installed copy must carry exactly the reviewed files and bytes (#100).
     const listed = isObject(entry.files) ? entry.files : {};
-    if (!same(Object.keys(listed), files)) {
-      problems.push(
-        `${id}: compiler code found in [${files.join(', ')}], allowlist lists [${Object.keys(listed).sort(byText).join(', ')}]`,
-      );
-    } else {
-      for (const f of files)
-        if (listed[f] !== hit.files.get(f))
-          problems.push(`${id}: ${f} is ${hit.files.get(f)}, allowlist says ${listed[f]}`);
+    for (const copy of hit.copies) {
+      const at = hit.copies.length > 1 ? `${id} (copy in ${copy.dir})` : id;
+      const copyFiles = [...copy.files.keys()].sort(byText);
+      if (!same(Object.keys(listed), copyFiles)) {
+        problems.push(
+          `${at}: compiler code found in [${copyFiles.join(', ')}], allowlist lists [${Object.keys(listed).sort(byText).join(', ')}]`,
+        );
+        continue;
+      }
+      for (const f of copyFiles)
+        if (listed[f] !== copy.files.get(f))
+          problems.push(`${at}: ${f} is ${copy.files.get(f)}, allowlist says ${listed[f]}`);
     }
     const consumers = [...(hit.consumers ?? [])].sort(byText);
     if (consumers.length === 0) problems.push(`${id}: no consumers found in the dependency graph`);
@@ -276,7 +293,7 @@ export function judge(hits, allowlist) {
     }
     if (problems.length === before) {
       report.push(
-        `ok   ${id}: TypeScript ${detected.version} in ${files.join(', ')} (digests match); consumers ${consumers.join(', ')}`,
+        `ok   ${id}: TypeScript ${detected.version} in ${files.join(', ')} (digests match in ${hit.copies.length} installed ${hit.copies.length === 1 ? 'copy' : 'copies'}); consumers ${consumers.join(', ')}`,
       );
     }
   }
@@ -349,8 +366,8 @@ function selfTest() {
     reason: 'self-test',
   };
   // The reviewed fake-formatter@1.0.0: TS 6 parser in dist/parser.js, notice names typescript@v6.0.3.
-  const formatter = (r, files = {}, version = '1.0.0') =>
-    fakePackage(r, `fake-formatter@${version}`, 'fake-formatter', version, {
+  const formatter = (r, files = {}, version = '1.0.0', storeKey = `fake-formatter@${version}`) =>
+    fakePackage(r, storeKey, 'fake-formatter', version, {
       'dist/parser.js': 'ts6-unminified.js',
       'THIRD-PARTY-NOTICES.md': NOTICE_603,
       ...files,
@@ -506,6 +523,50 @@ function selfTest() {
     (r) => formatter(r, { 'dist/extra.mjs': 'ts6-minified.js' }),
     { entries: [entry] },
     /compiler code found in \[dist\/extra\.mjs, dist\/parser\.js\]/,
+  );
+  // #100: two installed copies with the same name, version and file path (e.g. pnpm peer variants).
+  // A patched copy must fail wherever it sits in the scan order, so both orders are tested.
+  const patch = (dir) =>
+    writeFileSync(
+      join(dir, 'dist', 'parser.js'),
+      `${readFileSync(join(dir, 'dist', 'parser.js'), 'utf8')}\n// patched\n`,
+    );
+  check(
+    'accepts two identical installed copies of an allowlisted package',
+    false,
+    (r) => {
+      formatter(r);
+      formatter(r, {}, '1.0.0', 'fake-formatter@1.0.0_peer');
+    },
+    { entries: [entry] },
+  );
+  for (const [patched, storeKey] of [
+    ['first', 'fake-formatter@1.0.0'],
+    ['second', 'fake-formatter@1.0.0_peer'],
+  ]) {
+    check(
+      `rejects a changed file in the ${patched} of two copies with the same name, version and path`,
+      true,
+      (r) => {
+        formatter(r);
+        formatter(r, {}, '1.0.0', 'fake-formatter@1.0.0_peer');
+        patch(join(r, '.pnpm', storeKey, 'node_modules', 'fake-formatter'));
+      },
+      { entries: [entry] },
+      new RegExp(
+        `fake-formatter@1\\.0\\.0 \\(copy in [^)]*/\\.pnpm/${storeKey.replaceAll('.', '\\.')}/node_modules/fake-formatter\\): dist/parser\\.js is sha256:`,
+      ),
+    );
+  }
+  check(
+    'rejects a second copy that carries the compiler in an extra file',
+    true,
+    (r) => {
+      formatter(r);
+      formatter(r, { 'dist/extra.mjs': 'ts6-minified.js' }, '1.0.0', 'fake-formatter@1.0.0_peer');
+    },
+    { entries: [entry] },
+    /fake-formatter@1\.0\.0 \(copy in [^)]*_peer[^)]*\): compiler code found in \[dist\/extra\.mjs, dist\/parser\.js\]/,
   );
   for (const change of [{ usage: '' }, { reason: null }, { usage: '   ' }, { consumers: [] }, { files: {} }]) {
     const field = Object.keys(change)[0];
