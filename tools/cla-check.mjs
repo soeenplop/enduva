@@ -4,6 +4,14 @@
 // runs PR code: it reads the PR through the GitHub API and sets the commit status `cla` on the exact
 // head SHA it evaluated.
 //
+// Shared heads: a commit status belongs to a SHA, not to a PR, and GitHub offers no per-PR check a
+// ruleset can require on a personal-account repo. Every open PR to `main` with that head therefore
+// shares the one `cla` status, while the verdict depends on each PR's opener. The check always
+// evaluates every open PR to `main` with the head in question and posts success only if all pass.
+// Any event on one of them (opened, reopened, synchronize, closed, retargeted, comment) and any CLA
+// change re-evaluates the whole group. After posting, it re-reads the group and repeats if it changed,
+// and it never posts a verdict made with a CLA config that main no longer has.
+//
 // Activation: `status` in .github/cla.json. While it is "draft", no signatures are collected, and a
 // PR passes only if every commit author and the PR opener are exempt accounts. "final" (an owner-only
 // change, see CONTRIBUTING.md) pins the CLA version and the SHA-256 of CLA.md.
@@ -36,10 +44,16 @@ const NOT_IN_FORCE = 'CLA not yet in force: external contributions are not accep
 // GET /pulls/{n}/commits never lists more than 250 commits, so a larger set can't be complete.
 const MAX_PR_COMMITS = 250;
 const MAX_PAGES = 50;
+// Rounds per head before giving up on a group of PRs that keeps changing.
+const MAX_ROUNDS = 3;
+const BASE = 'main';
 const LOGIN = /^[A-Za-z0-9-]{1,39}(\[bot\])?$/;
 
 /** Completeness or consistency couldn't be established. The check fails closed. */
 export class Incomplete extends Error {}
+
+/** The PR no longer has the evaluated head, is closed or no longer targets main: re-read the group. */
+class Moved extends Error {}
 
 export const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
@@ -150,9 +164,11 @@ async function retry(fn, sleep, attempts = 3) {
   }
 }
 
-async function readCommitSet(api, repo, number, ctx) {
+const inGroup = (pr, sha) => pr.state === 'open' && pr.base?.ref === BASE && pr.head?.sha === sha;
+
+async function readCommitSet(api, repo, number, sha) {
   const pr = await api.get(`/repos/${repo}/pulls/${number}`);
-  ctx.head = pr.head.sha;
+  if (!inGroup(pr, sha)) throw new Moved();
   if (pr.commits > MAX_PR_COMMITS) {
     throw new Incomplete(`the PR has more than ${MAX_PR_COMMITS} commits, which the API can't list completely`);
   }
@@ -233,10 +249,10 @@ const findPrompt = (comments) => comments.find((c) => c.user?.id === IDS.actions
 const mention = (account) => (LOGIN.test(account.login ?? '') ? `@${account.login}` : `account ${account.id}`);
 
 /** Reads everything, decides, and returns the verdict plus the signature records to append. No writes. */
-export async function evaluate({ api, repo, number, cla, claUrl, sleep, ctx = {} }) {
-  const { pr, commits } = await retry(() => readCommitSet(api, repo, number, ctx), sleep);
+export async function evaluate({ api, repo, number, sha, cla, claUrl, sleep }) {
+  const { pr, commits } = await retry(() => readCommitSet(api, repo, number, sha), sleep);
   const verdict = (state, description, extra) => ({
-    head: pr.head.sha,
+    number,
     state,
     description,
     problems: [],
@@ -267,8 +283,7 @@ export async function evaluate({ api, repo, number, cla, claUrl, sleep, ctx = {}
   const required = [...accounts.values()].filter((account) => !cla.exempt.has(account.id));
   const assertHead = async () => {
     const now = await api.get(`/repos/${repo}/pulls/${number}`);
-    if (now.head.sha !== pr.head.sha || now.commits !== pr.commits)
-      throw new Incomplete('the head moved during the check');
+    if (!inGroup(now, sha) || now.commits !== pr.commits) throw new Moved();
   };
   if (cla.status === 'draft') {
     await assertHead();
@@ -312,8 +327,15 @@ export async function evaluate({ api, repo, number, cla, claUrl, sleep, ctx = {}
   return verdict('success', `All required accounts signed CLA ${cla.version}`, { records, prompt });
 }
 
-export function promptBody(result, cla, claUrl) {
+export function promptBody(result, cla, claUrl, blockers = []) {
   const link = `[Enduva CLA version ${cla.version}](${claUrl}) (sha256 \`${cla.sha256}\`)`;
+  if (result.state === 'success' && blockers.length > 0) {
+    return (
+      `${MARKER}\nAll required accounts of this pull request have signed the ${link}. ` +
+      'The `cla` status is shared by every open pull request with the same head commit, so it stays red until ' +
+      `each of these passes or is closed: ${blockers.map((n) => `#${n}`).join(', ')}.\n`
+    );
+  }
   if (result.state === 'success') return `${MARKER}\nAll required accounts have signed the ${link}. Thank you!\n`;
   const lines = [MARKER, '### Contributor License Agreement', ''];
   if (result.problems.length > 0) {
@@ -338,62 +360,199 @@ export function promptBody(result, cla, claUrl) {
   return `${lines.join('\n')}\n`;
 }
 
-async function updatePrompt(api, repo, number, result, cla, claUrl) {
-  const body = promptBody(result, cla, claUrl);
+async function updatePrompt(api, repo, result, cla, claUrl, blockers) {
+  const body = promptBody(result, cla, claUrl, blockers);
   if (result.prompt) {
     if (result.prompt.body !== body)
       await api.request('PATCH', `/repos/${repo}/issues/comments/${result.prompt.id}`, { body });
-  } else if (result.state !== 'success') {
-    await api.request('POST', `/repos/${repo}/issues/${number}/comments`, { body });
+  } else if (result.state !== 'success' || blockers.length > 0) {
+    await api.request('POST', `/repos/${repo}/issues/${result.number}/comments`, { body });
   }
 }
 
-/** Evaluates each PR, applies the writes and sets the `cla` status on the evaluated head. */
-export async function run({ api, repo, numbers, cla, links, sleep, report = () => {} }) {
-  const errors = [];
+/** Open PRs to main whose head is `sha`. Each PR in `expected` was just read as such and must be listed. */
+async function readGroup(api, repo, sha, expected) {
+  const open = await api.paginate(`/repos/${repo}/pulls?state=open&base=${BASE}`);
+  const numbers = open.filter((pr) => pr.head?.sha === sha).map((pr) => pr.number);
+  for (const number of expected) {
+    if (!numbers.includes(number)) throw new Incomplete(`the open pull request list does not show #${number} yet`);
+  }
+  return numbers.sort((a, b) => a - b);
+}
+
+/** One verdict for the shared status: success only if every PR of the group passes on its own. */
+function combine(sha, results) {
+  const failing = results.filter((r) => r.state !== 'success');
+  const single = results.length === 1;
+  let description;
+  if (failing.length === 0) {
+    description = single
+      ? results[0].description
+      : `${results[0].description} (all ${results.length} PRs with this head)`;
+  } else {
+    const [first] = failing;
+    description = single ? first.description : `#${first.number}: ${first.description}`;
+    if (failing.length > 1) description += ` (+${failing.length - 1} more PRs)`;
+  }
+  return { head: sha, state: failing.length === 0 ? 'success' : 'failure', description, results };
+}
+
+const failedClosed = (number, error) => ({
+  number,
+  state: 'failure',
+  description: `Failed closed: ${error.message}`,
+  problems: [],
+  missing: [],
+  records: [],
+  incomplete: true,
+});
+
+/** Evaluates every PR of one head, applies their writes and returns the combined verdict; Moved restarts. */
+async function evaluateGroup({ api, repo, sha, numbers, cla, links, sleep }) {
+  const results = [];
   for (const number of numbers) {
-    const ctx = {};
-    let result;
     try {
-      result = await evaluate({ api, repo, number, cla, claUrl: links.cla, sleep, ctx });
-      if (result.records.length > 0) await appendRecords(api, repo, result.records, number);
-      if (cla.status === 'final') await updatePrompt(api, repo, number, result, cla, links.cla);
+      results.push(await evaluate({ api, repo, number, sha, cla, claUrl: links.cla, sleep }));
     } catch (error) {
-      if (!ctx.head) {
-        errors.push(`#${number}: ${error.message}`);
-        continue;
-      }
-      result = {
-        head: ctx.head,
-        state: 'failure',
-        description: `Failed closed: ${error.message}`,
-        problems: [],
-        missing: [],
-      };
+      if (error instanceof Moved) throw error;
+      results.push(failedClosed(number, error));
     }
-    await api.request('POST', `/repos/${repo}/statuses/${result.head}`, {
-      state: result.state,
+  }
+  for (const [i, result] of results.entries()) {
+    try {
+      if (result.records.length > 0) await appendRecords(api, repo, result.records, result.number);
+    } catch (error) {
+      results[i] = failedClosed(result.number, error);
+    }
+  }
+  if (cla.status === 'final') {
+    const blockers = results.filter((r) => r.state !== 'success').map((r) => r.number);
+    for (const [i, result] of results.entries()) {
+      // A PR that failed closed may not have read its comments; it gets no prompt update.
+      if (result.incomplete) continue;
+      try {
+        await updatePrompt(api, repo, result, cla, links.cla, result.state === 'success' ? blockers : []);
+      } catch (error) {
+        results[i] = failedClosed(result.number, error);
+      }
+    }
+  }
+  return combine(sha, results);
+}
+
+/**
+ * Settles the shared `cla` status of one head: evaluate the group, post, re-read the group and repeat if
+ * it changed. `current()` says whether main still has the CLA config this run uses; if not, the push run
+ * for that change owns the verdict, and a stale one already posted is replaced by a failure.
+ */
+async function settle({ api, repo, sha, expected, cla, links, sleep, report, current }) {
+  const verdictOf = (state, description) => ({ head: sha, state, description, results: [] });
+  const post = (verdict) =>
+    api.request('POST', `/repos/${repo}/statuses/${sha}`, {
+      state: verdict.state,
       context: CONTEXT,
-      description: result.description.slice(0, 140),
+      description: verdict.description.slice(0, 140),
       target_url: cla.status === 'final' ? links.cla : links.contributing,
     });
-    report(number, result);
+  const finish = async (verdict, { posted = false } = {}) => {
+    if (!posted && verdict.state !== 'none') await post(verdict);
+    report(verdict);
+  };
+  const stillCurrent = () => current().catch(() => false);
+  let numbers = expected;
+  let verdict = null;
+  for (let round = 0; round <= MAX_ROUNDS; round++) {
+    // Round 0 only reads the group; every later round evaluates the group read before it.
+    if (round > 0) {
+      if (numbers.length === 0) return finish(verdictOf('none', 'no open PR to main has this head'));
+      try {
+        verdict = await evaluateGroup({ api, repo, sha, numbers, cla, links, sleep });
+      } catch (error) {
+        if (!(error instanceof Moved)) return finish(verdictOf('failure', `Failed closed: ${error.message}`));
+        verdict = null;
+      }
+      if (verdict) {
+        if (!(await stillCurrent())) return finish(verdictOf('none', 'not posted: the CLA config on main changed'));
+        await post(verdict);
+      }
+    }
+    let group;
+    try {
+      group = await retry(() => readGroup(api, repo, sha, round === 0 ? expected : []), sleep);
+    } catch (error) {
+      return finish(verdictOf('failure', `Failed closed: ${error.message}`));
+    }
+    if (verdict && group.join() === numbers.join()) {
+      if (await stillCurrent()) return finish(verdict, { posted: true });
+      return finish(verdictOf('failure', 'Failed closed: the CLA changed on main during the check; comment to re-run'));
+    }
+    numbers = group;
+  }
+  return finish(verdictOf('failure', 'Failed closed: the pull requests sharing this head kept changing'));
+}
+
+/**
+ * Re-evaluates the head of each PR in `numbers` (whether open or not, so closing or retargeting a PR
+ * settles the PRs left behind) plus the extra `shas`, e.g. the previous head after a push.
+ */
+export async function run({
+  api,
+  repo,
+  numbers,
+  shas = [],
+  cla,
+  links,
+  sleep,
+  report = () => {},
+  current = async () => true,
+}) {
+  const errors = [];
+  const heads = new Map(shas.map((sha) => [sha, []]));
+  for (const number of numbers) {
+    try {
+      const pr = await api.get(`/repos/${repo}/pulls/${number}`);
+      const sha = pr.head?.sha;
+      if (!/^[0-9a-f]{40}$/.test(sha ?? '')) throw new Error('no head SHA');
+      if (!heads.has(sha)) heads.set(sha, []);
+      if (inGroup(pr, sha)) heads.get(sha).push(number);
+    } catch (error) {
+      errors.push(`#${number}: ${error.message}`);
+    }
+  }
+  for (const [sha, expected] of heads) {
+    await settle({ api, repo, sha, expected, cla, links, sleep, report, current });
   }
   if (errors.length > 0) throw new Error(`no status could be set for ${errors.join('; ')}`);
 }
 
-async function prNumbers(api, repo, eventName, event) {
-  if (eventName === 'pull_request_target') return [event.pull_request.number];
-  if (eventName === 'issue_comment') return event.issue.pull_request ? [event.issue.number] : [];
-  if (eventName === 'push')
-    return (await api.paginate(`/repos/${repo}/pulls?state=open&base=main`)).map((pr) => pr.number);
+/** The PRs and extra heads an event affects. */
+async function targets(api, repo, eventName, event) {
+  if (eventName === 'pull_request_target') {
+    const before = event.action === 'synchronize' && /^[0-9a-f]{40}$/.test(event.before ?? '') ? [event.before] : [];
+    return { numbers: [event.pull_request.number], shas: before };
+  }
+  if (eventName === 'issue_comment') return { numbers: event.issue.pull_request ? [event.issue.number] : [], shas: [] };
+  if (eventName === 'push') {
+    const open = await api.paginate(`/repos/${repo}/pulls?state=open&base=${BASE}`);
+    return { numbers: open.map((pr) => pr.number), shas: [] };
+  }
   throw new Error(`unsupported event ${eventName}`);
 }
+
+/** Whether main still has exactly these CLA files (read through the API, fails closed). */
+const sameOnMain = (api, repo, files) => async () => {
+  for (const [path, bytes] of files) {
+    const file = await api.get(`/repos/${repo}/contents/${path}?ref=${BASE}`);
+    if (file?.encoding !== 'base64' || !Buffer.from(file.content, 'base64').equals(bytes)) return false;
+  }
+  return true;
+};
 
 async function main(args) {
   const claBytes = readFileSync('CLA.md');
   if (args[0] === '--hash') return console.log(sha256(claBytes));
-  const cla = parseConfig(JSON.parse(readFileSync('.github/cla.json', 'utf8')), claBytes);
+  const configBytes = readFileSync('.github/cla.json');
+  const cla = parseConfig(JSON.parse(configBytes.toString('utf8')), claBytes);
   const dryRun = args[0] === '--dry-run';
   const repo = dryRun ? args[1] : process.env.GITHUB_REPOSITORY;
   const base = dryRun
@@ -402,9 +561,9 @@ async function main(args) {
   if (!/^[\w.-]+\/[\w.-]+$/.test(repo ?? '') || !/^[0-9a-f]{40}$/.test(base ?? ''))
     throw new Error('repository or base SHA missing');
   const api = createApi({ token: process.env.GITHUB_TOKEN, dryRun });
-  const numbers = dryRun
-    ? [Number(args[2])]
-    : await prNumbers(
+  const { numbers, shas } = dryRun
+    ? { numbers: [Number(args[2])], shas: [] }
+    : await targets(
         api,
         repo,
         process.env.GITHUB_EVENT_NAME,
@@ -416,12 +575,13 @@ async function main(args) {
     cla: `https://github.com/${repo}/blob/${base}/CLA.md`,
     contributing: `https://github.com/${repo}/blob/${base}/CONTRIBUTING.md#licence-and-cla`,
   };
-  const report = (number, result) => {
-    const lines = [
-      `#${number} @ ${result.head}: ${result.state}: ${result.description}`,
-      ...result.problems.map((p) => `- ${p}`),
-    ];
-    if (result.missing.length > 0) lines.push(`- needs: ${result.missing.map(mention).join(', ')}`);
+  const report = (verdict) => {
+    const lines = [`${verdict.head}: ${verdict.state}: ${verdict.description}`];
+    for (const result of verdict.results) {
+      lines.push(`- #${result.number}: ${result.state}: ${result.description}`);
+      lines.push(...result.problems.map((p) => `  - ${p}`));
+      if (result.missing.length > 0) lines.push(`  - needs: ${result.missing.map(mention).join(', ')}`);
+    }
     console.log(lines.join('\n'));
     if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${lines.join('\n')}\n\n`);
   };
@@ -429,9 +589,17 @@ async function main(args) {
     api,
     repo,
     numbers,
+    shas,
     cla,
     links,
     report,
+    // A dry run may use a local config that differs from main on purpose.
+    current: dryRun
+      ? async () => true
+      : sameOnMain(api, repo, [
+          ['CLA.md', claBytes],
+          ['.github/cla.json', configBytes],
+        ]),
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   });
 }

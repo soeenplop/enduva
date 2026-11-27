@@ -7,14 +7,20 @@
 # installs or runs PR code. PR data (titles, branch names, logins, comments) is read through the API
 # inside the script and never interpolated into a shell. No third-party actions; actions pinned by SHA.
 #
+# Shared heads: a commit status belongs to a SHA, and every open PR to main with that head shares it.
+# So every run evaluates all open PRs to main with the affected head together and posts success only
+# if each of them passes (see tools/cla-check.mjs). Closing or retargeting a PR, or pushing away from a
+# head, therefore re-evaluates the PRs left on that head too.
+#
 # Activation: `status` in .github/cla.json (owner-only, see CONTRIBUTING.md). While it is "draft",
 # the check collects no signatures and passes only PRs whose commits and opener are exempt accounts.
 name: cla
 
 on:
+  # No base-branch filter: a PR retargeted away from main must still re-evaluate the PRs it leaves
+  # behind. The script only ever evaluates open PRs to main.
   pull_request_target:
-    types: [opened, synchronize, reopened]
-    branches: [main]
+    types: [opened, synchronize, reopened, closed, edited]
   # Signing comments.
   issue_comment:
     types: [created, edited]
@@ -32,13 +38,16 @@ concurrency:
 jobs:
   cla:
     name: cla-check
-    if: github.event_name != 'issue_comment' || github.event.issue.pull_request
+    # Comments on PRs only; `edited` PRs only when the base branch changed (not title or body edits).
+    if: >-
+      (github.event_name != 'issue_comment' || github.event.issue.pull_request) &&
+      (github.event_name != 'pull_request_target' || github.event.action != 'edited' || github.event.changes.base)
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       # Append to the cla-signatures branch. `main` stays protected by its ruleset (PRs only).
       contents: write
-      # Read the PR, its commits and comments; create or update the signing prompt comment.
+      # Read the PRs, their commits and comments; create or update the signing prompt comments.
       pull-requests: write
       # The `cla` status on the evaluated head SHA.
       statuses: write

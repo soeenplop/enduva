@@ -53,14 +53,31 @@ const comment = (user, body) => ({
 });
 const sign = (user, cla) => comment(user, phrase(cla));
 
-/** In-memory GitHub: the PR, its commits and comments, the signature store; records every write. */
-function fakeGitHub({ opener = OWNER, commits, comments = [], records, prCommits, issueComments, heads = [] }) {
-  const state = { comments, store: records ? { records, sha: 'blob0' } : null, writes: [], reads: [], prReads: 0 };
-  const pr = () => {
-    const head = heads[state.prReads++] ?? HEAD;
-    return { number: N, user: opener, head: { sha: head }, commits: prCommits ?? state.commits.length };
-  };
-  state.commits = commits;
+/**
+ * In-memory GitHub: open or closed PRs (by default one PR #N), their commits and comments, the
+ * signature store; records every read and write. A PR's `heads` list replaces its head on each read.
+ */
+function fakeGitHub({ prs, records, ...single }) {
+  const all = new Map(Object.entries(prs ?? { [N]: single }).map(([n, pr]) => [Number(n), pr]));
+  const state = { all, store: records ? { records, sha: 'blob0' } : null, writes: [], reads: [], onWrite: null };
+  for (const [n, pr] of all) {
+    pr.number = n;
+    pr.opener ??= OWNER;
+    pr.comments ??= [];
+    pr.head ??= HEAD;
+    pr.state ??= 'open';
+    pr.base ??= 'main';
+  }
+  state.comments = all.get(N)?.comments;
+  state.commits = all.get(N)?.commits;
+  const view = (pr) => ({
+    number: pr.number,
+    state: pr.state,
+    user: pr.opener,
+    head: { sha: pr.head },
+    base: { ref: pr.base },
+    commits: pr.prCommits ?? pr.commits.length,
+  });
   const base = `/repos/${REPO}`;
   const api = {
     async request(method, path, body, allow = []) {
@@ -77,12 +94,21 @@ function fakeGitHub({ opener = OWNER, commits, comments = [], records, prCommits
             data: { encoding: 'base64', content: bytes.toString('base64'), size: bytes.length, sha: state.store.sha },
           };
         }
-        if (path === `${base}/pulls/${N}`) return { status: 200, data: pr() };
-        if (path === `${base}/issues/${N}`)
-          return { status: 200, data: { comments: issueComments ?? state.comments.length } };
+        const pull = path.match(/\/pulls\/(\d+)$/);
+        if (pull) {
+          const pr = all.get(Number(pull[1]));
+          if (pr.heads?.length) pr.head = pr.heads.shift();
+          return { status: 200, data: view(pr) };
+        }
+        const issue = path.match(/\/issues\/(\d+)$/);
+        if (issue) {
+          const pr = all.get(Number(issue[1]));
+          return { status: 200, data: { comments: pr.issueComments ?? pr.comments.length } };
+        }
         return assert.fail(`unexpected GET ${path}`);
       }
       state.writes.push({ method, path, body });
+      state.onWrite?.({ method, path, body });
       if (path === `${base}/git/trees`) {
         state.tree = body.tree[0].content;
         return { status: 201, data: { sha: 'tree1' } };
@@ -100,8 +126,9 @@ function fakeGitHub({ opener = OWNER, commits, comments = [], records, prCommits
         };
         return { status: 200, data: {} };
       }
-      if (path === `${base}/issues/${N}/comments`) {
-        state.comments.push({
+      const post = path.match(/\/issues\/(\d+)\/comments$/);
+      if (post) {
+        all.get(Number(post[1])).comments.push({
           id: ++commentId,
           user: { id: IDS.actionsBot, login: 'github-actions[bot]' },
           body: body.body,
@@ -109,7 +136,7 @@ function fakeGitHub({ opener = OWNER, commits, comments = [], records, prCommits
         return { status: 201, data: {} };
       }
       if (path.startsWith(`${base}/issues/comments/`)) {
-        const target = state.comments.find((c) => path.endsWith(`/${c.id}`));
+        const target = [...all.values()].flatMap((pr) => pr.comments).find((c) => path.endsWith(`/${c.id}`));
         target.body = body.body;
         return { status: 200, data: {} };
       }
@@ -119,31 +146,39 @@ function fakeGitHub({ opener = OWNER, commits, comments = [], records, prCommits
     get: async (path) => (await api.request('GET', path)).data,
     async paginate(path) {
       state.reads.push(path);
-      if (path === `${base}/pulls/${N}/commits`) return state.commits;
-      if (path === `${base}/issues/${N}/comments`) return state.comments;
+      if (path === `${base}/pulls?state=open&base=main`)
+        return [...all.values()]
+          .filter((pr) => pr.state === 'open' && pr.base === 'main' && pr.listed !== false)
+          .map(view);
+      const list = path.match(/\/(pulls|issues)\/(\d+)\/(commits|comments)$/);
+      if (list) return all.get(Number(list[2]))[list[3]];
       return assert.fail(`unexpected paginate ${path}`);
     },
   };
   return { api, state };
 }
 
-async function check(gh, cla) {
-  const results = [];
+/** Runs the check for `numbers` and returns the last `cla` status posted to `sha` plus the verdicts. */
+async function check(gh, cla, { numbers = [N], shas = [], sha = HEAD, current } = {}) {
+  const verdicts = [];
   await run({
     api: gh.api,
     repo: REPO,
-    numbers: [N],
+    numbers,
+    shas,
     cla,
     links: LINKS,
     sleep: async () => {},
-    report: (_, r) => results.push(r),
+    report: (v) => verdicts.push(v),
+    current,
   });
-  const statuses = gh.state.writes.filter((w) => w.path.includes('/statuses/'));
-  const status = statuses.at(-1);
-  return { ...status.body, sha: status.path.split('/').at(-1), result: results.at(-1) };
+  const status = gh.state.writes.filter((w) => w.path === `/repos/${REPO}/statuses/${sha}`).at(-1);
+  const verdict = verdicts.findLast((v) => v.head === sha);
+  const result = verdict?.results.find((r) => r.number === numbers[0]) ?? verdict;
+  return { ...status?.body, sha: status && sha, posted: Boolean(status), verdict, result };
 }
 
-const prompt = (gh) => gh.state.comments.find((c) => c.user.id === IDS.actionsBot)?.body;
+const prompt = (gh, n = N) => gh.state.all.get(n).comments.find((c) => c.user.id === IDS.actionsBot)?.body;
 const storeWrites = (gh) =>
   gh.state.writes.filter((w) => !w.path.includes('/statuses/') && !w.path.includes('/comments'));
 
@@ -164,6 +199,7 @@ describe('draft CLA (inert)', () => {
     assert.equal(status.target_url, LINKS.contributing);
     assert.deepEqual(gh.state.writes.length, 1, 'only the status is written');
     assert.ok(!gh.state.reads.some((p) => p.includes('signatures') || p.includes('comments')));
+    assert.equal(prompt(gh), undefined);
   });
 });
 
@@ -291,7 +327,6 @@ describe('final CLA', () => {
       fakeGitHub({ commits: [commit(1, OWNER)] }), // head not in the set
       fakeGitHub({ commits: [commit(0, OWNER), commit(0, OWNER)] }), // duplicate pages
       fakeGitHub({ commits: [commit(0, OWNER)], prCommits: 251 }), // beyond the API's listing limit
-      fakeGitHub({ commits: [commit(0, OWNER)], heads: [HEAD, 'd'.repeat(40)] }), // head moved during the check
     ];
     for (const gh of cases) {
       const status = await check(gh, V1);
@@ -299,6 +334,14 @@ describe('final CLA', () => {
       assert.match(status.description, /^Failed closed/);
       assert.equal(status.sha, HEAD, 'the status goes to the evaluated head');
     }
+  });
+
+  test('acceptance: a head that moves during the check gets no verdict from the stale evaluation', async () => {
+    const gh = fakeGitHub({ opener: ALICE, commits: [commit(0, ALICE)], heads: [HEAD, HEAD, 'd'.repeat(40)] });
+    const status = await check(gh, DRAFT);
+    assert.equal(status.posted, false, 'nothing is posted for the old head');
+    assert.equal(status.verdict.state, 'none');
+    // The push's own `synchronize` run evaluates the new head (and the old one again, via `before`).
   });
 
   test('an incomplete comment read fails closed', async () => {
@@ -329,6 +372,113 @@ describe('final CLA', () => {
     assert.match(LINKS.cla, /\/blob\/[0-9a-f]{40}\/CLA\.md$/);
     assert.ok(prompt(gh).includes(`(${LINKS.cla}) (sha256 \`${V1.sha256}\`)`));
     assert.ok(promptBody({ state: 'success' }, V1, LINKS.cla).includes(V1.sha256));
+  });
+});
+
+describe('PRs sharing a head SHA (one shared `cla` status)', () => {
+  const NEW = 'e'.repeat(40);
+  // #7 by the exempt owner and #8 opened by Alice from a fork, both with the owner's commit as head.
+  const sharedHead = (extra = {}) =>
+    fakeGitHub({
+      prs: {
+        7: { opener: OWNER, commits: [commit(0, OWNER)] },
+        8: { opener: ALICE, commits: [commit(0, OWNER)], ...extra },
+      },
+    });
+  const statusWrites = (gh, sha = HEAD) =>
+    gh.state.writes.filter((w) => w.path === `/repos/${REPO}/statuses/${sha}`).map((w) => w.body.state);
+
+  test('acceptance: an exempt PR and an unsigned external PR with the same head fail, then signing turns both green', async () => {
+    const gh = sharedHead();
+    const fromExempt = await check(gh, V1, { numbers: [7] });
+    assert.equal(fromExempt.state, 'failure', "the exempt PR's own pass must not count for #8");
+    assert.match(fromExempt.description, /^#8: 1 account\(s\) must sign/);
+    assert.deepEqual(
+      fromExempt.verdict.results.map((r) => [r.number, r.state]),
+      [
+        [7, 'success'],
+        [8, 'failure'],
+      ],
+    );
+    assert.match(prompt(gh, 7), /shared by every open pull request with the same head commit.*#8/);
+    assert.match(prompt(gh, 8), /@alice must sign/);
+    assert.equal((await check(gh, V1, { numbers: [8] })).state, 'failure');
+
+    gh.state.all.get(8).comments.push(sign(ALICE, V1));
+    const signed = await check(gh, V1, { numbers: [8] });
+    assert.equal(signed.state, 'success');
+    assert.equal(signed.sha, HEAD);
+    assert.match(signed.description, /\(all 2 PRs with this head\)$/);
+    assert.match(prompt(gh, 7), /have signed/, "#7's prompt no longer points at #8");
+    assert.equal((await check(gh, V1, { numbers: [7] })).state, 'success', 'and green from either PR');
+  });
+
+  test('acceptance: closing the unsigned external PR re-evaluates the PR left behind', async () => {
+    const gh = sharedHead();
+    assert.equal((await check(gh, V1, { numbers: [8] })).state, 'failure');
+    gh.state.all.get(8).state = 'closed';
+    const closed = await check(gh, V1, { numbers: [8] });
+    assert.equal(closed.state, 'success');
+    assert.deepEqual(
+      closed.verdict.results.map((r) => r.number),
+      [7],
+    );
+  });
+
+  test('the same holds while the CLA is a draft: an external duplicate blocks until it is closed', async () => {
+    const gh = sharedHead();
+    const status = await check(gh, DRAFT, { numbers: [7] });
+    assert.equal(status.state, 'failure');
+    assert.match(status.description, /^#8: CLA not yet in force/);
+    assert.equal(prompt(gh, 7), undefined, 'still no comments while draft');
+    gh.state.all.get(8).state = 'closed';
+    assert.equal((await check(gh, DRAFT, { numbers: [8] })).state, 'success');
+  });
+
+  test('retargeting a PR to or from main re-evaluates its head', async () => {
+    const gh = sharedHead({ base: 'release' });
+    assert.equal((await check(gh, V1, { numbers: [7] })).state, 'success', 'only PRs to main share the check');
+    gh.state.all.get(8).base = 'main';
+    assert.equal((await check(gh, V1, { numbers: [8] })).state, 'failure');
+    gh.state.all.get(8).base = 'release';
+    assert.equal((await check(gh, V1, { numbers: [8] })).state, 'success');
+  });
+
+  test('a push re-evaluates the previous head for the PRs still on it', async () => {
+    const gh = sharedHead();
+    assert.equal((await check(gh, V1, { numbers: [8] })).state, 'failure');
+    Object.assign(gh.state.all.get(8), { head: NEW, commits: [commit(0, OWNER), commit(9, ALICE, { sha: NEW })] });
+    const before = await check(gh, V1, { numbers: [8], shas: [HEAD] });
+    assert.equal(before.state, 'success', '#7 alone on the old head');
+    assert.equal((await check(gh, V1, { numbers: [8], shas: [HEAD], sha: NEW })).state, 'failure');
+  });
+
+  test('a PR that joins the head while the status is posted is evaluated before the check settles', async () => {
+    const gh = sharedHead({ state: 'closed' });
+    gh.state.onWrite = ({ path }) => {
+      if (path.includes('/statuses/')) gh.state.all.get(8).state = 'open';
+    };
+    const status = await check(gh, V1, { numbers: [7] });
+    assert.deepEqual(statusWrites(gh), ['success', 'failure'], 'the stale success is replaced');
+    assert.equal(status.state, 'failure');
+  });
+
+  test('a PR the open list does not show yet fails closed instead of settling without it', async () => {
+    const gh = sharedHead({ listed: false });
+    const status = await check(gh, V1, { numbers: [8] });
+    assert.equal(status.state, 'failure');
+    assert.match(status.description, /does not show #8 yet/);
+  });
+
+  test('a verdict made with a CLA config that main no longer has is not posted, or replaced if already posted', async () => {
+    const stale = fakeGitHub({ commits: [commit(0, OWNER)] });
+    const skipped = await check(stale, V1, { current: async () => false });
+    assert.equal(skipped.posted, false, 'the run for the CLA change on main owns the verdict');
+    const late = fakeGitHub({ commits: [commit(0, OWNER)] });
+    const answers = [true, false];
+    const replaced = await check(late, V1, { current: async () => answers.shift() });
+    assert.deepEqual(statusWrites(late), ['success', 'failure']);
+    assert.match(replaced.description, /CLA changed on main/);
   });
 });
 
