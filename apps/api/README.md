@@ -52,6 +52,8 @@ Never point a local process at a hosted project.
   request gets an ID: a safe incoming `x-request-id` is reused, otherwise one is generated, and it is echoed in the
   `x-request-id` response header. Request logs hold only ID, method, path (no query string), status and duration:
   no headers, tokens, bodies, client IPs or health data. Nest's own logs go through the same logger (nestjs-pino).
+  For failed queries only the SQL text (placeholders), SQLSTATE, table and constraint are logged, never the
+  parameters or Postgres' message ([`src/db/errors.ts`](src/db/errors.ts)).
 - **Throttling:** `@nestjs/throttler`, per client IP on every route, in memory per process. Over the limit: `429`
   `rate_limited` with `Retry-After`. Per-user limits follow with auth (0.8b).
 - **Database:** one pg pool on `DATABASE_URL` ([ADR-0002](../../docs/adr/0002-db-access-and-rls.md)). It connects
@@ -64,12 +66,12 @@ Never point a local process at a hosted project.
 
 ## Tests
 
-- Unit tests for the env schema, the problem mapping and the transaction interceptor.
+- Unit tests for the env schema, the problem mapping, query-error redaction and the transaction interceptor.
 - `test/health.e2e.test.ts` boots the real `AppModule` under SWC: DI through decorator metadata, liveness,
   readiness without a database, request IDs, problem bodies (404 inside and outside `/v1`, malformed body,
   unexpected error), log redaction and throttling.
 - `test/dist.e2e.test.ts` runs the SWC build with plain `node`: it boots, serves `/v1/health`, and refuses to boot
   with an invalid environment. The worker entrypoint runs and exits.
 - `test/database.e2e.test.ts` runs against the **local** Supabase stack through the transaction pooler: readiness, a
-  request transaction as `enduva_api` under RLS, and rollback.
+  request transaction as `enduva_api` under RLS, rollback, and a failed query whose parameter stays out of the logs.
   Without a running stack its tests are reported as skipped (`SKIPPED, not running` in the suite name), as in CI.

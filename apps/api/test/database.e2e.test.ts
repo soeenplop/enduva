@@ -6,7 +6,7 @@ import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { type IdentifiedRequest, RequestTx } from '../src/db/request-transaction.js';
-import { createTestApp, http, testEnv } from './support.js';
+import { createTestApp, http, logCapture, testEnv } from './support.js';
 
 // Local Supabase only (`pnpm --filter @enduva/db db:start` + `db:reset`): the transaction pooler and the API login
 // with its local development password from supabase/seed.sql. Never a hosted project.
@@ -52,6 +52,13 @@ class ProbeController {
     return { ...identity, profiles: visible };
   }
 
+  /** A failing query whose parameter must not reach the logs. */
+  @Get('bad-query')
+  async badQuery(@RequestTx() tx: Transaction): Promise<never> {
+    await tx.execute(sql`select ${'heart-rate-72'}::uuid`);
+    throw new Error('unreachable');
+  }
+
   /** Writes inside the request transaction, then fails: nothing may persist. */
   @Post()
   async failAfterWrite(@RequestTx() tx: Transaction): Promise<never> {
@@ -61,10 +68,12 @@ class ProbeController {
 }
 
 describe.skipIf(!available)(`database (e2e, local Supabase${available ? '' : ': SKIPPED, not running'})`, () => {
+  const logs = logCapture();
   let app: NestExpressApplication;
 
   beforeAll(async () => {
-    app = await createTestApp(testEnv({ DATABASE_URL: LOCAL_POOLER_URL }), {
+    app = await createTestApp(testEnv({ DATABASE_URL: LOCAL_POOLER_URL, LOG_LEVEL: 'info' }), {
+      logDestination: logs,
       controllers: [ProbeController],
       providers: [{ provide: APP_GUARD, useClass: FakeAuthGuard }],
     });
@@ -92,6 +101,23 @@ describe.skipIf(!available)(`database (e2e, local Supabase${available ? '' : ': 
     const after = await http(app).get('/v1/probe').set('x-test-user', USER_A);
     expect(after.body).toEqual(before.body);
     expect(JSON.stringify(after.body)).not.toContain('rolled back');
+  });
+
+  it('logs a failed query without its parameters', async () => {
+    const res = await http(app).get('/v1/probe/bad-query').set('x-test-user', USER_A).set('x-request-id', 'bad-query');
+    expect(res.status).toBe(500);
+    expect(logs.lines()).toContainEqual(
+      expect.objectContaining({
+        context: 'ProblemFilter',
+        req: expect.objectContaining({ id: 'bad-query' }) as unknown,
+        err: expect.objectContaining({
+          type: 'DrizzleQueryError',
+          sqlState: '22P02',
+          query: 'select $1::uuid',
+        }) as unknown,
+      }),
+    );
+    expect(logs.text()).not.toContain('heart-rate-72');
   });
 
   it('gives a route without verified claims no transaction (500, nothing runs unscoped)', async () => {

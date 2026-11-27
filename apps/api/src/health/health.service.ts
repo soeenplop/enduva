@@ -3,6 +3,7 @@ import type { Database } from '@enduva/db';
 import { sql } from 'drizzle-orm';
 
 import { DATABASE } from '../db/database.js';
+import { loggableError } from '../db/errors.js';
 import { ProblemException } from '../problem/problem.js';
 
 const READINESS_TIMEOUT_MS = 2_000;
@@ -31,7 +32,7 @@ export class HealthService {
     try {
       await Promise.race([this.db.execute(sql`select 1`), timeout]);
     } catch (error) {
-      this.logger.warn({ err: error }, 'readiness check failed');
+      this.logger.warn({ err: loggableError(error) }, 'readiness check failed');
       throw new ProblemException('database_unavailable');
     } finally {
       clearTimeout(timer);
