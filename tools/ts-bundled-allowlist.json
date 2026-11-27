@@ -20,9 +20,9 @@
         "plugins/typescript.js": "sha256:9c1b3055e18e29378c3f147d9c7967801f6a2405db3fc85a4b08a0f4c484ff24",
         "plugins/typescript.mjs": "sha256:befece7495d9fee605e81a93bf7b06a9ebe3c59523de65172187ef43123418e3"
       },
-      "consumers": ["@tanstack/router-generator@1.168.0"],
-      "usage": "@tanstack/router-generator (hard dependency; run by `tsr generate` via @tanstack/router-cli and by the TanStack Start Vite build via @tanstack/router-plugin in apps/landing) formats the generated route trees (`routeTree.gen.ts`) with Prettier's `typescript` parser.",
-      "reason": "TanStack Router's generator depends on Prettier and formats with `parser: 'typescript'`. TanStack stays (owner ruling on PR #97). Parsing and printing only: no type checking, language service or emit. Root entry added by the lead under W13 on PR #110."
+      "consumers": ["@tanstack/router-generator@1.168.0", "orval@8.49.0"],
+      "usage": "@tanstack/router-generator (hard dependency; run by `tsr generate` via @tanstack/router-cli and by the TanStack Start Vite build via @tanstack/router-plugin in apps/landing) formats the generated route trees (`routeTree.gen.ts`) with Prettier's `typescript` parser. orval (packages/api-client) has Prettier as an optional peer, which pnpm links to the same copy; orval only imports it when `output.formatter: 'prettier'` is set, which our config deliberately omits, so it is never loaded during client generation.",
+      "reason": "TanStack Router's generator depends on Prettier and formats with `parser: 'typescript'`. TanStack stays (owner ruling on PR #97). Parsing and printing only: no type checking, language service or emit. Root entry added by the lead under W13 on PR #110. Consumer orval@8.49.0 added by the lead under W13 on the 0.8c web-client PR: the optional peer link is not used, and unlinking it with a pnpmfile hook would be a workaround."
     }
   ]
 }
