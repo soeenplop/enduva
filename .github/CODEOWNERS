@@ -1,0 +1,12 @@
+# Files that define the CLA gate (PROTECTED in tools/cla-check.mjs). Every agent works through the
+# owner's account, so a code-owner review can't tell the owner from an agent and isn't required by
+# the ruleset. The enforcement is the `cla` check itself: a PR that changes one of these files fails
+# it unless its head commit is signed with an owner approval key listed in .github/cla-approvers.
+/CLA.md @soeenplop
+/.github/cla.json @soeenplop
+/.github/cla-approvers @soeenplop
+/.github/CODEOWNERS @soeenplop
+/.github/workflows/cla.yml @soeenplop
+/.github/rulesets/ @soeenplop
+/tools/cla-check.mjs @soeenplop
+/tools/cla-check.test.mjs @soeenplop

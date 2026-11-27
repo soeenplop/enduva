@@ -1,16 +1,23 @@
 # CLA check (roadmap task 0.5, T24), logic and rules in tools/cla-check.mjs. Its result is the commit
-# status `cla` on the evaluated PR head SHA, a required check of the `main` ruleset
-# (.github/rulesets/main.json). The job itself (`cla-check`) is not the required check.
+# status `cla` on PR head SHAs, a required check of the `main` ruleset (.github/rulesets/main.json).
+# The jobs themselves (`cla-plan`, `cla-check`) are not required checks.
 #
-# Security: `pull_request_target`, `issue_comment` and `push` all run this file and the script from
-# the base branch. The job checks out only that base commit (github.sha) and never checks out,
-# installs or runs PR code. PR data (titles, branch names, logins, comments) is read through the API
-# inside the script and never interpolated into a shell. No third-party actions; actions pinned by SHA.
+# Security: every trigger runs this file and the script from the base branch. The jobs check out only
+# that base commit (github.sha) and never check out, install or run PR code. PR data (titles, branch
+# names, logins, comments) is read through the API inside the script and never interpolated into a
+# shell; the only expression a step gets is a head SHA from the plan job, passed as an environment
+# variable and validated by the script. No third-party actions; actions pinned by SHA.
 #
 # Shared heads: a commit status belongs to a SHA, and every open PR to main with that head shares it.
-# So every run evaluates all open PRs to main with the affected head together and posts success only
-# if each of them passes (see tools/cla-check.mjs). Closing or retargeting a PR, or pushing away from a
-# head, therefore re-evaluates the PRs left on that head too.
+# `plan` maps the event to the affected heads and first sets a head a PR joins to `pending` (so no
+# inherited success survives); `settle` then runs once per head, serialized per head SHA, and
+# evaluates every open PR to main with that head together. A newer run for a head replaces only a
+# queued run for the same head, which would have evaluated the same head anyway.
+#
+# Policy changes (CLA.md, .github/cla.json, .github/cla-approvers on main), the hourly schedule and a
+# manual dispatch without a PR number reconcile every open head: a success made with another policy,
+# or one that doesn't name every open PR on its head, is set to pending before it is re-evaluated, so
+# an interrupted sweep is finished by the next run.
 #
 # Activation: `status` in .github/cla.json (owner-only, see CONTRIBUTING.md). While it is "draft",
 # the check collects no signatures and passes only PRs whose commits and opener are exempt accounts.
@@ -24,33 +31,43 @@ on:
   # Signing comments.
   issue_comment:
     types: [created, edited]
-  # A CLA or config change re-evaluates every open PR against the new version.
+  # A CLA policy change re-evaluates every open head against the new policy.
   push:
     branches: [main]
-    paths: [CLA.md, .github/cla.json]
+    paths: [CLA.md, .github/cla.json, .github/cla-approvers]
+  # Reconciliation: finishes an interrupted sweep and repairs heads a failed run left behind.
+  schedule:
+    - cron: '23 * * * *'
+  # Authorized re-check (repository writers only): one PR, or every open head when empty.
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Pull request number to re-check (empty re-checks every open pull request)
+        required: false
+        type: string
 
 permissions: {}
 
-concurrency:
-  group: cla-${{ github.event.pull_request.number || github.event.issue.number || 'push' }}
-  cancel-in-progress: false
-
 jobs:
-  cla:
-    name: cla-check
-    # Comments on PRs only; `edited` PRs only when the base branch changed (not title or body edits).
+  plan:
+    name: cla-plan
+    # Comments only when they can be a signature (on a PR, not from a bot, containing the phrase's
+    # start; the script checks the exact phrase and the author). `edited` PRs only when the base
+    # branch changed (not title or body edits).
     if: >-
-      (github.event_name != 'issue_comment' || github.event.issue.pull_request) &&
+      (github.event_name != 'issue_comment' || (github.event.issue.pull_request &&
+      github.event.comment.user.type != 'Bot' &&
+      contains(github.event.comment.body, 'I have read and agree to the Enduva CLA'))) &&
       (github.event_name != 'pull_request_target' || github.event.action != 'edited' || github.event.changes.base)
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 5
     permissions:
-      # Append to the cla-signatures branch. `main` stays protected by its ruleset (PRs only).
-      contents: write
-      # Read the PRs, their commits and comments; create or update the signing prompt comments.
-      pull-requests: write
-      # The `cla` status on the evaluated head SHA.
+      contents: read
+      pull-requests: read
+      # `pending` on heads that PRs join, and on stale heads before they are re-evaluated.
       statuses: write
+    outputs:
+      heads: ${{ steps.plan.outputs.heads }}
     steps:
       # The base commit (github.sha), never the PR head.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -60,7 +77,45 @@ jobs:
         with:
           node-version: 24
       # No install: the script has no dependencies.
-      - name: CLA check
+      - name: Plan the heads to settle
+        id: plan
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: node tools/cla-check.mjs
+        run: node tools/cla-check.mjs plan
+
+  settle:
+    name: cla-check
+    needs: plan
+    # Also after a plan that failed part-way: the heads it did return still get their verdict.
+    if: ${{ !cancelled() && needs.plan.outputs.heads != '' && needs.plan.outputs.heads != '[]' }}
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        head: ${{ fromJSON(needs.plan.outputs.heads) }}
+    # One settle per head SHA at a time; a newer run for the same head replaces a queued one.
+    concurrency:
+      group: cla-head-${{ matrix.head }}
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      # Append to the cla-signatures branch. `main` stays protected by its ruleset (PRs only).
+      contents: write
+      # Read the PRs, their commits and comments; create or update the signing prompt comments.
+      pull-requests: write
+      # The `cla` status on the head SHA.
+      statuses: write
+    steps:
+      # The base commit (github.sha), never the PR head.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Settle the cla status of one head
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CLA_HEAD: ${{ matrix.head }}
+        run: node tools/cla-check.mjs settle

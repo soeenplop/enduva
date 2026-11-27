@@ -1,0 +1,6 @@
+# Owner approval keys for changes to the CLA check and policy (the files in .github/CODEOWNERS).
+# A PR that changes one of them passes the `cla` check only if its head commit is signed with a key
+# listed here. Format: ssh-keygen allowed_signers, one "<principal> <key type> <public key>" per line.
+# Only keys the owner holds and no agent can use belong here (never the agents' repo signing key).
+# The key must also be a signing key on the owner's GitHub account, so that GitHub verifies the commit.
+# No key yet: every PR that changes a protected file fails the `cla` check (see CONTRIBUTING.md).
