@@ -44,7 +44,7 @@ erDiagram
 | --- | --- |
 | `profiles` | `user_id` (PK), display_name, avatar_path, birth_date, sex, height_cm, locale (`de`/`en`), time_zone, role (`user`/`admin`), onboarding_completed_at |
 | `user_settings` | theme, week_start, notification prefs, health_sync settings |
-| `ai_consents` | user_id, consent_version, granted_at, revoked_at |
+| `consents` | user_id, purpose (`health_data`/`ai_nutrition`/`ai_coach`), consent_version, granted_at, revoked_at. One active row per purpose (ADR-0002) |
 | `entitlements` | user_id, tier (`free`/`premium`), source (`manual`/`app_store`/`web`), valid_until |
 | `ai_usage` | user_id, feature, model, input/output tokens, cost_estimate, created_at |
 | `data_exports` | user_id, status, storage_path, expires_at |
