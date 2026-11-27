@@ -18,6 +18,7 @@ describe('problem details', () => {
     expect(codeForStatus(404)).toBe('not_found');
     expect(codeForStatus(429)).toBe('rate_limited');
     // A status with several codes maps to its generic one.
+    expect(codeForStatus(401)).toBe('unauthorized');
     expect(codeForStatus(503)).toBe('database_unavailable');
     expect(codeForStatus(406)).toBe('bad_request');
     expect(codeForStatus(502)).toBe('internal_error');

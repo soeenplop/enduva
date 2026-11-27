@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 import { decodeJwt } from 'jose';
@@ -70,3 +71,29 @@ export async function signIn(auth: LocalAuth, email: string, password: string): 
   const { sub, session_id: sessionId } = decodeJwt(body.access_token);
   return { accessToken: body.access_token, userId: String(sub), sessionId: String(sessionId) };
 }
+
+/** Creates a confirmed synthetic user through the Admin API and signs them in. */
+export async function newUser(auth: LocalAuth): Promise<Session> {
+  const email = `e2e-${randomUUID()}@example.com`;
+  const password = randomUUID();
+  await call(auth, '/admin/users', {
+    method: 'POST',
+    admin: true,
+    body: JSON.stringify({ email, password, email_confirm: true }),
+  });
+  return signIn(auth, email, password);
+}
+
+export const deleteUser = (auth: LocalAuth, userId: string, soft = false) =>
+  call(auth, `/admin/users/${userId}`, {
+    method: 'DELETE',
+    admin: true,
+    body: JSON.stringify({ should_soft_delete: soft }),
+  });
+
+export const banUser = (auth: LocalAuth, userId: string) =>
+  call(auth, `/admin/users/${userId}`, { method: 'PUT', admin: true, body: JSON.stringify({ ban_duration: '24h' }) });
+
+/** Signs the session out (Auth deletes it); the access token itself stays valid until it expires. */
+export const signOut = (auth: LocalAuth, session: Session) =>
+  call(auth, '/logout?scope=local', { method: 'POST', headers: { authorization: `Bearer ${session.accessToken}` } });

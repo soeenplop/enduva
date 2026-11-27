@@ -11,6 +11,7 @@ import type { Env } from './config/env.js';
 import { DatabaseModule } from './db/database.module.js';
 import { HealthModule } from './health/health.module.js';
 import { createHttpLogger, loggerParams } from './logging/logging.js';
+import { MeModule } from './me/me.module.js';
 import { ProblemFilter } from './problem/problem.filter.js';
 
 const HTTP_LOGGER = Symbol('enduva.http-logger');
@@ -37,6 +38,7 @@ export class AppModule {
         // After the throttler, so its guard runs first and unauthenticated floods are limited before verification.
         AuthModule.register(env),
         HealthModule,
+        MeModule,
       ],
       providers: [
         { provide: APP_FILTER, useClass: ProblemFilter },
