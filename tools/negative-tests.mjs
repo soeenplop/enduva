@@ -4,7 +4,8 @@
 //
 // - `<pkg>/negative/*.ts(x)`: each file starts with `// @expect TS<code> at <line>:<col>`. The runner
 //   type-checks the package's normal sources plus that one fixture with the package's TS 7 `tsc` and
-//   requires a non-zero exit and exactly one diagnostic: that code at that location.
+//   requires a normal, non-zero exit (not killed by a signal) and exactly one diagnostic: that code
+//   at that location.
 // - `<pkg>/negative/lint/*.ts(x)`: each file starts with `// @expect-lint <rule> at <line>:<col>`.
 //   The runner lints it with oxlint's type-aware mode (tsgolint) and the shared config
 //   (`@enduva/config/oxlint.json`, its ignores removed) and requires exactly one diagnostic: that
@@ -28,10 +29,14 @@ function expectation(file, tag) {
 
 const describe = ({ file, code, line, column }) => `${code} at ${file}:${line}:${column}`;
 
-/** Exactly one diagnostic, the expected one, and a failing exit status. Returns a problem or null. */
+/**
+ * Exactly one diagnostic, the expected one, and a normal, failing exit: `status` is spawnSync's,
+ * which is null when the process was killed by a signal (or never started). Returns a problem or null.
+ */
 export function verdict(label, status, actual, expected) {
   const want = describe(expected);
   if (status === 0) return `${label}: passed, expected ${want}`;
+  if (!Number.isInteger(status)) return `${label}: did not exit normally (killed by a signal?), expected ${want}`;
   if (actual.length === 1 && actual[0].raw === undefined && describe(actual[0]) === want) return null;
   const got = actual.map((d) => d.raw ?? describe(d));
   return `${label}: expected only ${want}, got:\n  ${got.join('\n  ') || '(no diagnostics)'}`;
@@ -136,6 +141,7 @@ function selfTest() {
     ['accepts exactly the expected diagnostic', 2, [hit], false],
     ['rejects a fixture that passes', 0, [], true],
     ['rejects a fixture that passes despite reporting the diagnostic', 0, [hit], true],
+    ['rejects a process killed by a signal despite the expected diagnostic', null, [hit], true],
     ['rejects no diagnostics', 2, [], true],
     ['rejects another code', 2, [{ ...hit, code: 'TS2322' }], true],
     ['rejects another location', 2, [{ ...hit, column: 39 }], true],
@@ -155,6 +161,17 @@ function selfTest() {
   const parsedOk = parsed.length === 2 && describe(parsed[0]) === describe(want) && parsed[1].raw !== undefined;
   if (!parsedOk) failed++;
   console.log(`${parsedOk ? 'ok  ' : 'FAIL'} parses located and global tsc errors`);
+  // End to end: a real process prints exactly the expected diagnostic, then kills itself.
+  const script = `require('fs').writeSync(1, ${JSON.stringify(`negative/a.ts(5,38): error TS2345: x\n`)}); process.kill(process.pid, 'SIGKILL');`;
+  const killed = spawnSync(process.execPath, ['-e', script], { encoding: 'utf8' });
+  const diagnostics = tscDiagnostics(killed.stdout);
+  const killedOk =
+    killed.signal === 'SIGKILL' &&
+    diagnostics.length === 1 &&
+    describe(diagnostics[0]) === describe(want) &&
+    verdict('fixture', killed.status, diagnostics, want) !== null;
+  if (!killedOk) failed++;
+  console.log(`${killedOk ? 'ok  ' : 'FAIL'} rejects a real process killed by SIGKILL after the expected diagnostic`);
   if (failed > 0) process.exit(1);
 }
 
