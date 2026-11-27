@@ -1,12 +1,16 @@
 # Interim CLA gate (roadmap 0.5, T24, owner ruling 2026-11-27), logic in tools/cla-gate.mjs. While
-# CLA.md is a draft, it passes only PRs whose opener and every commit author and committer are the
-# owner or a listed bot. The job name is a required status check of the `main` ruleset
-# (.github/rulesets/main.json). Task CLA.1 replaces it with the full signature check.
+# CLA.md is a draft, it passes only same-repository PRs whose opener and every commit's author and
+# committer are the owner or a listed bot, with GitHub-verified signatures. It also fails while
+# another open PR on the same head SHA breaks the opener rules: the result belongs to the SHA. The
+# job name is a required status check of the `main` ruleset (.github/rulesets/main.json). Task
+# CLA.1 replaces it with the full signature check.
 #
 # Security: pull_request_target runs this file and the script from the base branch with a read-only
 # token. The only checkout is the base commit (github.sha, the default for this event): PR code is
 # never checked out, installed or run. PR data is read through the API inside the script and never
-# interpolated into a shell. Actions pinned by SHA.
+# interpolated into a shell. Actions pinned by SHA. The required context names only the Actions
+# app, so fork `pull_request` workflows (which could report a job named `cla`) need approval for
+# all external contributors (repository setting, 2026-11-27) and are never approved.
 #
 # No `if:` anywhere: a skipped job would count as a passing `cla` check on that head. `edited`
 # re-checks a PR whose base branch changed (and, harmlessly, title or body edits).
