@@ -30,6 +30,8 @@ process with exit code 1 and a list of the offending variable names (never their
 | `NODE_ENV` | `development` | `development`, `test` or `production` |
 | `HOST` / `PORT` | `0.0.0.0` / `3000` | |
 | `LOG_LEVEL` | `info` | pino level, or `silent` |
+| `TRUST_PROXY` | `0` | Number of trusted reverse proxies (Traefik: `1`), so throttling sees the client IP |
+| `THROTTLE_LIMIT` / `THROTTLE_TTL_SECONDS` | `100` / `60` | Requests per client IP and window |
 
 ## Behaviour
 
@@ -44,11 +46,14 @@ process with exit code 1 and a list of the offending variable names (never their
   request gets an ID: a safe incoming `x-request-id` is reused, otherwise one is generated, and it is echoed in the
   `x-request-id` response header. Request logs hold only ID, method, path (no query string), status and duration:
   no headers, tokens, bodies, client IPs or health data. Nest's own logs go through the same logger (nestjs-pino).
+- **Throttling:** `@nestjs/throttler`, per client IP on every route, in memory per process. Over the limit: `429`
+  `rate_limited` with `Retry-After`. Per-user limits follow with auth (0.8b).
 
 ## Tests
 
 - Unit tests for the env schema and the problem mapping.
 - `test/health.e2e.test.ts` boots the real `AppModule` under SWC: DI through decorator metadata, liveness, request
-  IDs, problem bodies (404 inside and outside `/v1`, malformed body, unexpected error) and log redaction.
+  IDs, problem bodies (404 inside and outside `/v1`, malformed body, unexpected error), log redaction and
+  throttling.
 - `test/dist.e2e.test.ts` runs the SWC build with plain `node`: it boots, serves `/v1/health`, and refuses to boot
   with an invalid environment. The worker entrypoint runs and exits.

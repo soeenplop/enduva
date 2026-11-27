@@ -9,11 +9,18 @@ describe('loadEnv', () => {
       HOST: '0.0.0.0',
       PORT: 3000,
       LOG_LEVEL: 'info',
+      TRUST_PROXY: 0,
+      THROTTLE_LIMIT: 100,
+      THROTTLE_TTL_SECONDS: 60,
     });
   });
 
   it('coerces numbers', () => {
-    expect(loadEnv({ PORT: '8080' })).toMatchObject({ PORT: 8080 });
+    expect(loadEnv({ PORT: '8080', THROTTLE_LIMIT: '5', TRUST_PROXY: '1' })).toMatchObject({
+      PORT: 8080,
+      THROTTLE_LIMIT: 5,
+      TRUST_PROXY: 1,
+    });
   });
 
   it.each([
@@ -22,6 +29,9 @@ describe('loadEnv', () => {
     ['NODE_ENV', 'staging'],
     ['HOST', ''],
     ['LOG_LEVEL', 'verbose'],
+    ['TRUST_PROXY', 'true'],
+    ['THROTTLE_LIMIT', '-1'],
+    ['THROTTLE_TTL_SECONDS', '0'],
   ])('refuses %s=%s', (name, value) => {
     expect(() => loadEnv({ [name]: value })).toThrow(new RegExp(`^Invalid environment:\\n  ${name}: `));
   });

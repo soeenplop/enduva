@@ -1,6 +1,7 @@
 import { type DynamicModule, Module, VersioningType } from '@nestjs/common';
-import { APP_FILTER } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
+import { seconds, ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { Logger, LoggerModule } from 'nestjs-pino';
 import type { DestinationStream } from 'pino';
 import type { HttpLogger } from 'pino-http';
@@ -23,9 +24,17 @@ export class AppModule {
     const http = createHttpLogger(env, options.logDestination);
     return {
       module: AppModule,
-      imports: [LoggerModule.forRoot(loggerParams(http)), HealthModule],
+      imports: [
+        LoggerModule.forRoot(loggerParams(http)),
+        // Per client IP; per-user limits follow with auth (0.8b).
+        ThrottlerModule.forRoot({
+          throttlers: [{ ttl: seconds(env.THROTTLE_TTL_SECONDS), limit: env.THROTTLE_LIMIT }],
+        }),
+        HealthModule,
+      ],
       providers: [
         { provide: APP_FILTER, useClass: ProblemFilter },
+        { provide: APP_GUARD, useClass: ThrottlerGuard },
         { provide: HTTP_LOGGER, useValue: http },
       ],
     };
@@ -33,13 +42,15 @@ export class AppModule {
 }
 
 /** HTTP settings shared by `main.ts` and the e2e tests. */
-export function configureApp(app: NestExpressApplication, _env: Env): NestExpressApplication {
+export function configureApp(app: NestExpressApplication, env: Env): NestExpressApplication {
   // Before init, so it runs ahead of Nest's body parser and every response gets a request ID and a log line.
   app.use(app.get<HttpLogger>(HTTP_LOGGER));
   app.useLogger(app.get(Logger));
   // `/v1/…` through URI versioning rather than a global prefix, so unknown paths outside /v1 also get the
   // problem+json 404.
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
+  // Client IPs (throttling) come from X-Forwarded-For only behind this many trusted proxies.
+  app.set('trust proxy', env.TRUST_PROXY);
   app.disable('x-powered-by');
   return app;
 }

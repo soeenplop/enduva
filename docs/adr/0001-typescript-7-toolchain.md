@@ -176,7 +176,7 @@ Task 0.8a ([#10](https://github.com/soeenplop/enduva/issues/10)) builds [`apps/a
 
 - **Nest on SWC.** Nest 12.6.3, `@swc/cli`/`@swc/core` with [`swc/nest.json`](../../packages/config/swc/nest.json), no Nest CLI. The build emits `dist/main.js` and `dist/worker.js`, and a test runs the build with plain `node` (criterion 1, as in the spike's smoke script). Vitest runs through `unplugin-swc` 2.0.0 via the new preset `@enduva/config/vitest/nest`, which passes the options of `swc/nest.json` and nothing else (no `.swcrc` lookup, no tsconfig-derived defaults).
 - **API fixtures (criteria 2 and 5).** [`apps/api/negative/`](../../apps/api/negative) holds the ported fixtures for the root runner: TS2554 (controller built without its injected service), TS2345 (a problem code outside the closed set) and `typescript(no-floating-promises)`. The spike keeps its own copies until it is deleted (Consequences).
-- **New runtime packages** (`nestjs-pino` 5.3.2, `pino` 10.4.0, `pino-http` 11.0.0) bring no TypeScript: `pnpm audit:ts` passes with no new allowlist entry.
+- **New runtime packages** (`@nestjs/throttler` 6.8.0, `nestjs-pino` 5.3.2, `pino` 10.4.0, `pino-http` 11.0.0) bring no TypeScript: `pnpm audit:ts` passes with no new allowlist entry.
 
 ## Consequences
 

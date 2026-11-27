@@ -114,3 +114,44 @@ describe('GET /v1/health (e2e, SWC)', () => {
     expect(logs.text()).not.toMatch(/query-secret|header-secret|cookie-secret|body-secret/);
   });
 });
+
+describe('throttling (e2e)', () => {
+  let app: NestExpressApplication;
+
+  beforeAll(async () => {
+    app = await createTestApp(testEnv({ THROTTLE_LIMIT: '2', THROTTLE_TTL_SECONDS: '60' }));
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('answers 429 rate_limited with Retry-After once the limit is used up', async () => {
+    expect((await http(app).get('/v1/health')).status).toBe(200);
+    expect((await http(app).get('/v1/health')).status).toBe(200);
+    const res = await http(app).get('/v1/health');
+    expect(res.status).toBe(429);
+    expect(res.headers['content-type']).toMatch(problemType);
+    expect(res.body).toMatchObject({ status: 429, code: 'rate_limited', title: 'Too Many Requests' });
+    expect(Number(res.headers['retry-after'])).toBeGreaterThan(0);
+  });
+});
+
+describe('throttling behind a trusted proxy (e2e)', () => {
+  let app: NestExpressApplication;
+
+  beforeAll(async () => {
+    app = await createTestApp(testEnv({ THROTTLE_LIMIT: '1', TRUST_PROXY: '1' }));
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('counts each forwarded client IP separately', async () => {
+    const from = (ip: string) => http(app).get('/v1/health').set('x-forwarded-for', ip);
+    expect((await from('203.0.113.1')).status).toBe(200);
+    expect((await from('203.0.113.1')).status).toBe(429);
+    expect((await from('203.0.113.2')).status).toBe(200);
+  });
+});
