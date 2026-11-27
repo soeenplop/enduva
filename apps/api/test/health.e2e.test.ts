@@ -1,9 +1,10 @@
-import { Controller, Get, Post } from '@nestjs/common';
+import { Controller, Get, HttpException, Param, Post } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { Database } from '@enduva/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { DATABASE } from '../src/db/database.js';
+import { ProblemException } from '../src/problem/problem.js';
 import { HealthController } from '../src/health/health.controller.js';
 import { HealthService } from '../src/health/health.service.js';
 import { createTestApp, http, logCapture, testEnv } from './support.js';
@@ -27,6 +28,16 @@ class BoomController {
     };
     const error = Object.assign(new Error('message-secret'), { constructor: { name: 'LeakedName' } });
     throw Object.defineProperties(error, { status: { get: thrower }, expose: { get: thrower } });
+  }
+
+  @Get('malformed/:kind')
+  malformed(@Param('kind') kind: string): never {
+    if (kind === 'nan') throw new HttpException('x', Number.NaN);
+    if (kind === 'fraction') throw new HttpException('x', 404.5);
+    if (kind === 'exposed-fraction') throw Object.assign(new Error('x'), { status: 400.5, expose: true });
+    const unknownCode = new ProblemException('not_found');
+    Object.defineProperty(unknownCode, 'code', { value: kind === 'proto' ? '__proto__' : 'not-a-code' });
+    throw unknownCode;
   }
 
   @Get('items/:id')
@@ -148,6 +159,21 @@ describe('GET /v1/health (e2e, SWC)', () => {
     expect(filterLine?.err).toEqual({ type: 'Error' });
     expect(logs.text()).not.toMatch(/LeakedName|message-secret|getter-secret/);
   });
+
+  it.each(['nan', 'fraction', 'exposed-fraction', 'code', 'proto'])(
+    'answers a malformed status or problem code with a 500 problem (%s)',
+    async (kind) => {
+      const res = await http(app).get(`/v1/boom/malformed/${kind}`);
+      expect(res.status).toBe(500);
+      expect(res.headers['content-type']).toMatch(problemType);
+      expect(res.body).toEqual({
+        type: 'about:blank',
+        title: 'Internal Server Error',
+        status: 500,
+        code: 'internal_error',
+      });
+    },
+  );
 
   it('logs requests with their ID and route template but without paths, headers, query strings or bodies', async () => {
     const res = await http(app)
