@@ -1,5 +1,6 @@
-# Root workspace checks (ADR-0001). Task 0.5 adds build, lint, typecheck and test and makes the
-# checks required; until then this job covers formatting and the TypeScript 7 audits.
+# Root workspace CI (task 0.5). The job names are the required status checks of the `main`
+# ruleset (.github/rulesets/main.json): renaming a job needs the ruleset updated in the same PR.
+# Commitlint runs in commitlint.yml, because it must re-run when a PR title is edited.
 name: ci
 
 on:
@@ -12,27 +13,84 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  TURBO_TELEMETRY_DISABLED: '1'
 
 jobs:
-  root:
-    name: Root format and TS 7 audits
+  build:
+    name: build-typecheck-lint-test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: Build, typecheck, lint and test (turbo)
+        run: pnpm turbo build typecheck lint test
+
+  format:
+    name: format
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 24
-          cache: pnpm
-
-      # --ignore-scripts skips the root `prepare` (lefthook install), which CI doesn't need.
-      - name: Install (frozen lockfile)
-        run: pnpm install --frozen-lockfile --ignore-scripts
+      - uses: ./.github/actions/setup
       - name: Format check (oxfmt)
         run: pnpm format:check
+
+  ts7-audits:
+    name: ts7-audits
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      # Each audit runs its self-test first (ADR-0001). The bundled-TS audit scans this runner's
+      # frozen install, so it must stay after the install step.
       - name: TS 7 audits (lockfile, bundled TypeScript, pnpm why typescript)
         run: pnpm audit:ts
+
+  negative-tests:
+    name: negative-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: Negative tests (tsc and oxlint must fail on the broken fixtures)
+        run: pnpm test:negative
+
+  gitleaks:
+    name: gitleaks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      # Release tarball pinned by version and SHA-256 (from gitleaks_<version>_checksums.txt).
+      # A bump changes both values.
+      GITLEAKS_VERSION: 8.30.1
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Install gitleaks
+        run: |
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/gitleaks.tar.gz" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  $RUNNER_TEMP/gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP" gitleaks
+      # The scan includes merge commits' diffs; the self-test proves it on a throwaway repo first.
+      - name: Self-test (a secret added only in a merge resolution must be found)
+        run: tools/gitleaks-scan.sh "$RUNNER_TEMP/gitleaks" --self-test
+      - name: Scan the full git history, merge commits included
+        run: tools/gitleaks-scan.sh "$RUNNER_TEMP/gitleaks" .
