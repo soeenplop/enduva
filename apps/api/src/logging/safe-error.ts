@@ -2,7 +2,6 @@ import { DatabaseError } from '@enduva/db';
 import { HttpException, NotFoundException } from '@nestjs/common';
 import { ThrottlerException } from '@nestjs/throttler';
 import { DrizzleQueryError } from 'drizzle-orm';
-import { ZodError } from 'zod';
 
 import { databaseErrorFields, type DatabaseErrorFields } from '../db/errors.js';
 import { ProblemException } from '../problem/problem.js';
@@ -19,14 +18,13 @@ export const UNKNOWN_ERROR_TYPE = 'Unknown';
 type ErrorClass = abstract new (...args: never) => Error;
 
 /**
- * The categories that may be logged, checked in order with `instanceof`, so subclasses come before their base
+ * The categories that may be logged, checked in order against the prototype chain, so subclasses come before their base
  * classes. The name is a literal here: a thrown value can bring its own `constructor` and `name`, so neither is ever
  * read from it. `Error` is last and catches every other error.
  */
 const errorTypes: readonly (readonly [ErrorClass, string])[] = [
   [DrizzleQueryError, 'DrizzleQueryError'],
   [DatabaseError, 'DatabaseError'],
-  [ZodError, 'ZodError'],
   [ProblemException, 'ProblemException'],
   [ThrottlerException, 'ThrottlerException'],
   [NotFoundException, 'NotFoundException'],
@@ -44,7 +42,12 @@ const errorTypes: readonly (readonly [ErrorClass, string])[] = [
 function errorType(error: unknown): string {
   if (typeof error !== 'object' || error === null) return UNKNOWN_ERROR_TYPE;
   try {
-    return errorTypes.find(([type]) => error instanceof type)?.[1] ?? UNKNOWN_ERROR_TYPE;
+    // A plain prototype-chain check, not `instanceof`: a class can override `Symbol.hasInstance` (Zod 4 does, and reads
+    // `_zod` on the value), which would let a plain object pick its own category or throw midway through the scan.
+    // Zod errors have no usable prototype chain, so they are logged as `Error`.
+    return (
+      errorTypes.find(([type]) => Object.prototype.isPrototypeOf.call(type.prototype, error))?.[1] ?? UNKNOWN_ERROR_TYPE
+    );
   } catch {
     // A proxy's `getPrototypeOf` trap can throw.
     return UNKNOWN_ERROR_TYPE;

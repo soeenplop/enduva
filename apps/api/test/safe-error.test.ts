@@ -22,7 +22,7 @@ describe('safeError', () => {
   it.each([
     [new DrizzleQueryError('select 1', [], new Error('x')), 'DrizzleQueryError'],
     [new DatabaseError('x', 0, 'error'), 'DatabaseError'],
-    [z.string().safeParse(1).error, 'ZodError'],
+    [z.string().safeParse(1).error, 'Error'],
     [new ProblemException('database_unavailable'), 'ProblemException'],
     [new ThrottlerException(), 'ThrottlerException'],
     [new NotFoundException(), 'NotFoundException'],
@@ -44,6 +44,13 @@ describe('safeError', () => {
     expect(safeError({ constructor: { name: 'LeakedName' }, name: 'LeakedName' })).toEqual({
       type: UNKNOWN_ERROR_TYPE,
     });
+  });
+
+  it("ignores custom instanceof hooks such as Zod 4's", () => {
+    const lookalike = { _zod: { traits: new Set(['ZodError', '$ZodError']) }, issues: [] };
+    expect(safeError(lookalike)).toEqual({ type: UNKNOWN_ERROR_TYPE });
+    const throwingTraits = Object.defineProperty(new RangeError('x'), '_zod', { get: thrower });
+    expect(safeError(throwingTraits)).toEqual({ type: 'RangeError' });
   });
 
   it.each([['string-secret'], [42], [10n], [Symbol('symbol-secret')], [undefined], [null], [() => 'fn-secret']])(
