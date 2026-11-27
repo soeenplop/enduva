@@ -3,7 +3,6 @@ import type { Database } from '@enduva/db';
 
 import { API_LOGIN } from '../config/env.js';
 import { DATABASE } from '../db/database.js';
-import { loggableError } from '../db/errors.js';
 import { ProblemException } from '../problem/problem.js';
 
 /** Bound of the readiness response, and of the readiness query (node-postgres `query_timeout`). */
@@ -48,7 +47,7 @@ export class HealthService {
     try {
       login = await Promise.race([this.probe, timeout]);
     } catch (error) {
-      this.logger.warn({ err: loggableError(error) }, 'readiness check failed');
+      this.logger.warn({ err: error }, 'readiness check failed');
       throw new ProblemException('database_unavailable');
     } finally {
       clearTimeout(timer);

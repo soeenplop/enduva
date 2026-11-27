@@ -56,7 +56,8 @@ class ProbeController {
   /** A failing query whose parameter must not reach the logs. */
   @Get('bad-query')
   async badQuery(@RequestTx() tx: Transaction): Promise<never> {
-    await tx.execute(sql`select ${'heart-rate-72'}::uuid`);
+    // Multiline, so Drizzle's message would get lines that look like stack frames.
+    await tx.execute(sql`select ${'heart-rate-72\n    at fake (/heart-rate/frame.js:1:1)'}::uuid`);
     throw new Error('unreachable');
   }
 
@@ -127,10 +128,10 @@ describe.skipIf(!available)(`database (e2e, local Supabase${available ? '' : ': 
       expect.objectContaining({
         context: 'ProblemFilter',
         req: expect.objectContaining({ id: res.headers['x-request-id'] }) as unknown,
-        err: { type: 'DrizzleQueryError' },
+        err: { type: 'DrizzleQueryError', sqlState: '22P02' },
       }),
     );
-    expect(logs.text()).not.toContain('heart-rate-72');
+    expect(logs.text()).not.toMatch(/heart-rate|select|::uuid/);
   });
 
   it('gives a route without verified claims no transaction (500, nothing runs unscoped)', async () => {

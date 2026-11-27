@@ -60,8 +60,10 @@ Never point a local process at a hosted project.
   `/v1/items/:id`; `(unmatched)` when the request ended before routing), status and duration: no raw paths or query
   strings, headers, tokens, bodies, client IPs or health data. Nest's own logs go through the same logger
   (nestjs-pino).
-  For failed queries only the SQL text (placeholders), SQLSTATE, table and constraint are logged, never the
-  parameters or Postgres' message ([`src/db/errors.ts`](src/db/errors.ts)).
+  Database errors add only their SQLSTATE, table and constraint, each checked against a strict pattern
+  ([`src/db/errors.ts`](src/db/errors.ts)): never the query text, parameters, Drizzle's message or stack, or
+  Postgres' message, detail, hint or where. This holds for every database log path (request errors, readiness,
+  idle client errors).
 - **Throttling:** `@nestjs/throttler` as a global guard, in memory per process. Each matched endpoint (controller and
   handler) has its own bucket per client IP, so the limit is not an API-wide or ingress-wide request limit. The
   guard runs after the body parser and routing: requests to unmatched routes and requests whose body is rejected are

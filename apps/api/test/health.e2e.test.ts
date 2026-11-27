@@ -66,11 +66,21 @@ describe('GET /v1/health (e2e, SWC)', () => {
       status: 503,
       code: 'database_unavailable',
     });
+    // The checkout failure is logged by class only, not with its message (host and port here).
+    const line = logs
+      .lines()
+      .find((l) => l.msg === 'readiness check failed' && reqId(l) === res.headers['x-request-id']);
+    expect(line?.err).toEqual({ type: 'Error' });
   });
 
-  it('survives an idle database client failing', async () => {
-    app.get<Database>(DATABASE).$client.emit('error', new Error('connection terminated'));
+  it('survives an idle database client failing and logs it without its message', async () => {
+    const error = Object.assign(new Error('idle-secret'), { detail: 'detail-secret' });
+    app.get<Database>(DATABASE).$client.emit('error', error);
     expect((await http(app).get('/v1/health')).status).toBe(200);
+    expect(logs.lines()).toContainEqual(
+      expect.objectContaining({ msg: 'idle database client failed', err: { type: 'Error' } }),
+    );
+    expect(logs.text()).not.toMatch(/idle-secret|detail-secret/);
   });
 
   it('generates every x-request-id and ignores the client one', async () => {
