@@ -59,6 +59,13 @@ $$;
 -- write can't make withdrawn consent or a revoked device active again, or move the revocation time. The database
 -- stamps the revocation time itself. Granting consent again inserts a new row; the revoked rows stay until the
 -- account is deleted (the cascade from `profiles` is the only way they go, see the grants below).
+--
+-- The stamp is `clock_timestamp()`, the moment the revoking UPDATE runs, not `now()`. `now()` is the start of the
+-- revoking transaction, and under READ COMMITTED that transaction can see a row that was granted and committed after
+-- it began; stamping `now()` would then put `revoked_at` before `granted_at` and the check constraint would reject a
+-- valid revocation. The row was committed before the UPDATE could see it, so `clock_timestamp()` is already later than
+-- its start time; `greatest()` with the column named by the trigger argument (`granted_at`, `created_at`) keeps
+-- `revoked_at` at or after it even if the wall clock steps back, so a revocation never fails on ordering.
 create function app.keep_revocation() returns trigger
   language plpgsql
   set search_path = ''
@@ -70,7 +77,7 @@ begin
         using errcode = 'check_violation', hint = 'Insert a new row instead.';
     end if;
   elsif new.revoked_at is not null then
-    new.revoked_at := now();
+    new.revoked_at := greatest(clock_timestamp(), (to_jsonb(old) ->> tg_argv[0])::timestamptz);
   end if;
   return new;
 end
@@ -88,8 +95,8 @@ create trigger set_updated_at before update on app.user_settings for each row ex
 create trigger bump_version before update on app.user_settings for each row execute function app.bump_version();
 create trigger set_updated_at before update on app.entitlements for each row execute function app.set_updated_at();
 create trigger set_updated_at before update on app.devices for each row execute function app.set_updated_at();
-create trigger keep_revocation before update on app.consents for each row execute function app.keep_revocation();
-create trigger keep_revocation before update on app.devices for each row execute function app.keep_revocation();
+create trigger keep_revocation before update on app.consents for each row execute function app.keep_revocation('granted_at');
+create trigger keep_revocation before update on app.devices for each row execute function app.keep_revocation('created_at');
 
 -- Ownership and RLS -----------------------------------------------------------------------------------------------
 
