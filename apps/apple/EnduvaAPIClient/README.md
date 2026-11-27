@@ -1,11 +1,14 @@
 # EnduvaAPIClient
 
 Swift client for the Enduva API (iOS 17, watchOS 10, macOS 14). Apple's
-[swift-openapi-generator](https://github.com/apple/swift-openapi-generator) build plugin generates the types and the
-`Client` at build time from `Sources/EnduvaAPIClient/openapi.json`, a symlink to the committed
-[`apps/api/openapi.json`](../../api/openapi.json). Nothing generated is committed, so it can't go stale. Dependencies
-are pinned `exact:` with a committed `Package.resolved` ([ADR-0001](../../../docs/adr/0001-typescript-7-toolchain.md)).
-The Xcode project (0.11a) adds this package as a local dependency of `EnduvaKit`.
+[swift-openapi-generator](https://github.com/apple/swift-openapi-generator) generates the types and the `Client` into
+the committed `Sources/EnduvaAPIClient/GeneratedSources` from `Sources/EnduvaAPIClient/openapi.json`, a symlink to the
+committed [`apps/api/openapi.json`](../../api/openapi.json). The `swift-client` CI job regenerates them and fails if
+anything changed, so they can't go stale. Dependencies are pinned `exact:` with a committed `Package.resolved`
+([ADR-0001](../../../docs/adr/0001-typescript-7-toolchain.md)). [`EnduvaKit`](../EnduvaKit) depends on this package.
+
+Why not the generator's build plugin: Xcode runs it once per platform but writes every run's output to the same path, so
+building the iPhone app with its embedded Watch app fails with "Multiple commands produce …/GeneratedSources/Types.swift".
 
 ```swift
 let client = Client.enduva(serverURL: apiURL) { try await session.accessToken() }
@@ -31,7 +34,9 @@ Known limit: optional and nullable properties both become Swift optionals, and `
 ## Build and test
 
 ```sh
-swift test --force-resolved-versions   # generates, compiles and runs the tests (macOS)
+# After a change to apps/api/openapi.json: regenerate and commit GeneratedSources
+swift package --force-resolved-versions --allow-writing-to-package-directory generate-code-from-openapi --target EnduvaAPIClient
+swift test --force-resolved-versions   # compiles and runs the tests (macOS)
 ```
 
 The tests run the generated client against a stub transport: bearer and conditional headers, the JSON body, decoding

@@ -79,8 +79,8 @@ jobs:
       - name: Negative tests (tsc and oxlint must fail on the broken fixtures)
         run: pnpm test:negative
 
-  # Required (lead decision on PR #126): the generated Swift client compiles from the committed
-  # apps/api/openapi.json, and its middlewares and body decoding pass their tests. No pnpm needed: the build job's
+  # Required (lead decision on PR #126): the committed Swift client matches the committed apps/api/openapi.json,
+  # compiles, and its middlewares and body decoding pass their tests. No pnpm needed: the build job's
   # drift check keeps the spec in sync with the contracts. It runs on every PR (no path filter), as a required
   # check must.
   swift-client:
@@ -98,7 +98,18 @@ jobs:
         run: |
           xcodebuild -version
           swift --version
-      - name: Generate, compile and test the Swift client (swift-openapi-generator build plugin)
+      # The generated sources are committed (Xcode can't run the build plugin for an iPhone app that embeds a Watch
+      # app). Regenerating them from the committed spec must leave the tree unchanged.
+      - name: Generated client is committed and up to date
+        run: |
+          swift package --force-resolved-versions --allow-writing-to-package-directory \
+            generate-code-from-openapi --target EnduvaAPIClient
+          if [ -n "$(git status --porcelain .)" ]; then
+            git status --porcelain .
+            echo "::error::The generated Swift client is stale. Regenerate it (apps/apple/EnduvaAPIClient/README.md) and commit the result."
+            exit 1
+          fi
+      - name: Compile and test the Swift client
         run: swift test --force-resolved-versions
 
   gitleaks:
