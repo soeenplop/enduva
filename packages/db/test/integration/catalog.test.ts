@@ -103,11 +103,32 @@ describe('schema app', () => {
           union all
           select 'function', proname::text from pg_proc
           where pronamespace = 'app'::regnamespace and pg_get_userbyid(proowner) <> 'enduva_owner'
+            and oid <> 'app.auth_session_active()'::regprocedure
           union all
           select 'schema', nspname::text from pg_namespace
           where nspname = 'app' and pg_get_userbyid(nspowner) like 'enduva\\_%'`,
     );
     expect(rows).toEqual([]);
+  });
+
+  // The session check reads Supabase's `auth` schema, which only the migration role can (ADR-0002 → Session check).
+  it('has exactly one SECURITY DEFINER function: the session check, owned by postgres and callable by the API only', async () => {
+    const rows = await query(
+      sql`select p.oid::regprocedure::text as function, pg_get_userbyid(p.proowner)::text as owner, p.proconfig as config,
+                 p.provolatile as volatility,
+                 array(select a.grantee::regrole::text from aclexplode(p.proacl) a
+                       where a.privilege_type = 'EXECUTE' and a.grantee <> p.proowner order by 1) as execute
+          from pg_proc p where p.pronamespace = 'app'::regnamespace and p.prosecdef`,
+    );
+    expect(rows).toEqual([
+      {
+        function: 'app.auth_session_active()',
+        owner: 'postgres',
+        config: ['search_path=""'],
+        volatility: 's',
+        execute: ['enduva_api'],
+      },
+    ]);
   });
 
   it.each(DATA_API_ROLES)('is unreachable for %s', async (role) => {

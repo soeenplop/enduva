@@ -94,6 +94,25 @@ Supabase's `auth.uid()`: that would need grants on Supabase's `auth` schema, and
 `request.jwt.claim.sub` setting. With no claims, policies match no row. A `sub` that isn't a UUID fails the cast and
 with it the query.
 
+### Session check: one function owned by the migration role (0.8b)
+
+The API checks on every request, inside the request transaction, that the token's session still exists and its
+account is active (architecture → Authentication). Sessions and users live in Supabase's `auth` schema. `postgres`
+may read `auth.sessions` and `auth.users` but holds `USAGE` on `auth` without grant option, so it can't give
+`enduva_owner` or a runtime role access. Instead,
+[`app.auth_session_active()`](../../supabase/migrations/20261127182543_auth_session_check.sql) is a `SECURITY DEFINER`
+function **owned by `postgres`**, the only function in `app` not owned by `enduva_owner`:
+
+- It takes no arguments and reads the user and `session_id` from the transaction's claims, so a caller learns only
+  whether its own identity is valid. It returns true if the session exists for that user and hasn't passed
+  `not_after`, and the user isn't soft-deleted or banned. Missing claims return false.
+- `search_path = ''`, `stable`, EXECUTE for `enduva_api` only (PUBLIC revoked). The catalog test pins all of that.
+- Account deletion (0.13b) must disable or delete the auth user **before** it deletes the profile: the API creates a
+  missing profile on a user's first request, and only the failing session check stops a deleted account from getting
+  a new one.
+- Hosted projects grant `postgres` the same rights on `auth`; this is **unverified** until 0.12b applies the migration
+  there.
+
 ### RLS decides whose rows, grants decide which operations
 
 Every table has an `own_rows` policy `for all to enduva_api, enduva_worker`, with `using` and `with check`

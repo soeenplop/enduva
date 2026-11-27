@@ -22,6 +22,13 @@
       "when": 1795762560481,
       "tag": "20261127065600_account_security",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1795803943095,
+      "tag": "20261127182543_auth_session_check",
+      "breakpoints": true
     }
   ]
 }
