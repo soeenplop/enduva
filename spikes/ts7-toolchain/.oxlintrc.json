@@ -1,0 +1,33 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "react", "import", "unicorn"],
+  "categories": {
+    "correctness": "error"
+  },
+  "rules": {
+    "typescript/await-thenable": "error",
+    "typescript/no-floating-promises": "error",
+    "typescript/no-misused-promises": "error",
+    "typescript/no-unnecessary-type-assertion": "error",
+    "typescript/no-unsafe-argument": "error",
+    "typescript/restrict-template-expressions": "error",
+    "typescript/switch-exhaustiveness-check": "error"
+  },
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/routeTree.gen.ts",
+    "**/src/paraglide/**",
+    "web/src/api/generated.ts",
+    "**/negative/**",
+    "scripts/fixtures/**",
+    "swift-client/**"
+  ],
+  "overrides": [
+    {
+      "files": ["**/*.mjs"],
+      "rules": {
+        "typescript/no-unsafe-argument": "off"
+      }
+    }
+  ]
+}

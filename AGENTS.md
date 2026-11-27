@@ -7,7 +7,8 @@ Rules for coding agents working on Enduva. The full workflow is in [`docs/plan/0
 - **English only** in the repo: code, comments, commits, PRs, issues, docs.
 - **One task = one branch + one worktree + one PR.** Branch name: `<type>/<task-id>-<slug>`, e.g. `feat/1.3-healthkit-workout-import`. Manual worktrees go to `.worktrees/<branch-name>`.
 - Start from the latest `origin/main`. Rebase before review; once review has started, merge `main` in instead.
-- **TypeScript 7 only.** Nothing may install `typescript` < 7, an alias of it, or another pre-7 compiler. Check with `pnpm why typescript`. Prefer `.mjs` configs over `.ts` configs that need a TS loader.
+- **TypeScript 7 only.** Nothing may install `typescript` < 7, an alias of it, or another pre-7 compiler, and TS < 7 must never type-check, provide a language service or emit/transpile. Check with `pnpm why typescript`. TS < 7 code that a third-party tool bundles purely for parsing/formatting (e.g. Prettier's parser via TanStack's route generator) is allowed only if it is on the bundled-TS allowlist; never add or change an allowlist entry without the owner ([T1](docs/plan/00-decisions.md)). Prefer `.mjs` configs over `.ts` configs that need a TS loader.
+- **Formatter is oxfmt.** Don't add or invoke Prettier directly.
 - **Never commit secrets** (`.env`, keys, tokens, credentials). Only `.env.example` is tracked.
 - Pin dependency versions exactly. Dependency build scripts are denied by default (`allowBuilds` in `pnpm-workspace.yaml`).
 

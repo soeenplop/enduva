@@ -65,7 +65,7 @@ Key points:
 | AI | Vercel AI SDK (`ai`) with OpenAI provider | Structured output via Zod, tool calling for the coach. Model IDs via env |
 | Web | React 19 + TanStack Start 1.x (TanStack Router, Vite, SSR, Node server output; exact output preset pinned in 0.12a) | TanStack Query (generated API client; **a new `QueryClient` per SSR request/router instance**, never a module-level singleton, so no user's data can leak through a shared server cache), TanStack Form, TanStack Table, Paraglide JS (i18n), Tailwind CSS 4, Radix-based components (shadcn/ui pattern), MapLibre GL (`react-map-gl`), Recharts/ECharts |
 | Landing | TanStack Start with static prerendering of all routes | Same design tokens and UI package as the web app |
-| Lint / format | oxlint (type-aware via `tsgolint`, which builds on the TS 7 native compiler) + Prettier | typescript-eslint relies on the TS JS API that TS 7 lacks |
+| Lint / format | oxlint (type-aware via `tsgolint`, which builds on the TS 7 native compiler) + **oxfmt** (Oxc formatter), used directly. Our scripts never call Prettier | typescript-eslint relies on the TS JS API that TS 7 lacks. TanStack's route generator invokes Prettier (a transitive dependency) with its TypeScript parser, and oxfmt ships a bundled copy of that parser; both are allowlisted (see the TS 7 toolchain section) |
 | Tests (TS) | Vitest (+ `unplugin-swc` for Nest), Playwright E2E, Testcontainers or Supabase local for integration | |
 | iOS / watchOS | Swift 6.4, SwiftUI, SwiftData, HealthKit, WorkoutKit, ActivityKit, WidgetKit, VisionKit | Xcode 27, iOS/watchOS 27 deployment target |
 | Swift API client | Apple `swift-openapi-generator` from the API's OpenAPI spec | Regenerated in CI. Diff checked |
@@ -96,6 +96,8 @@ TS 7 ships the Go-based compiler but **not the full JS compiler API**. That affe
 
 If any criterion can't be met **without** TS 6, the spike stops, documents the gap in ADR-0001 and the owner decides (T1 says no TS 6). No silent fallback.
 
+**Bundled TypeScript (T1 clarification, owner ruling on PR #97).** Some tools ship TS < 7 *parser* code inside their own files without depending on a `typescript` package: `@tanstack/router-generator` formats `routeTree.gen.ts` with Prettier, whose `typescript` parser bundles TS 6.0.3, and oxfmt ships a re-bundled copy of that parser. That is tolerated only for parsing or formatting, and only for copies listed in the **bundled-TS allowlist** (`ts-bundled-allowlist.json`: package, exact version, bundled TS version as detected, files with SHA-256 digests, direct consumers with exact versions, usage, reason; all required and non-empty). A CI audit scans the installed `node_modules` for TypeScript compiler code (by its diagnostic-table keys and version constants) and fails on any unlisted copy, on any change of an allowlisted package's version, detected bundled TS version, files or file digests, or direct consumers, and on stale entries. It cannot judge usage and reason; that is the review of the allowlist change. A bundled TS < 7 that type-checks, provides a language service or emits is never allowlistable. Method and limits are in ADR-0001.
+
 ## Repository layout
 
 ```
@@ -111,7 +113,7 @@ enduva/
 │  ├─ db/                  Drizzle schema, queries, seed scripts
 │  ├─ i18n/                Shared message catalogs (de, en) for web + landing
 │  ├─ ui/                  Shared React components + design tokens
-│  └─ config/              Shared tsconfig, oxlint, prettier, vitest presets
+│  └─ config/              Shared tsconfig, oxlint, oxfmt, vitest presets
 ├─ supabase/               Supabase CLI config, migrations, seed.sql
 ├─ deploy/                 compose.yaml, Dockerfiles, Dokploy scripts
 ├─ docs/

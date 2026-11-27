@@ -1,0 +1,119 @@
+# Spike 0.3: TypeScript 7 toolchain (ADR-0001). Throwaway: removed together with spikes/ts7-toolchain.
+name: spike-ts7
+
+on:
+  pull_request:
+    paths:
+      - 'spikes/**'
+      - 'docs/adr/**'
+      - '.github/workflows/spike-ts7.yml'
+      # The lockfile audit also checks the root lockfile.
+      - 'pnpm-lock.yaml'
+      - 'package.json'
+      - 'pnpm-workspace.yaml'
+  push:
+    branches: [main]
+    paths:
+      - 'spikes/**'
+      - 'docs/adr/**'
+      - '.github/workflows/spike-ts7.yml'
+      # The lockfile audit also checks the root lockfile.
+      - 'pnpm-lock.yaml'
+      - 'package.json'
+      - 'pnpm-workspace.yaml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: spike-ts7-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: spikes/ts7-toolchain
+
+jobs:
+  typescript:
+    name: TS 7 toolchain
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          package_json_file: spikes/ts7-toolchain/package.json
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: spikes/ts7-toolchain/pnpm-lock.yaml
+
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+      - name: Lockfile audit (no TypeScript < 7, no aliases, no pre-7 compilers)
+        run: pnpm audit:lockfile
+      - name: pnpm why typescript
+        run: pnpm why typescript
+      - name: Install root workspace (scanned by the bundled-TypeScript audit)
+        working-directory: .
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Bundled-TypeScript audit (installed files; allowlist ts-bundled-allowlist.json)
+        run: pnpm audit:bundled-ts
+
+      - name: Generate (openapi.json, web client, Paraglide, route trees)
+        run: pnpm generate
+      - name: Record generated route trees
+        run: sha256sum web/src/routeTree.gen.ts landing/src/routeTree.gen.ts > "$RUNNER_TEMP/route-trees.sha256"
+      - name: Type-check (tsc 7)
+        run: pnpm typecheck
+      - name: Negative tests (tsc and oxlint must fail on broken fixtures)
+        run: pnpm test:negative
+      - name: Lint (oxlint type-aware via tsgolint)
+        run: pnpm lint
+      - name: Format check (oxfmt)
+        run: pnpm format:check
+      - name: Tests (Vitest + Nest e2e)
+        run: pnpm test
+
+      - name: Production builds (api, contracts, web, landing)
+        run: pnpm build
+      - name: Route trees from tsr generate equal the ones the Start build wrote
+        run: sha256sum -c "$RUNNER_TEMP/route-trees.sha256"
+      - name: Smoke test (API build on Node, web SSR bundle)
+        run: pnpm smoke
+      - name: Prerender output (/de/ and /en/)
+        run: pnpm check:prerender
+      - name: drizzle-kit generate
+        run: pnpm db:generate && grep -q 'CREATE TABLE "activities"' api/drizzle/0000_init.sql
+
+  swift:
+    name: Swift client (swift-openapi-generator)
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          package_json_file: spikes/ts7-toolchain/package.json
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: spikes/ts7-toolchain/pnpm-lock.yaml
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+      - name: Generate openapi.json from the Zod contracts
+        run: pnpm --filter @spike/contracts generate && pnpm swift:openapi
+      - name: Toolchain versions
+        run: |
+          node --version
+          xcodebuild -version
+          swift --version
+      - name: Generate and compile the Swift client
+        working-directory: spikes/ts7-toolchain/swift-client
+        run: swift build --force-resolved-versions

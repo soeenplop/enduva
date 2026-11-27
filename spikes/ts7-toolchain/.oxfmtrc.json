@@ -1,0 +1,21 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 120,
+  "singleQuote": true,
+  "embeddedLanguageFormatting": "off",
+  "sortPackageJson": false,
+  "ignorePatterns": [
+    "pnpm-lock.yaml",
+    "**/dist/**",
+    "**/routeTree.gen.ts",
+    "**/src/paraglide/**",
+    "web/src/api/generated.ts",
+    "contracts/openapi.json",
+    "swift-client/**",
+    "**/*.md",
+    "**/*.yaml",
+    "**/*.yml",
+    "**/negative/**",
+    "scripts/fixtures/**"
+  ]
+}

@@ -1,0 +1,12 @@
+# Generated in CI before type-checking (see .github/workflows/spike-ts7.yml).
+contracts/openapi.json
+web/src/api/generated.ts
+*/src/routeTree.gen.ts
+landing/src/paraglide/
+api/drizzle/
+swift-client/Sources/SpikeAPIClient/openapi.json
+swift-client/.build/
+# Temporary configs written by scripts/negative-tests.mjs.
+*/tsconfig.negative.json
+negative.oxlintrc.json
+landing/project.inlang/cache/
