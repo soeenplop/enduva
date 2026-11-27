@@ -29,8 +29,9 @@ holds user data) at module scope. Loaders fill the cache with `context.queryClie
 
 No locale in the URL (02-architecture.md, Internationalisation). [`src/server.ts`](src/server.ts) resolves it per
 request: the `enduva-locale` cookie (a stand-in for the profile setting until 0.9b), then `Accept-Language`, then
-`en`. Messages live in [`packages/i18n/messages`](../../packages/i18n/messages); every key must exist in `de` and `en`
-(unit test).
+`en`. In the browser, [`src/locale.ts`](src/locale.ts) takes the locale from the `<html lang>` the server rendered, so
+hydration never renegotiates it from `navigator.languages`. Messages live in
+[`packages/i18n/messages`](../../packages/i18n/messages); every key must exist in `de` and `en` (unit test).
 
 ## Negative tests
 
