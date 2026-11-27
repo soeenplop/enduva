@@ -1,21 +1,33 @@
 import * as z from 'zod';
 
+/** IANA tzdb names: an area and a location, or `UTC`. Keeps out ICU-only IDs (`SystemV/EST5`, `PST`) and offsets. */
+const ianaZone =
+  /^(?:UTC|(?:Africa|America|Antarctica|Arctic|Asia|Atlantic|Australia|Europe|Indian|Pacific|Etc)\/[A-Za-z0-9_+-]+(?:\/[A-Za-z0-9_+-]+)*)$/;
+
 /**
- * An IANA time zone name the runtime knows (ICU), stored as the runtime spells it (`europe/berlin` → `Europe/Berlin`).
- * The pattern keeps out offsets such as `+01:00`, which Intl also accepts but which aren't zones.
+ * An IANA time zone the runtime (ICU) knows, including tzdb aliases such as `Asia/Calcutta`. Stored as sent when it
+ * is spelled correctly, otherwise as ICU spells it (`europe/berlin` → `Europe/Berlin`), and only if that is an IANA
+ * name too.
  */
 const timeZone = z
   .string()
   .max(64)
-  .regex(/^[A-Za-z][A-Za-z0-9_+\-/]*$/)
+  .regex(new RegExp(ianaZone.source, 'i'))
   .transform((name, context) => {
+    let resolved: string | undefined;
     try {
-      return new Intl.DateTimeFormat('en', { timeZone: name }).resolvedOptions().timeZone;
+      resolved = new Intl.DateTimeFormat('en', { timeZone: name }).resolvedOptions().timeZone;
     } catch {
-      context.addIssue({ code: 'custom', message: 'unknown time zone' });
-      return z.NEVER;
+      resolved = undefined;
     }
+    if (resolved !== undefined && ianaZone.test(name)) return name;
+    if (resolved !== undefined && ianaZone.test(resolved)) return resolved;
+    context.addIssue({ code: 'custom', message: 'unknown time zone' });
+    return z.NEVER;
   });
+
+/** No control characters (PostgreSQL can't store NUL in text) and no unpaired surrogates. */
+const isPrintable = (value: string) => value.isWellFormed() && !/\p{Cc}/u.test(value);
 
 /** A real calendar date `YYYY-MM-DD` from 1900-01-01 up to today (UTC). */
 function isBirthDate(value: string): boolean {
@@ -31,7 +43,7 @@ function isBirthDate(value: string): boolean {
  */
 export const meUpdateSchema = z
   .strictObject({
-    displayName: z.string().trim().min(1).max(100).nullable(),
+    displayName: z.string().trim().min(1).max(100).refine(isPrintable).nullable(),
     birthDate: z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/)

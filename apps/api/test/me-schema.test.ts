@@ -18,8 +18,12 @@ describe('PATCH /v1/me body', () => {
   it('takes IANA time zones as the runtime spells them, and nothing else', () => {
     expect(parse({ timeZone: 'europe/berlin' }).data).toEqual({ timeZone: 'Europe/Berlin' });
     expect(parse({ timeZone: 'UTC' }).data).toEqual({ timeZone: 'UTC' });
-    for (const timeZone of ['+01:00', 'Mars/Olympus', '', 'Europe/Berlin; drop', null])
+    for (const timeZone of ['Asia/Kolkata', 'Asia/Calcutta', 'America/Argentina/Buenos_Aires', 'Etc/GMT+1'])
+      expect(parse({ timeZone }).data).toEqual({ timeZone });
+    // ICU-only IDs, legacy abbreviations and offsets that Intl accepts but IANA tzdb consumers may not.
+    for (const timeZone of ['SystemV/EST5', 'PST', 'EST5EDT', 'US/Eastern', '+01:00', 'Mars/Olympus', ''])
       expect(parse({ timeZone }).success).toBe(false);
+    for (const timeZone of ['Europe/Berlin; drop', null]) expect(parse({ timeZone }).success).toBe(false);
   });
 
   it.each([
@@ -31,6 +35,10 @@ describe('PATCH /v1/me body', () => {
     ['an unknown field', { displayName: 'Ada', nickname: 'A' }],
     ['a blank name', { displayName: '   ' }],
     ['a name over 100 characters', { displayName: 'a'.repeat(101) }],
+    ['a name with NUL', { displayName: 'Ada\u0000' }],
+    ['a name with a control character', { displayName: 'Ada\u001b[31m' }],
+    ['a name with a C1 control character', { displayName: 'Ada\u0085' }],
+    ['a name with an unpaired surrogate', { displayName: 'Ada\ud800' }],
     ['an impossible date', { birthDate: '1990-02-30' }],
     ['a date in the future', { birthDate: '2999-01-01' }],
     ['a date before 1900', { birthDate: '1899-12-31' }],
