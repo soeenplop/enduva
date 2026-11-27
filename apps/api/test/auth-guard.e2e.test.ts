@@ -66,6 +66,14 @@ describe('auth guard (e2e)', () => {
     expect(res.body).toEqual(unauthorized);
   });
 
+  it('rejects repeated Authorization fields, even with a valid token in each', async () => {
+    // Node keeps only the first repeated Authorization field in `headers`; supertest sends an array as separate fields.
+    const twice = [`Bearer ${token}`, `Bearer ${token}`] as unknown as string;
+    const res = await http(app).get('/v1/guarded/private').set('authorization', twice);
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual(unauthorized);
+  });
+
   it('lets a valid token through, with the scheme in any case', async () => {
     for (const scheme of ['Bearer', 'bearer']) {
       const res = await http(app).get('/v1/guarded/private').set('authorization', `${scheme} ${token}`);

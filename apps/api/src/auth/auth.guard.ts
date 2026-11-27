@@ -33,7 +33,9 @@ export class AuthGuard implements CanActivate {
     if (this.reflector.getAllAndOverride<boolean>(PUBLIC, [context.getHandler(), context.getClass()]) === true)
       return true;
     const request = context.switchToHttp().getRequest<IdentifiedRequest>();
-    const token = bearerPattern.exec(request.headers.authorization ?? '')?.[1];
+    // `headers` keeps only the first of repeated Authorization fields; ambiguous credentials are rejected instead.
+    const fields = request.headersDistinct.authorization ?? [];
+    const token = fields.length === 1 ? bearerPattern.exec(fields[0] ?? '')?.[1] : undefined;
     try {
       if (token === undefined) throw new InvalidTokenError();
       request.claims = await this.verifier.verify(token);
