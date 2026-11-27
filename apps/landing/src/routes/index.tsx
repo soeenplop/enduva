@@ -1,11 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { repositoryUrl } from '../../site.mjs';
 import { m } from '../paraglide/messages.js';
+import { pageHead } from '../seo';
 
 export const Route = createFileRoute('/')({
-  head: () => ({
-    meta: [{ title: m.meta_home_title() }, { name: 'description', content: m.meta_home_description() }],
-  }),
+  head: () => pageHead({ path: '/', title: m.meta_home_title(), description: m.meta_home_description() }),
   component: Home,
 });
 

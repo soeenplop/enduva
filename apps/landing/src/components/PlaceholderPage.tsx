@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router';
 import { m } from '../paraglide/messages.js';
+import { pageHead } from '../seo';
 
 export interface PlaceholderPageProps {
   title: string;
@@ -23,15 +24,15 @@ export function PlaceholderPage({ title, task }: PlaceholderPageProps) {
   );
 }
 
-/** Route options of a placeholder page: its head tags and its component. */
-export function placeholderRoute(title: () => string, task: string) {
+/** Route options of a placeholder page at `path` (as in `site.mjs`): its head tags and component. */
+export function placeholderRoute(path: string, title: () => string, task: string) {
   return {
-    head: () => ({
-      meta: [
-        { title: `${title()} | Enduva` },
-        { name: 'description', content: m.placeholder_description({ page: title(), task }) },
-      ],
-    }),
+    head: () =>
+      pageHead({
+        path,
+        title: `${title()} | Enduva`,
+        description: m.placeholder_description({ page: title(), task }),
+      }),
     component: () => <PlaceholderPage title={title()} task={task} />,
   };
 }

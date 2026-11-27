@@ -2,18 +2,22 @@
 //
 // - Exactly the expected HTML files: every page under each locale prefix plus the picker at `/`,
 //   and no unprefixed duplicate such as dist/client/imprint/index.html.
-// - Each page: the opening <html> tag's own `lang`, the translated heading, the placeholder notice
-//   where the final text is owned by a later task, links to the page in the other locale, the
-//   ELv2 note with the repository link, and internal links that all carry a locale prefix.
-// - The picker links to every locale and redirects by `navigator.languages` (its inline script is
-//   run in a sandbox).
+// - Each page: the opening <html> tag's own `lang`, the translated heading, a canonical URL,
+//   hreflang alternates for every locale plus x-default, Open Graph / Twitter tags, links to the
+//   page in the other locale, the ELv2 note with the repository link, and internal links that all
+//   carry a locale prefix.
+// - The picker links to every locale, has the home page's hreflang alternates and redirects by
+//   `navigator.languages` (its inline script is run in a sandbox).
+// - sitemap.xml lists every page in every locale, and robots.txt, the manifest and the brand files
+//   are in place.
 //
 // Usage: node scripts/check-static.mjs [dist/client] (scripts/build.mjs runs it after every build).
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runInNewContext } from 'node:vm';
-import { pagePaths, repositoryUrl } from '../site.mjs';
+import { pagePaths, pageUrl, repositoryUrl, siteOrigin, xDefaultUrl } from '../site.mjs';
+import { brandFiles } from './static-pages.mjs';
 
 const { m } = await import('../src/paraglide/messages.js');
 const { baseLocale, locales, localizeHref } = await import('../src/paraglide/runtime.js');
@@ -27,6 +31,7 @@ const expectedPages = {
   '/disclaimer/': { heading: (locale) => m.page_disclaimer({}, { locale }), task: 'G1.1' },
   '/data-sources/': { heading: (locale) => m.page_data_sources({}, { locale }), task: 'G1.2' },
 };
+const ogLocales = { de: 'de_DE', en: 'en_US' };
 
 /** Strips tags (until none are left) and decodes the entities React emits: the text a page shows. */
 function stripTags(text) {
@@ -58,6 +63,19 @@ const attr = (tag, key) => {
   const values = tag.filter(([k]) => k === key);
   return values.length === 1 ? values[0][1] : undefined;
 };
+const metas = (html, key, value) => tags(html, 'meta').filter((tag) => attr(tag, key) === value);
+const content = (html, key, value) => metas(html, key, value).map((tag) => attr(tag, 'content'));
+
+/** `hreflang` alternates: one per locale plus `x-default`, all absolute, nothing else. */
+function checkAlternates(links, path, fail) {
+  const alternates = links
+    .filter((tag) => attr(tag, 'rel') === 'alternate')
+    .map((tag) => `${attr(tag, 'hreflang')} ${attr(tag, 'href')}`)
+    .sort();
+  const want = [...locales.map((other) => `${other} ${pageUrl(path, other)}`), `x-default ${xDefaultUrl(path)}`].sort();
+  if (alternates.join('|') !== want.join('|'))
+    fail(`hreflang alternates:\n    want ${want.join('\n         ')}\n    got  ${alternates.join('\n         ')}`);
+}
 
 function checkPage(outDir, path, locale, failures) {
   const href = localizeHref(path, { locale });
@@ -79,8 +97,34 @@ function checkPage(outDir, path, locale, failures) {
   if (task && !decode(html).includes(m.placeholder_notice({ task }, { locale })))
     fail(`placeholder notice for ${task} missing`);
 
+  const url = pageUrl(path, locale);
+  const links = tags(html, 'link');
+  const canonical = links.filter((tag) => attr(tag, 'rel') === 'canonical').map((tag) => attr(tag, 'href'));
+  if (canonical.length !== 1 || canonical[0] !== url) fail(`expected canonical ${url}, got ${canonical.join(', ')}`);
+  checkAlternates(links, path, fail);
+
   const title = [...html.matchAll(/<title>(.*?)<\/title>/gs)].map(([, text]) => decode(text));
+  const description = content(html, 'name', 'description');
   if (title.length !== 1 || !title[0]) fail('expected one non-empty <title>');
+  if (description.length !== 1 || !description[0]) fail('expected one non-empty meta description');
+  const og = {
+    'og:title': title[0],
+    'og:description': description[0],
+    'og:url': url,
+    'og:image': `${siteOrigin}/og.png`,
+    'og:locale': ogLocales[locale],
+  };
+  for (const [property, value] of Object.entries(og)) {
+    const got = content(html, 'property', property);
+    if (got.length !== 1 || got[0] !== value) fail(`expected ${property} "${value}", got ${JSON.stringify(got)}`);
+  }
+  for (const [name, value] of Object.entries({
+    'twitter:card': 'summary_large_image',
+    'twitter:image': og['og:image'],
+  })) {
+    const got = content(html, 'name', name);
+    if (got.length !== 1 || got[0] !== value) fail(`expected ${name} "${value}", got ${JSON.stringify(got)}`);
+  }
 
   const anchors = tags(html, 'a').map((tag) => attr(tag, 'href') ?? '');
   for (const other of locales.filter((l) => l !== locale)) {
@@ -94,7 +138,7 @@ function checkPage(outDir, path, locale, failures) {
   );
   if (unprefixed.length > 0) fail(`internal links without a locale prefix: ${unprefixed.join(', ')}`);
 
-  if (failures.length === before) console.log(`ok   ${label}: lang="${locale}", heading, links`);
+  if (failures.length === before) console.log(`ok   ${label}: lang="${locale}", canonical, hreflang, OG tags`);
 }
 
 function checkPicker(outDir, failures) {
@@ -103,6 +147,10 @@ function checkPicker(outDir, failures) {
   if (!existsSync(file)) return fail('missing (the language picker at /)');
   const html = readFileSync(file, 'utf8');
   const before = failures.length;
+  const links = tags(html, 'link');
+  const canonical = links.filter((tag) => attr(tag, 'rel') === 'canonical').map((tag) => attr(tag, 'href'));
+  if (canonical.join() !== `${siteOrigin}/`) fail(`expected canonical ${siteOrigin}/, got ${canonical.join(', ')}`);
+  checkAlternates(links, '/', fail);
   const anchors = tags(html, 'a').map((tag) => attr(tag, 'href'));
   for (const locale of locales) {
     const home = localizeHref('/', { locale });
@@ -127,7 +175,8 @@ function checkPicker(outDir, failures) {
     const want = localizeHref('/', { locale });
     if (target !== want) fail(`navigator.languages ${JSON.stringify(languages)} redirects to ${target}, want ${want}`);
   }
-  if (failures.length === before) console.log(`ok   ${relative(process.cwd(), file)}: picker links and redirects`);
+  if (failures.length === before)
+    console.log(`ok   ${relative(process.cwd(), file)}: picker links, hreflang and redirects`);
 }
 
 export async function checkStatic(outDir) {
@@ -147,7 +196,20 @@ export async function checkStatic(outDir) {
   for (const path of pagePaths) for (const locale of locales) checkPage(outDir, path, locale, failures);
   checkPicker(outDir, failures);
 
-  if (failures.length === 0) console.log(`ok   ${html.length} HTML files`);
+  const sitemapFile = join(outDir, 'sitemap.xml');
+  const sitemap = existsSync(sitemapFile) ? readFileSync(sitemapFile, 'utf8') : '';
+  const locs = [...sitemap.matchAll(/<loc>(.*?)<\/loc>/g)].map(([, loc]) => loc).sort();
+  const wantLocs = pagePaths.flatMap((path) => locales.map((locale) => pageUrl(path, locale))).sort();
+  if (locs.join('|') !== wantLocs.join('|')) failures.push(`sitemap.xml: expected <loc> ${wantLocs.join(', ')}`);
+
+  const robots = existsSync(join(outDir, 'robots.txt')) ? readFileSync(join(outDir, 'robots.txt'), 'utf8') : '';
+  if (!robots.includes(`Sitemap: ${siteOrigin}/sitemap.xml`)) failures.push('robots.txt: Sitemap line missing');
+
+  const manifest = JSON.parse(readFileSync(join(outDir, 'site.webmanifest'), 'utf8'));
+  const assets = [...brandFiles, ...manifest.icons.map((icon) => icon.src.slice(1))];
+  for (const name of assets) if (!existsSync(join(outDir, name))) failures.push(`${name} missing`);
+
+  if (failures.length === 0) console.log(`ok   ${html.length} HTML files, sitemap.xml, robots.txt, manifest and icons`);
   return failures;
 }
 

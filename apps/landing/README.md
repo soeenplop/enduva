@@ -4,7 +4,7 @@ The landing page at `https://enduva.soeenplop.dev` (T4): TanStack Start, prerend
 
 ## URLs
 
-Every page exists once per locale, always with a prefix: `/de/…` and `/en/…`, each with its own `<html lang>`. [`site.mjs`](site.mjs) lists the pages, and the prerender config renders exactly those URLs. `/` is a static language picker that links to both and redirects by `navigator.languages`. There are no unprefixed duplicates.
+Every page exists once per locale, always with a prefix: `/de/…` and `/en/…`, each with its own `<html lang>`, canonical URL and `hreflang` alternates (`x-default` is `/` for the home page and the English page otherwise). [`site.mjs`](site.mjs) lists the pages, and the prerender config renders exactly those URLs. `/` is a static language picker that links to both and redirects by `navigator.languages`. There are no unprefixed duplicates.
 
 ## Commands
 
@@ -13,8 +13,8 @@ Run them through Turbo from the repository root (`pnpm turbo build typecheck lin
 | Script | What it does |
 | --- | --- |
 | `pnpm generate` | Compiles the Paraglide messages (`src/paraglide/`) and the route tree (`src/routeTree.gen.ts`, with Start's footer from `tsr.config.json`) for `tsc`. Both are git-ignored |
-| `pnpm build` | [`scripts/build.mjs`](scripts/build.mjs): `vite build` with prerendering, the route-tree and Paraglide identity check, the picker at `/`, then [`scripts/check-static.mjs`](scripts/check-static.mjs) on `dist/client` |
-| `pnpm dev` | Vite dev server. The picker at `/` only exists in the build |
+| `pnpm build` | [`scripts/build.mjs`](scripts/build.mjs): `vite build` with prerendering, the route-tree and Paraglide identity check, then the picker at `/`, `sitemap.xml`, `robots.txt`, the manifest and the brand files from `assets/brand/final/web`, then [`scripts/check-static.mjs`](scripts/check-static.mjs) on `dist/client` |
+| `pnpm dev` | Vite dev server. The brand files, `/` and the sitemap only exist in the build |
 | `pnpm test` | Vitest |
 
 `dist/client` is the whole site. Serve it with any static file server that maps `/de/` to `/de/index.html`.
@@ -34,3 +34,12 @@ Each `negative/*.tsx` starts with `// @expect TS<code> at <line>:<col>` and must
 ## Design
 
 Concept B "Daybreak": colors, spacing and type come from `@enduva/ui/tokens.css`, which follows the system's light/dark setting. Manrope (SIL OFL) is self-hosted from `@fontsource-variable/manrope`. The final landing page is task 5.1.
+
+## Lighthouse
+
+Not part of CI. To check the static build locally, serve `dist/client` and run the pinned Lighthouse with `npx`, which installs it into npm's cache and never into our lockfile (13.6.0 has no `typescript` dependency and bundles no compiler code):
+
+```sh
+python3 -m http.server 4173 --bind 127.0.0.1 --directory dist/client
+npx --yes lighthouse@13.6.0 http://127.0.0.1:4173/de/ --only-categories=performance,accessibility,best-practices,seo
+```
