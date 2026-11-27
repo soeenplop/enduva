@@ -1,0 +1,4 @@
+{
+  "extends": "@enduva/config/tsconfig/nest.json",
+  "include": ["src", "test"]
+}

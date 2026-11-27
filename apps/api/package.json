@@ -1,0 +1,40 @@
+{
+  "name": "@enduva/api",
+  "version": "0.0.0",
+  "private": true,
+  "description": "NestJS API (REST under /v1) and the worker entrypoint.",
+  "type": "module",
+  "scripts": {
+    "build": "swc src -d dist --strip-leading-paths --delete-dir-on-start --config-file node_modules/@enduva/config/swc/nest.json",
+    "dev": "pnpm build && (swc src -d dist --strip-leading-paths --config-file node_modules/@enduva/config/swc/nest.json --watch & node --watch --enable-source-maps --env-file-if-exists=.env dist/main.js)",
+    "start": "node --enable-source-maps dist/main.js",
+    "start:worker": "node --enable-source-maps dist/worker.js",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "oxlint -c node_modules/@enduva/config/oxlint.json --type-aware --deny-warnings src test",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@nestjs/common": "12.6.3",
+    "@nestjs/core": "12.6.3",
+    "@nestjs/platform-express": "12.6.3",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@enduva/config": "workspace:*",
+    "@nestjs/testing": "12.6.3",
+    "@swc/cli": "catalog:",
+    "@swc/core": "catalog:",
+    "@types/express": "5.0.6",
+    "@types/node": "catalog:",
+    "@types/supertest": "7.2.1",
+    "chokidar": "5.0.0",
+    "oxlint": "catalog:",
+    "oxlint-tsgolint": "catalog:",
+    "supertest": "7.3.2",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  }
+}

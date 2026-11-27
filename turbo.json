@@ -21,6 +21,10 @@
       "dependsOn": ["^build", "transit"],
       "outputs": []
     },
+    "@enduva/api#test": {
+      "dependsOn": ["build", "^build", "transit"],
+      "outputs": []
+    },
     "@enduva/tools#test": {
       "cache": false
     },
