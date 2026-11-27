@@ -1,21 +1,62 @@
+import { DatabaseError } from '@enduva/db';
+import { HttpException, NotFoundException } from '@nestjs/common';
+import { ThrottlerException } from '@nestjs/throttler';
+import { DrizzleQueryError } from 'drizzle-orm';
+import { ZodError } from 'zod';
+
 import { databaseErrorFields, type DatabaseErrorFields } from '../db/errors.js';
+import { ProblemException } from '../problem/problem.js';
 
 /** What may be logged of an error: fields picked one by one, never its message, cause, stack or other properties. */
 export interface SafeError extends DatabaseErrorFields {
-  /** The error's class, e.g. `TypeError`; `NonError` for a thrown non-object. */
+  /** The error's category from `errorTypes`, e.g. `TypeError`; `UNKNOWN_ERROR_TYPE` for anything else. */
   readonly type: string;
 }
 
-/** Class names come from code, but a crafted error can set any `name`; anything that isn't an identifier is dropped. */
-const identifier = /^[A-Za-z_$][\w$]{0,63}$/;
+/** The category of a thrown value that is no `Error`, or that cannot be inspected without throwing. */
+export const UNKNOWN_ERROR_TYPE = 'Unknown';
+
+type ErrorClass = abstract new (...args: never) => Error;
+
+/**
+ * The categories that may be logged, checked in order with `instanceof`, so subclasses come before their base
+ * classes. The name is a literal here: a thrown value can bring its own `constructor` and `name`, so neither is ever
+ * read from it. `Error` is last and catches every other error.
+ */
+const errorTypes: readonly (readonly [ErrorClass, string])[] = [
+  [DrizzleQueryError, 'DrizzleQueryError'],
+  [DatabaseError, 'DatabaseError'],
+  [ZodError, 'ZodError'],
+  [ProblemException, 'ProblemException'],
+  [ThrottlerException, 'ThrottlerException'],
+  [NotFoundException, 'NotFoundException'],
+  [HttpException, 'HttpException'],
+  [AggregateError, 'AggregateError'],
+  [EvalError, 'EvalError'],
+  [RangeError, 'RangeError'],
+  [ReferenceError, 'ReferenceError'],
+  [SyntaxError, 'SyntaxError'],
+  [TypeError, 'TypeError'],
+  [URIError, 'URIError'],
+  [Error, 'Error'],
+];
+
+function errorType(error: unknown): string {
+  if (typeof error !== 'object' || error === null) return UNKNOWN_ERROR_TYPE;
+  try {
+    return errorTypes.find(([type]) => error instanceof type)?.[1] ?? UNKNOWN_ERROR_TYPE;
+  } catch {
+    // A proxy's `getPrototypeOf` trap can throw.
+    return UNKNOWN_ERROR_TYPE;
+  }
+}
 
 /**
  * The loggable fields of any thrown value. Messages, causes, stacks and enumerable properties of unknown errors can
  * carry request input (credentials, health data), so none of them are logged; the request ID on the log line links
- * the error to its request. Database errors add their SQLSTATE, table and constraint (`databaseErrorFields`).
+ * the error to its request. Database errors add their SQLSTATE, table and constraint (`databaseErrorFields`). Never
+ * throws, whatever is thrown: it runs while an error is being logged.
  */
 export function safeError(error: unknown): SafeError {
-  if (typeof error !== 'object' || error === null) return { type: 'NonError' };
-  const name: unknown = (error as { constructor?: { name?: unknown } }).constructor?.name;
-  return { type: typeof name === 'string' && identifier.test(name) ? name : 'Error', ...databaseErrorFields(error) };
+  return { type: errorType(error), ...databaseErrorFields(error) };
 }

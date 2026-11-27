@@ -51,9 +51,12 @@ Never point a local process at a hosted project.
 - **Errors:** every error is RFC 9457 problem details (`application/problem+json`) with `type: about:blank`, the
   status phrase as `title`, `status` and a stable `code` from [`src/problem/problem.ts`](src/problem/problem.ts).
   Throw `ProblemException(code)` for expected errors. Messages of Nest and Express exceptions are not passed on.
-  Unexpected errors become `500` `internal_error` and are logged with the request ID and their class only: the
+  Unexpected errors become `500` `internal_error` and are logged with the request ID and their category only: the
   `err` serializer ([`src/logging/safe-error.ts`](src/logging/safe-error.ts)) never logs messages, causes, stacks
-  or other properties, since those can carry request input.
+  or other properties, since those can carry request input. The category comes from an allowlist of known error
+  classes checked with `instanceof` (e.g. `DatabaseError`, `HttpException`, `TypeError`, then `Error`), never from
+  the thrown value's `constructor` or `name`; anything else is `Unknown`. Neither the serializer nor the filter
+  throws, whatever is thrown.
 - **Logging:** pino JSON on stdout. The request logger is the first middleware, ahead of the body parser, so every
   request gets a server-generated ID, echoed in the `x-request-id` response header. An incoming `x-request-id` is
   ignored: it is client-controlled. Request logs hold only ID, method, the matched route template (e.g.
@@ -79,10 +82,11 @@ Never point a local process at a hosted project.
 
 ## Tests
 
-- Unit tests for the env schema, the problem mapping, query-error redaction and the transaction interceptor.
+- Unit tests for the env schema, the problem mapping, error categories and query-error redaction (including hostile
+  thrown values: shadowed or throwing `constructor`, proxies, primitives) and the transaction interceptor.
 - `test/health.e2e.test.ts` boots the real `AppModule` under SWC: DI through decorator metadata, liveness,
   readiness without a database, request IDs, problem bodies (404 inside and outside `/v1`, malformed body,
-  unexpected error), log redaction and throttling.
+  unexpected and hostile errors), log redaction and throttling.
 - `test/dist.e2e.test.ts` runs the SWC build with plain `node`: it boots, serves `/v1/health`, and refuses to boot
   with an invalid environment. The worker entrypoint runs and exits.
 - `test/database.e2e.test.ts` runs against the **local** Supabase stack through the transaction pooler: readiness, a

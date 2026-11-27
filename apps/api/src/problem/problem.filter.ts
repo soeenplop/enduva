@@ -31,10 +31,15 @@ export class ProblemFilter implements ExceptionFilter {
     response.status(body.status).type(PROBLEM_CONTENT_TYPE).send(JSON.stringify(body));
   }
 
+  /** Never throws: a thrown value whose prototype lookup or fields throw (a proxy, a getter) is an internal error. */
   private toProblem(exception: unknown): Problem {
-    if (exception instanceof ProblemException) return exception.toProblem();
-    const status = exception instanceof HttpException ? exception.getStatus() : exposedClientStatus(exception);
-    if (status === undefined || status >= 500) return problem('internal_error');
-    return problem(codeForStatus(status), status);
+    try {
+      if (exception instanceof ProblemException) return exception.toProblem();
+      const status = exception instanceof HttpException ? exception.getStatus() : exposedClientStatus(exception);
+      if (status === undefined || status >= 500) return problem('internal_error');
+      return problem(codeForStatus(status), status);
+    } catch {
+      return problem('internal_error');
+    }
   }
 }

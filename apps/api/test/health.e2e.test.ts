@@ -20,6 +20,15 @@ class BoomController {
     throw Object.assign(new Error('message-secret', { cause }), { token: 'prop-secret' });
   }
 
+  @Get('hostile')
+  hostile(): never {
+    const thrower = () => {
+      throw new Error('getter-secret');
+    };
+    const error = Object.assign(new Error('message-secret'), { constructor: { name: 'LeakedName' } });
+    throw Object.defineProperties(error, { status: { get: thrower }, expose: { get: thrower } });
+  }
+
   @Get('items/:id')
   item(): { readonly ok: true } {
     return { ok: true };
@@ -128,6 +137,16 @@ describe('GET /v1/health (e2e, SWC)', () => {
     const completion = logs.lines().find((l) => l.res !== undefined && reqId(l) === id);
     expect(completion?.err).toEqual({ type: 'Error' });
     expect(logs.text()).not.toMatch(/message-secret|cause-secret|cause-prop-secret|prop-secret|"stack"/);
+  });
+
+  it('answers and logs a hostile thrown value without reading its class name or fields', async () => {
+    const res = await http(app).get('/v1/boom/hostile');
+    expect(res.status).toBe(500);
+    expect(res.body).toMatchObject({ code: 'internal_error' });
+    const id = res.headers['x-request-id'];
+    const filterLine = logs.lines().find((l) => l.context === 'ProblemFilter' && reqId(l) === id);
+    expect(filterLine?.err).toEqual({ type: 'Error' });
+    expect(logs.text()).not.toMatch(/LeakedName|message-secret|getter-secret/);
   });
 
   it('logs requests with their ID and route template but without paths, headers, query strings or bodies', async () => {
