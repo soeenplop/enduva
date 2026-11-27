@@ -170,6 +170,13 @@ Task 0.5a ([#7](https://github.com/soeenplop/enduva/issues/7)) made the root che
 - **Spike.** Its lockfile audit checks only its own lockfile now, and `spike-ts7.yml` no longer runs on root lockfile changes.
 - **CodeQL: approved standalone analysis exception (W13).** Its JavaScript/TypeScript extractor (CodeQL CLI 2.27.6) runs its own bundled TypeScript 5.9.2, calling `ts.createProgram` per file (`noResolve`, no type checker) only to parse our code for its own analysis. The lead approved it as a standalone analysis exception under W13 ([decision on PR #104](https://github.com/soeenplop/enduva/pull/104#issuecomment-7212225890)): CodeQL runs outside our build toolchain and never type-checks, emits or serves as a language service for our build, and it influences no artifact. It is added as a **non-required** check (security alerts only) in a follow-up PR. Inside our build toolchain the TS < 7 ban stays absolute.
 
+## Handoff in 0.8a
+
+Task 0.8a ([#10](https://github.com/soeenplop/enduva/issues/10)) builds [`apps/api`](../../apps/api) on this stack:
+
+- **Nest on SWC.** Nest 12.6.3, `@swc/cli`/`@swc/core` with [`swc/nest.json`](../../packages/config/swc/nest.json), no Nest CLI. The build emits `dist/main.js` and `dist/worker.js`, and a test runs the build with plain `node` (criterion 1, as in the spike's smoke script). Vitest runs through `unplugin-swc` 2.0.0 via the new preset `@enduva/config/vitest/nest`, which passes the options of `swc/nest.json` and nothing else (no `.swcrc` lookup, no tsconfig-derived defaults).
+- **API fixtures (criteria 2 and 5).** [`apps/api/negative/`](../../apps/api/negative) holds the ported fixtures for the root runner: TS2554 (controller built without its injected service) and `typescript(no-floating-promises)`. The spike keeps its own copies until it is deleted (Consequences).
+
 ## Consequences
 
 - 0.4 can scaffold the monorepo with the stack above. Copy `tsconfig.base.json`, `.swcrc`, `.oxlintrc.json`, `.oxfmtrc.json`, `tsr.config.json` (with the footer), the negative-test script, both audit scripts and the bundled-TS allowlist into `packages/config` / CI. 0.4 copied the presets, `.oxfmtrc.json`, both audit scripts and the allowlist; `tsr.config.json` and the negative-test script move with the apps ([Handoff in 0.4](#handoff-in-04)). Use Node 24 in CI and pin `@types/node` (plus an `overrides` entry) to the same major as the minimum supported or deployed Node.
