@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#FFD7AD"/>
+  <g transform="translate(182 145) scale(.33)">
+    <circle fill="#A93420" cx="512" cy="351" r="150"/>
+    <path fill="#38241D" d="M177 521H310C340 634 416 682 512 682S684 634 714 521H847C818 707 686 817 512 817S206 707 177 521Z"/>
+  </g>
+  <g transform="translate(507 260) scale(1.55)" fill="#38241D">
+    <g transform="translate(4 3)" fill-rule="evenodd">
+    <path transform="translate(0 0)" d="M5 0H43V10H12V27H39V37H12V56H44V66H5Q0 66 0 61V5Q0 0 5 0Z"/>
+    <path transform="translate(56 0)" d="M0 17H10V23Q17 15 27 16Q45 16 45 37V66H34V38Q34 26 24 26Q11 26 11 41V66H0Z"/>
+    <path transform="translate(112 0)" d="M36 0H47V66H37V60Q31 67 21 67Q0 67 0 42Q0 16 21 16Q30 16 36 23ZM24 26Q11 26 11 42Q11 57 24 57Q37 57 37 42Q37 26 24 26Z"/>
+    <path transform="translate(168 0)" d="M0 17H11V45Q11 57 21 57Q34 57 34 42V17H45V66H35V60Q28 68 18 67Q0 67 0 46Z"/>
+    <path transform="translate(224 0)" d="M0 17H12L26 54L40 17H52L32 66H20Z"/>
+    <path transform="translate(280 0)" d="M37 17H47V66H37V60Q30 67 21 67Q0 67 0 42Q0 16 21 16Q31 16 37 23ZM24 26Q11 26 11 42Q11 57 24 57Q37 57 37 42Q37 26 24 26Z"/>
+  </g>
+  </g>
+</svg>

@@ -8,10 +8,18 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./dist/index.js"
+    },
+    "./tokens": {
+      "types": "./src/tokens.ts",
+      "default": "./dist/tokens.js"
+    },
+    "./tokens.css": {
+      "types": "./tokens.css.d.ts",
+      "default": "./dist/tokens.css"
     }
   },
   "scripts": {
-    "build": "swc src -d dist --strip-leading-paths --delete-dir-on-start --config-file node_modules/@enduva/config/swc/react.json",
+    "build": "swc src -d dist --strip-leading-paths --delete-dir-on-start --config-file node_modules/@enduva/config/swc/react.json && node generate-css.mjs",
     "typecheck": "tsc -p tsconfig.json",
     "lint": "oxlint -c node_modules/@enduva/config/oxlint.json --type-aware --deny-warnings src test",
     "test": "vitest run"

@@ -10,6 +10,7 @@
   },
   "devDependencies": {
     "@enduva/config": "workspace:*",
+    "@resvg/resvg-wasm": "2.6.2",
     "oxlint": "catalog:"
   }
 }
