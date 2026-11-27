@@ -5,7 +5,10 @@ import viteReact from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 import { paraglideOptions } from './paraglide.options.mjs';
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
+  // The production SSR bundle includes its dependencies, so the `web` image ships dist/ and srvx, but none of
+  // @tanstack/react-start's build-time dependencies (Vite, Babel, Prettier). Dev keeps Vite's default.
+  ...(command === 'build' && { ssr: { noExternal: true } }),
   plugins: [
     paraglideVitePlugin(paraglideOptions),
     tailwindcss(),
@@ -13,4 +16,4 @@ export default defineConfig({
     // React's plugin must come after Start's plugin.
     viteReact(),
   ],
-});
+}));
