@@ -89,5 +89,8 @@ jobs:
             "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
           echo "${GITLEAKS_SHA256}  $RUNNER_TEMP/gitleaks.tar.gz" | sha256sum -c -
           tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP" gitleaks
-      - name: Scan the full git history
-        run: '"$RUNNER_TEMP/gitleaks" git --redact --no-banner --exit-code 1 .'
+      # The scan includes merge commits' diffs; the self-test proves it on a throwaway repo first.
+      - name: Self-test (a secret added only in a merge resolution must be found)
+        run: tools/gitleaks-scan.sh "$RUNNER_TEMP/gitleaks" --self-test
+      - name: Scan the full git history, merge commits included
+        run: tools/gitleaks-scan.sh "$RUNNER_TEMP/gitleaks" .
