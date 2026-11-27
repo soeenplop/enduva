@@ -1,0 +1,8 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "language_name": "English",
+  "meta_title": "Enduva",
+  "home_title": "Welcome to Enduva",
+  "home_lead": "Your training and nutrition in one place. The app is in development, so this is only its frame for now.",
+  "not_found_title": "Page not found"
+}

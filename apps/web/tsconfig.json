@@ -1,0 +1,8 @@
+{
+  "extends": "@enduva/config/tsconfig/react.json",
+  "compilerOptions": {
+    "types": ["node", "vite/client"]
+  },
+  "include": ["src", "test"],
+  "exclude": ["src/paraglide"]
+}
