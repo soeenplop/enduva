@@ -1,0 +1,30 @@
+# Build context of deploy/Dockerfile (the repository root). Mirrors a clean checkout: no installs, build output,
+# caches or secrets from the host, and nothing the images don't build from.
+.git
+.github
+.worktrees
+**/node_modules
+**/dist
+**/build
+**/.turbo
+**/coverage
+**/.DS_Store
+
+# Env & secrets: only examples, which no image needs either.
+**/.env
+**/.env.*
+
+# Generated and scratch files (the packages' .gitignore files): the image build regenerates them.
+apps/*/src/routeTree.gen.ts
+apps/*/src/paraglide
+apps/*/project.inlang/cache
+apps/*/.tanstack
+apps/*/tsconfig.negative.json
+packages/api-client/src/generated
+
+# Not part of any image.
+apps/apple
+spikes
+docs
+supabase
+deploy/compose.yaml
