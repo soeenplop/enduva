@@ -4,11 +4,26 @@ import { InvalidEnvError, loadEnv } from '../src/config/env.js';
 
 describe('loadEnv', () => {
   it('applies the defaults', () => {
-    expect(loadEnv({})).toEqual({ NODE_ENV: 'development', HOST: '0.0.0.0', PORT: 3000 });
+    expect(loadEnv({})).toEqual({
+      NODE_ENV: 'development',
+      HOST: '0.0.0.0',
+      PORT: 3000,
+      LOG_LEVEL: 'info',
+      TRUST_PROXY: [],
+      THROTTLE_LIMIT: 100,
+      THROTTLE_TTL_SECONDS: 60,
+    });
   });
 
   it('coerces numbers', () => {
-    expect(loadEnv({ PORT: '8080' })).toMatchObject({ PORT: 8080 });
+    expect(loadEnv({ PORT: '8080', THROTTLE_LIMIT: '5' })).toMatchObject({ PORT: 8080, THROTTLE_LIMIT: 5 });
+  });
+
+  it('reads trusted proxies as a list of addresses, CIDRs and named ranges', () => {
+    expect(loadEnv({ TRUST_PROXY: ' 10.0.1.5, 172.16.0.0/12,fd00::/8 ,uniquelocal,' })).toMatchObject({
+      TRUST_PROXY: ['10.0.1.5', '172.16.0.0/12', 'fd00::/8', 'uniquelocal'],
+    });
+    expect(loadEnv({ TRUST_PROXY: '' })).toMatchObject({ TRUST_PROXY: [] });
   });
 
   it('keeps an explicit PORT=0 for an ephemeral port', () => {
@@ -25,6 +40,16 @@ describe('loadEnv', () => {
     ['PORT', '70000'],
     ['NODE_ENV', 'staging'],
     ['HOST', ''],
+    ['LOG_LEVEL', 'verbose'],
+    ['TRUST_PROXY', 'true'],
+    ['TRUST_PROXY', '1'],
+    ['TRUST_PROXY', '0.0.0.0/0'],
+    ['TRUST_PROXY', '10.0.0.0/33'],
+    ['TRUST_PROXY', '10.0.0.0/8/1'],
+    ['TRUST_PROXY', '10.0.0.0/255.0.0.0'],
+    ['TRUST_PROXY', 'traefik'],
+    ['THROTTLE_LIMIT', '-1'],
+    ['THROTTLE_TTL_SECONDS', '0'],
   ])('refuses %s=%s', (name, value) => {
     expect(() => loadEnv({ [name]: value })).toThrow(new RegExp(`^Invalid environment:\\n  ${name}: `));
   });
@@ -32,14 +57,14 @@ describe('loadEnv', () => {
   it('lists every offending variable but never a value', () => {
     let error: unknown;
     try {
-      loadEnv({ PORT: 's3cret-port', NODE_ENV: 's3cret-env' });
+      loadEnv({ PORT: 's3cret-port', LOG_LEVEL: 's3cret-level' });
     } catch (caught) {
       error = caught;
     }
     expect(error).toBeInstanceOf(InvalidEnvError);
     const { message } = error as Error;
     expect(message).toContain('PORT');
-    expect(message).toContain('NODE_ENV');
+    expect(message).toContain('LOG_LEVEL');
     expect(message).not.toContain('s3cret');
   });
 });

@@ -3,16 +3,18 @@ import 'reflect-metadata';
 import type { Provider, Type } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
+import type { DestinationStream } from 'pino';
 import request from 'supertest';
 
 import { AppModule, configureApp } from '../src/app.module.js';
 import { type Env, loadEnv } from '../src/config/env.js';
 
 export function testEnv(overrides: Readonly<Record<string, string>> = {}): Env {
-  return loadEnv({ NODE_ENV: 'test', ...overrides });
+  return loadEnv({ NODE_ENV: 'test', LOG_LEVEL: 'silent', ...overrides });
 }
 
 export interface TestAppOptions {
+  readonly logDestination?: DestinationStream;
   /** Extra controllers and providers for a test. */
   readonly controllers?: Type[];
   readonly providers?: Provider[];
@@ -20,15 +22,33 @@ export interface TestAppOptions {
 
 /** Boots the real AppModule, compiled by SWC through the Vitest preset, with the same HTTP setup as `main.ts`. */
 export async function createTestApp(env: Env, options: TestAppOptions = {}): Promise<NestExpressApplication> {
-  const { controllers = [], providers = [] } = options;
+  const { logDestination, controllers = [], providers = [] } = options;
   const moduleRef = await Test.createTestingModule({
-    imports: [AppModule.register(env)],
+    imports: [AppModule.register(env, logDestination === undefined ? {} : { logDestination })],
     controllers,
     providers,
   }).compile();
-  const app = configureApp(moduleRef.createNestApplication<NestExpressApplication>({ logger: false }), env);
+  const app = configureApp(moduleRef.createNestApplication<NestExpressApplication>({ bufferLogs: true }), env);
   await app.init();
   return app;
 }
 
 export const http = (app: NestExpressApplication) => request(app.getHttpServer());
+
+/** Collects log lines in memory. */
+export function logCapture(): DestinationStream & {
+  readonly lines: () => Record<string, unknown>[];
+  text: () => string;
+} {
+  const chunks: string[] = [];
+  return {
+    write: (chunk: string) => void chunks.push(chunk),
+    text: () => chunks.join(''),
+    lines: () =>
+      chunks
+        .join('')
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as Record<string, unknown>),
+  };
+}

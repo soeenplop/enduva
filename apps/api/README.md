@@ -29,17 +29,38 @@ process with exit code 1 and a list of the offending variable names (never their
 | --- | --- | --- |
 | `NODE_ENV` | `development` | `development`, `test` or `production` |
 | `HOST` / `PORT` | `0.0.0.0` / `3000` | |
+| `LOG_LEVEL` | `info` | pino level, or `silent` |
+| `TRUST_PROXY` | empty | Comma-separated IPs/CIDRs of the ingress (Traefik in Dokploy, e.g. the CIDR of its Docker network). `X-Forwarded-For` is honoured only from these peers; empty trusts none. No hop counts |
+| `THROTTLE_LIMIT` / `THROTTLE_TTL_SECONDS` | `100` / `60` | Requests per client IP **and endpoint** per window (see Throttling) |
 
 ## Behaviour
 
 - **Routes** live under `/v1` through Nest's URI versioning (`defaultVersion: '1'`), not a global prefix, so
   Nest's 404 handling also covers paths outside `/v1`.
 - **Health:** `GET /v1/health` is liveness and touches nothing else.
+- **Errors:** every error is RFC 9457 problem details (`application/problem+json`) with `type: about:blank`, the
+  status phrase as `title`, `status` and a stable `code` from [`src/problem/problem.ts`](src/problem/problem.ts).
+  Throw `ProblemException(code)` for expected errors. Messages of Nest and Express exceptions are not passed on.
+  Unexpected errors become `500` `internal_error` and are logged with the request ID and their class only: the
+  `err` serializer ([`src/logging/safe-error.ts`](src/logging/safe-error.ts)) never logs messages, causes, stacks
+  or other properties, since those can carry request input.
+- **Logging:** pino JSON on stdout. The request logger is the first middleware, ahead of the body parser, so every
+  request gets a server-generated ID, echoed in the `x-request-id` response header. An incoming `x-request-id` is
+  ignored: it is client-controlled. Request logs hold only ID, method, the matched route template (e.g.
+  `/v1/items/:id`; `(unmatched)` when the request ended before routing), status and duration: no raw paths or query
+  strings, headers, tokens, bodies, client IPs or health data. Nest's own logs go through the same logger
+  (nestjs-pino).
+- **Throttling:** `@nestjs/throttler` as a global guard, in memory per process. Each matched endpoint (controller and
+  handler) has its own bucket per client IP, so the limit is not an API-wide or ingress-wide request limit. The
+  guard runs after the body parser and routing: requests to unmatched routes and requests whose body is rejected are
+  never counted. Over the limit: `429` `rate_limited` with `Retry-After`. Per-user limits follow with auth (0.8b);
+  an overall request limit belongs to the ingress.
 
 ## Tests
 
-- Unit tests for the env schema.
-- `test/health.e2e.test.ts` boots the real `AppModule` under SWC and checks that DI works through decorator
-  metadata.
+- Unit tests for the env schema and the problem mapping.
+- `test/health.e2e.test.ts` boots the real `AppModule` under SWC: DI through decorator metadata, liveness, request
+  IDs, problem bodies (404 inside and outside `/v1`, malformed body, unexpected error), log redaction and
+  throttling.
 - `test/dist.e2e.test.ts` runs the SWC build with plain `node`: it boots, serves `/v1/health`, and refuses to boot
   with an invalid environment. The worker entrypoint runs and exits.
