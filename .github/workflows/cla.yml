@@ -20,10 +20,10 @@
 # a smaller commit set; a PR retargeted to main is re-checked through `edited`. No `if:` anywhere: a
 # skipped job would count as a passing `cla` check on that head.
 #
-# GitHub starts a `pull_request` run only if this workflow file exists in the PR's head branch. A
-# branch created before the gate landed gets no `cla` result from pushes, edits or reopening until
-# `main` is merged into it (observed on #114). A head branch without this file, e.g. a fork that
-# deletes it, gets no `cla` result either: the required check stays missing, blocked (fail-closed).
+# Branches that predate the gate: merge `main` in. On #114, body edits and close/reopen produced no
+# `cla` result; merging `main` did. GitHub reads this workflow from the PR's merge commit, so a
+# branch that deletes this file gets no `cla` result: the required check stays missing, blocked
+# (fail-closed). Fork runs are additionally held back by the fork approval setting.
 name: cla
 
 on:
