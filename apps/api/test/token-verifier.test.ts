@@ -217,7 +217,7 @@ describe('remote JWKS', () => {
     expect(server.state.fetches).toBe(3);
   });
 
-  it('keeps verifying with fresh keys while refetches for unknown keys fail, one fetch per cooldown', async () => {
+  it('keeps verifying with fresh keys during an outage, and answers unknown keys with 503 until a fetch succeeds', async () => {
     const { clock, remote } = clocked();
     const known = await token(first);
     const unknown = await token(await signingKey('ES256'));
@@ -226,12 +226,43 @@ describe('remote JWKS', () => {
     server.state.status = 500;
     try {
       clock.ms += 30_000;
-      await expect(remote.verify(unknown)).rejects.toThrow(AuthUnavailableError);
-      for (let i = 0; i < 5; i += 1) await expect(remote.verify(unknown)).rejects.toThrow(InvalidTokenError);
+      for (let i = 0; i < 6; i += 1) await expect(remote.verify(unknown)).rejects.toThrow(AuthUnavailableError);
       await expect(remote.verify(known)).resolves.toMatchObject({ sub: TEST_USER });
       expect(server.state.fetches).toBe(2);
     } finally {
       server.state.status = 200;
+    }
+    // Once a fetch has succeeded, a key that is still unknown is a bad token, without another fetch.
+    clock.ms += 30_000;
+    await expect(remote.verify(unknown)).rejects.toThrow(InvalidTokenError);
+    await expect(remote.verify(unknown)).rejects.toThrow(InvalidTokenError);
+    expect(server.state.fetches).toBe(3);
+  });
+
+  it('lets concurrent tokens with a newly rotated key share one refetch on a warm cache', async () => {
+    const { clock, remote } = clocked();
+    await remote.verify(await token(first));
+    const rotated = await signingKey('ES256');
+    server.state.keys = [first, rotated];
+    server.state.delayMs = 50;
+    server.state.fetches = 0;
+    try {
+      clock.ms += 30_000;
+      const results = await Promise.all(Array.from({ length: 3 }, async () => remote.verify(await token(rotated))));
+      expect(results).toEqual(Array.from({ length: 3 }, () => expect.objectContaining({ sub: TEST_USER })));
+      expect(server.state.fetches).toBe(1);
+    } finally {
+      server.state.keys = [first];
+      server.state.delayMs = 0;
+    }
+  });
+
+  it('never follows a redirect for the key set', async () => {
+    server.state.redirect = server.elsewhere;
+    try {
+      await expect(remoteVerifier().verify(await token(first))).rejects.toThrow(AuthUnavailableError);
+    } finally {
+      server.state.redirect = undefined;
     }
   });
 
