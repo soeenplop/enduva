@@ -2,6 +2,36 @@ import { isIP } from 'node:net';
 
 import * as z from 'zod';
 
+export const API_LOGIN = 'enduva_api_login';
+
+/**
+ * Query parameters a `DATABASE_URL` may carry: TLS settings only. node-postgres (pg-connection-string) lets query
+ * parameters override the URL, e.g. `?user=postgres` replaces the login and `?options=-c role=…` sets session
+ * settings, so every other parameter is refused.
+ */
+const allowedDatabaseParams = new Set(['sslmode', 'sslrootcert', 'uselibpqcompat']);
+
+/** The login node-postgres will use: the URL's user name, with no override. `<role>.<tenant>` is Supabase's pooler. */
+function connectsAsApiLogin(value: string): boolean {
+  const url = URL.parse(value);
+  if (url === null) return false;
+  if ([...url.searchParams.keys()].some((key) => !allowedDatabaseParams.has(key))) return false;
+  let user: string;
+  try {
+    user = decodeURIComponent(url.username);
+  } catch {
+    return false;
+  }
+  return user === API_LOGIN || user.startsWith(`${API_LOGIN}.`);
+}
+
+/** Postgres URL of the API's login role (ADR-0002). */
+const databaseUrl = z
+  .url({ protocol: /^postgres(ql)?$/, error: 'must be a postgres:// or postgresql:// URL' })
+  .refine(connectsAsApiLogin, {
+    error: `must connect as ${API_LOGIN} (ADR-0002), never as postgres or service_role, with no query parameters but sslmode, sslrootcert and uselibpqcompat`,
+  });
+
 /**
  * A decimal port number. Blank or whitespace-only values are rejected instead of coerced to 0, which would silently
  * bind an ephemeral port; an explicit `0` still asks for one.
@@ -48,6 +78,12 @@ export const envSchema = z.object({
   HOST: z.string().min(1).default('0.0.0.0'),
   PORT: port.default(3000),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+  /** Supabase transaction-pooler URL with the `enduva_api_login` role (ADR-0002). */
+  DATABASE_URL: databaseUrl,
+  /** Pool size per process (06-deployment → Connection budget). */
+  DATABASE_POOL_MAX: positiveInt.max(100).default(10),
+  /** How long a checkout may wait for a connection, queued or new, before it fails (node-postgres). */
+  DATABASE_CONNECT_TIMEOUT_MS: positiveInt.max(60_000).default(5_000),
   /** Trusted ingress proxies (addresses/CIDRs). Empty: `X-Forwarded-For` is ignored and the socket peer is the client. */
   TRUST_PROXY: trustedProxies.default([]),
   /** Requests per client IP, endpoint and window. */
@@ -63,7 +99,7 @@ export class InvalidEnvError extends Error {
 
 /**
  * Parses the environment. The error lists the offending variable names and the rules they break, never their
- * values, which can be secrets.
+ * values: `DATABASE_URL` carries a password.
  */
 export function loadEnv(source: Readonly<Record<string, string | undefined>>): Env {
   const result = envSchema.safeParse(source);

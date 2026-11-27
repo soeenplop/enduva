@@ -9,13 +9,16 @@ import request from 'supertest';
 import { AppModule, configureApp } from '../src/app.module.js';
 import { type Env, loadEnv } from '../src/config/env.js';
 
+/** Nothing listens on port 1: the pool fails fast, as with a database that is down. */
+export const UNREACHABLE_DATABASE_URL = 'postgresql://enduva_api_login:unused@127.0.0.1:1/postgres';
+
 export function testEnv(overrides: Readonly<Record<string, string>> = {}): Env {
-  return loadEnv({ NODE_ENV: 'test', LOG_LEVEL: 'silent', ...overrides });
+  return loadEnv({ NODE_ENV: 'test', LOG_LEVEL: 'silent', DATABASE_URL: UNREACHABLE_DATABASE_URL, ...overrides });
 }
 
 export interface TestAppOptions {
   readonly logDestination?: DestinationStream;
-  /** Extra controllers and providers for a test. */
+  /** Extra controllers and providers, e.g. a stand-in for the 0.8b auth guard. */
   readonly controllers?: Type[];
   readonly providers?: Provider[];
 }

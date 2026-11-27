@@ -1,7 +1,9 @@
 import { Controller, Get, Post } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
+import type { Database } from '@enduva/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { DATABASE } from '../src/db/database.js';
 import { HealthController } from '../src/health/health.controller.js';
 import { HealthService } from '../src/health/health.service.js';
 import { createTestApp, http, logCapture, testEnv } from './support.js';
@@ -46,12 +48,39 @@ describe('GET /v1/health (e2e, SWC)', () => {
     expect(app.get(HealthController)).toBeInstanceOf(HealthController);
   });
 
-  it('is live', async () => {
+  it('is live without a database', async () => {
     const res = await http(app).get('/v1/health');
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ status: 'ok' });
     expect(res.headers['cache-control']).toBe('no-store');
     expect(res.headers['x-powered-by']).toBeUndefined();
+  });
+
+  it('is not ready while the database is unreachable', async () => {
+    const res = await http(app).get('/v1/health/ready');
+    expect(res.status).toBe(503);
+    expect(res.headers['content-type']).toMatch(problemType);
+    expect(res.body).toEqual({
+      type: 'about:blank',
+      title: 'Service Unavailable',
+      status: 503,
+      code: 'database_unavailable',
+    });
+    // The checkout failure is logged by class only, not with its message (host and port here).
+    const line = logs
+      .lines()
+      .find((l) => l.msg === 'readiness check failed' && reqId(l) === res.headers['x-request-id']);
+    expect(line?.err).toEqual({ type: 'Error' });
+  });
+
+  it('survives an idle database client failing and logs it without its message', async () => {
+    const error = Object.assign(new Error('idle-secret'), { detail: 'detail-secret' });
+    app.get<Database>(DATABASE).$client.emit('error', error);
+    expect((await http(app).get('/v1/health')).status).toBe(200);
+    expect(logs.lines()).toContainEqual(
+      expect.objectContaining({ msg: 'idle database client failed', err: { type: 'Error' } }),
+    );
+    expect(logs.text()).not.toMatch(/idle-secret|detail-secret/);
   });
 
   it('generates every x-request-id and ignores the client one', async () => {

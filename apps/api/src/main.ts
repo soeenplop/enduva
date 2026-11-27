@@ -19,6 +19,6 @@ function envOrExit(): Env {
 const env = envOrExit();
 const app = await NestFactory.create<NestExpressApplication>(AppModule.register(env), { bufferLogs: true });
 configureApp(app, env);
-// SIGTERM/SIGINT close the app gracefully.
+// SIGTERM/SIGINT close the app, which ends the database pool.
 app.enableShutdownHooks();
 await app.listen(env.PORT, env.HOST);

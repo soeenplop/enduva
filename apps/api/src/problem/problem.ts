@@ -14,6 +14,7 @@ export const problemStatus = {
   unsupported_media_type: 415,
   rate_limited: 429,
   internal_error: 500,
+  database_unavailable: 503,
 } as const satisfies Record<string, number>;
 
 export type ProblemCode = keyof typeof problemStatus;

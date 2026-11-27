@@ -13,4 +13,11 @@ export class HealthController {
   live(): Status {
     return this.health.live();
   }
+
+  /** Readiness: the database is reachable. 503 problem `database_unavailable` otherwise. */
+  @Get('ready')
+  @Header('Cache-Control', 'no-store')
+  ready(): Promise<Status> {
+    return this.health.ready();
+  }
 }
