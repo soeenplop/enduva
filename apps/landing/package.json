@@ -2,15 +2,16 @@
   "name": "@enduva/landing",
   "version": "0.0.0",
   "private": true,
-  "description": "Landing page, prerendered to static HTML under /de/… and /en/… (T4).",
+  "description": "Landing page, prerendered to static HTML under /de/\u2026 and /en/\u2026 (T4).",
   "type": "module",
   "scripts": {
     "generate": "node scripts/compile-paraglide.mjs && tsr generate",
     "dev": "vite dev",
     "build": "node scripts/build.mjs",
     "typecheck": "tsc -p tsconfig.json",
-    "lint": "oxlint -c node_modules/@enduva/config/oxlint.json --type-aware --deny-warnings --ignore-pattern 'src/paraglide/**' --ignore-pattern src/routeTree.gen.ts src test scripts *.mjs",
-    "test": "vitest run"
+    "lint": "oxlint -c node_modules/@enduva/config/oxlint.json --type-aware --deny-warnings --ignore-pattern 'src/paraglide/**' --ignore-pattern src/routeTree.gen.ts src test e2e scripts *.mjs",
+    "test": "vitest run",
+    "test:e2e": "vitest run --config vitest.e2e.config.mjs"
   },
   "dependencies": {
     "@enduva/ui": "workspace:*",
@@ -33,6 +34,7 @@
     "oxlint": "catalog:",
     "oxlint-tsgolint": "catalog:",
     "parse5": "8.1.1",
+    "playwright-core": "1.65.1",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"

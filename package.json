@@ -14,6 +14,7 @@
     "typecheck": "turbo run typecheck",
     "lint": "turbo run lint",
     "test": "turbo run test",
+    "test:e2e": "turbo run test:e2e",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
     "audit:lockfile": "node tools/audit-lockfile.mjs --self-test && node tools/audit-lockfile.mjs pnpm-lock.yaml",

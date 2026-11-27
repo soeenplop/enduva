@@ -32,15 +32,24 @@
       "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/assets/brand/final/web/**"],
       "outputs": ["dist/**"]
     },
+    "@enduva/web#generate": {
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/i18n/messages/**"],
+      "outputs": ["src/routeTree.gen.ts", "src/paraglide/**"]
+    },
+    "@enduva/web#build": {
+      "dependsOn": ["^build", "generate"],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/i18n/messages/**"],
+      "outputs": ["dist/**"]
+    },
     "transit": {
       "dependsOn": ["^transit"]
     },
     "typecheck": {
-      "dependsOn": ["transit", "generate"],
+      "dependsOn": ["transit", "generate", "^generate"],
       "outputs": []
     },
     "lint": {
-      "dependsOn": ["transit", "generate"],
+      "dependsOn": ["transit", "generate", "^generate"],
       "outputs": []
     },
     "test": {
@@ -51,7 +60,16 @@
       "dependsOn": ["build", "^build", "transit"],
       "outputs": []
     },
+    "@enduva/web#test": {
+      "dependsOn": ["build", "^build", "transit", "generate"],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/i18n/messages/**"],
+      "outputs": []
+    },
     "@enduva/tools#test": {
+      "cache": false
+    },
+    "test:e2e": {
+      "dependsOn": ["build"],
       "cache": false
     },
     "//#format:check": {
