@@ -108,7 +108,7 @@ function versionsInCode(text) {
   const found = new Set();
   for (const m of text.matchAll(/\bversionMajorMinor\s*=\s*["'](\d+\.\d+)["']/g)) found.add(m[1]);
   for (const m of text.matchAll(/(?<![\w$.])([A-Za-z_$][\w$]*)\s*=\s*"(\d+\.\d+)"/g)) {
-    const id = m[1].replace(/\$/g, '\\$');
+    const id = m[1].replace(/[\\^$.*+?()[\]{}|]/g, '\\$&');
     if (new RegExp(`(?<![\\w$.])${id}\\.split\\(["']\\.["']\\)|\\$\\{${id}\\}`).test(text)) found.add(m[2]);
   }
   return found;
