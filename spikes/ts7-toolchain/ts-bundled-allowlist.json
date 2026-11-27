@@ -1,22 +1,27 @@
 {
-  "$comment": "TypeScript < 7 compiler code that third-party tools bundle purely for parsing or formatting, tolerated by the T1 clarification (owner ruling on PR #97). Checked by scripts/audit-bundled-typescript.mjs: any unlisted copy, and any change of package version, bundled TypeScript version or files, fails until this list is updated on purpose. Never add a copy that type-checks, provides a language service or emits/transpiles. See ADR-0001.",
+  "$comment": "TypeScript < 7 compiler code that third-party tools bundle purely for parsing or formatting, tolerated by the T1 clarification (owner ruling on PR #97). Checked by scripts/audit-bundled-typescript.mjs: every field is required and non-empty; an unlisted copy, or any change of the package version, the detected bundled TypeScript version, the files or their sha256 digests, or the direct consumers in the pnpm graph, fails until this list is updated on purpose. `bundledTypeScript` is exactly what the audit can read from the installed files, no more. The audit cannot check `usage` and `reason`: whoever changes an entry must confirm the use is still parsing/formatting only. Never add a copy that type-checks, provides a language service or emits/transpiles. See ADR-0001.",
   "entries": [
     {
       "package": "prettier",
       "version": "3.10.1",
       "bundledTypeScript": "6.0.3",
-      "files": ["plugins/typescript.js", "plugins/typescript.mjs"],
-      "usedBy": "@tanstack/router-generator@1.168.0 (hard dependency; via @tanstack/router-cli and @tanstack/router-plugin). The same copy satisfies Orval's optional `prettier` peer, which Orval only uses with `output.formatter: 'prettier'` (not set).",
-      "usage": "Prettier's `typescript` parser formats the generated route trees (`routeTree.gen.ts`) in `tsr generate` and in the TanStack Start Vite build.",
+      "files": {
+        "plugins/typescript.js": "sha256:9c1b3055e18e29378c3f147d9c7967801f6a2405db3fc85a4b08a0f4c484ff24",
+        "plugins/typescript.mjs": "sha256:befece7495d9fee605e81a93bf7b06a9ebe3c59523de65172187ef43123418e3"
+      },
+      "consumers": ["@tanstack/router-generator@1.168.0", "orval@8.49.0"],
+      "usage": "@tanstack/router-generator (hard dependency; run by `tsr generate` via @tanstack/router-cli and by the TanStack Start Vite build via @tanstack/router-plugin) formats the generated route trees (`routeTree.gen.ts`) with Prettier's `typescript` parser. Orval resolves the same copy as its optional `prettier` peer and only uses it with `output.formatter: 'prettier'`, which we don't set.",
       "reason": "TanStack Router's generator depends on Prettier and formats with `parser: 'typescript'`. TanStack stays (owner ruling on PR #97). Parsing and printing only: no type checking, language service or emit."
     },
     {
       "package": "oxfmt",
       "version": "0.80.0",
-      "bundledTypeScript": "6.0.3",
-      "files": ["dist/typescript-DQUs9PXr.js"],
-      "usedBy": "oxfmt, our formatter (`pnpm format` / `pnpm format:check`).",
-      "usage": "oxfmt bundles Prettier 3.10.1 (including its `typescript` parser plugin) for the languages it delegates to Prettier and for its Tailwind class sorter. The plugin is lazy-loaded. JS/TS/JSON are formatted by oxfmt's native (Rust) formatter: `format:check` on the spike passes with this file removed, so our check does not load it.",
+      "bundledTypeScript": "6.0",
+      "files": {
+        "dist/typescript-DQUs9PXr.js": "sha256:92d0b8d2a2ba01021ecd183ec44248fb22e98418241910a50aed9bced7dc5935"
+      },
+      "consumers": ["workspace:ts7-toolchain-spike"],
+      "usage": "Our formatter (`pnpm format` / `pnpm format:check`). The file is a lazy-loaded, re-bundled copy of Prettier 3.10.1's `typescript` parser plugin (its `//#region` comment names `prettier@3.10.1/.../plugins/typescript.mjs`; the audit reads only `6.0` from it), used for the languages oxfmt delegates to Prettier and for its Tailwind class sorter. JS/TS/JSON are formatted by oxfmt's native (Rust) formatter: `format:check` on the spike passes with this file removed, so our check does not load it.",
       "reason": "Ships inside every current oxfmt release; it cannot be dropped as a dependency. Parsing and printing only: no type checking, language service or emit."
     }
   ]

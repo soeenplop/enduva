@@ -21,17 +21,30 @@
 //      - a minified `<id>="X.Y"` whose identifier is later used as `<id>.split(".")` or `${<id>}`
 //        (how the compiler and typescript-estree use `versionMajorMinor`),
 //      - `typescript@vX.Y.Z` / `typescript@X.Y.Z` in the package's notice files (THIRD-PARTY-NOTICES,
-//        NOTICE, LICENSE). If no version is found, it is "unknown" and treated like < 7.
-//   5. Every file is attributed to the nearest enclosing package.json with a `name` and `version`.
+//        NOTICE, LICENSE).
+//      The most precise of these is the detected version (`6.0.3` if a notice names it, else `6.0`).
+//      No version, or two conflicting ones, fails: T1 requires the bundled version to be explicit.
+//   5. Every file is attributed to the nearest enclosing package.json with a `name` and `version`,
+//      and its SHA-256 digest is recorded.
+//   6. The consumers of each such package (the packages and workspace importers that depend on it
+//      directly) are read from the installed dependency graph with `pnpm why <name> -r --json`, run
+//      in the workspace that owns each scanned `node_modules`.
 //
 // Verdict
 //   - The `typescript` package itself at >= 7 is the compiler we use and is not a bundled copy.
 //     `typescript` < 7 always fails (it is never allowlistable; the lockfile audit catches it too).
-//   - Any other package that contains compiler code must be in the allowlist with exactly this
-//     package name and version, the detected bundled TypeScript version and the exact file list.
-//   - Allowlist entries that match no installed package fail as stale. So any version change of an
-//     allowlisted package (or of its bundled TypeScript, or of the files that carry it) fails until
-//     the allowlist is updated on purpose.
+//   - Every allowlist entry is validated first: all fields present and non-empty, no unknown fields,
+//     an exact package version, a `X.Y` or `X.Y.Z` bundled version, a `sha256:<hex>` digest per
+//     file, and a non-empty list of distinct consumers.
+//   - Any other package that contains compiler code must have an entry with exactly this package
+//     name and version, the detected bundled TypeScript version (string equality, so `6.0` and
+//     `6.0.3` are different), the exact file list with matching digests, and exactly the consumers
+//     found in the graph (`<name>@<version>`, or `workspace:<name>` for an importer).
+//   - Allowlist entries that match no installed package fail as stale. So any change of an
+//     allowlisted package's version, of the bytes of a file that carries the compiler, of the set of
+//     such files, or of a consumer's name or version fails until the allowlist is updated on purpose.
+//   - The audit cannot judge `usage` and `reason`; it only requires them. Whether a use still
+//     qualifies as parsing/formatting is decided by the reviewer of the allowlist change.
 //
 // Limits (see ADR-0001)
 //   - Only installed files are scanned: optional packages for other platforms are not present on
@@ -40,8 +53,10 @@
 //     not visible, nor is a copy whose diagnostic keys were deliberately stripped or rewritten.
 //     The signatures detect the TypeScript scanner/parser; a tool that ships only small helpers
 //     copied from TypeScript (no diagnostic table) is not detected.
-//   - Minified version detection is heuristic; a copy whose version cannot be read fails unless an
-//     allowlist entry says `"bundledTypeScript": "unknown"`.
+//   - Minified version detection is heuristic. Where only `X.Y` can be read, the entry records
+//     `X.Y`, and the file digests pin the reviewed bytes.
+//   - Consumers are the direct dependents in pnpm's graph. A package that is only reached through a
+//     bundled `node_modules` (not in the lockfile) has no consumers there and therefore fails.
 //
 // Usage: node scripts/audit-bundled-typescript.mjs --allowlist <file.json> <node_modules>...
 //        node scripts/audit-bundled-typescript.mjs --self-test
@@ -59,6 +74,8 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -103,6 +120,8 @@ function versionsInNotices(dir) {
   return found;
 }
 
+const sha256 = (bytes) => `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
+
 function readManifest(dir) {
   try {
     const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
@@ -114,7 +133,7 @@ function readManifest(dir) {
 
 /** Finds every installed package that contains TypeScript compiler code. */
 export function scan(roots) {
-  const hits = new Map(); // `${name}@${version}` -> { name, version, dir, files: Set, versions: Set }
+  const hits = new Map(); // `${name}@${version}` -> { name, version, dir, files: Map<path, digest>, versions: Set }
 
   function walk(dir, owner) {
     const manifest = readManifest(dir);
@@ -127,15 +146,16 @@ export function scan(roots) {
         continue;
       }
       if (!entry.isFile() || !owner || !isJavaScript(path, entry.name)) continue;
-      const text = readFileSync(path, 'latin1');
+      const bytes = readFileSync(path);
+      const text = bytes.toString('latin1');
       if (!SIGNATURES.some((s) => text.includes(s))) continue;
       const key = `${owner.name}@${owner.version}`;
       let hit = hits.get(key);
       if (!hit) {
-        hit = { name: owner.name, version: owner.version, dir: owner.dir, files: new Set(), versions: new Set() };
+        hit = { name: owner.name, version: owner.version, dir: owner.dir, files: new Map(), versions: new Set() };
         hits.set(key, hit);
       }
-      hit.files.add(relative(owner.dir, path).split('\\').join('/'));
+      hit.files.set(relative(owner.dir, path).split('\\').join('/'), sha256(bytes));
       for (const v of versionsInCode(text)) hit.versions.add(v);
     }
   }
@@ -149,24 +169,64 @@ export function scan(roots) {
 
 const byText = (a, b) => a.localeCompare(b);
 const major = (v) => Number(v.split('.')[0]);
-// A detected "6.0" is consistent with an allowlisted "6.0.3"; a detected "6.0.3" must match exactly.
-const compatible = (detected, listed) =>
-  detected.split('.').length === 2 ? listed.startsWith(`${detected}.`) || listed === detected : listed === detected;
-const REQUIRED = ['package', 'version', 'bundledTypeScript', 'files', 'usedBy', 'usage', 'reason'];
+const nonBlank = (v) => typeof v === 'string' && v.trim() !== '';
+const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+const EXACT = /^\d+\.\d+\.\d+(?:-[\w.]+)?$/;
+const BUNDLED = /^\d+\.\d+(?:\.\d+(?:-[\w.]+)?)?$/;
+const DIGEST = /^sha256:[0-9a-f]{64}$/;
+const CONSUMER = /^(?:workspace:)?(?:@[^@\s/]+\/)?[^@\s/]+(?:@\d+\.\d+\.\d+(?:-[\w.]+)?)?$/;
+const FIELDS = ['package', 'version', 'bundledTypeScript', 'files', 'consumers', 'usage', 'reason'];
 
+/** The most precise detected version, if all detected versions agree (`6.0` is a prefix of `6.0.3`). */
+export function detectedVersion(versions) {
+  if (versions.length === 0) return { problem: 'no bundled TypeScript version could be read' };
+  const best = versions.reduce((a, b) => (b.split('.').length > a.split('.').length ? b : a));
+  if (versions.every((v) => v === best || best.startsWith(`${v}.`))) return { version: best };
+  return { problem: `conflicting bundled TypeScript versions ${versions.join(', ')}` };
+}
+
+function validate(e, i) {
+  if (!isObject(e)) return [`allowlist entry ${i}: must be an object`];
+  const at = `allowlist entry ${i} (${nonBlank(e.package) ? e.package : '?'})`;
+  const p = [];
+  for (const k of Object.keys(e)) if (!FIELDS.includes(k)) p.push(`${at}: unknown field "${k}"`);
+  for (const k of ['package', 'usage', 'reason'])
+    if (!nonBlank(e[k])) p.push(`${at}: "${k}" must be a non-empty string`);
+  if (typeof e.version !== 'string' || !EXACT.test(e.version)) p.push(`${at}: "version" must be an exact version`);
+  if (typeof e.bundledTypeScript !== 'string' || !BUNDLED.test(e.bundledTypeScript)) {
+    p.push(`${at}: "bundledTypeScript" must be the detected version, X.Y or X.Y.Z`);
+  }
+  if (!isObject(e.files) || Object.keys(e.files).length === 0) {
+    p.push(`${at}: "files" must map each file to its sha256 digest`);
+  } else {
+    for (const [f, d] of Object.entries(e.files))
+      if (!nonBlank(f) || typeof d !== 'string' || !DIGEST.test(d))
+        p.push(`${at}: "files"."${f}" must be sha256:<64 hex>`);
+  }
+  const c = e.consumers;
+  if (
+    !Array.isArray(c) ||
+    c.length === 0 ||
+    !c.every((x) => nonBlank(x) && CONSUMER.test(x)) ||
+    new Set(c).size !== c.length
+  ) {
+    p.push(`${at}: "consumers" must be a non-empty list of distinct "<name>@<version>" / "workspace:<name>"`);
+  }
+  return p;
+}
+
+const same = (a, b) => JSON.stringify([...a].sort(byText)) === JSON.stringify([...b].sort(byText));
+
+/** `hits` from scan(), each with `consumers` (from consumersOf()) for packages other than `typescript`. */
 export function judge(hits, allowlist) {
   const problems = [];
   const report = [];
-  const entries = allowlist.entries ?? [];
-  for (const [i, e] of entries.entries()) {
-    const missing = REQUIRED.filter(
-      (k) => e[k] === undefined || e[k] === '' || (Array.isArray(e[k]) && e[k].length === 0),
-    );
-    if (missing.length > 0) problems.push(`allowlist entry ${i} (${e.package ?? '?'}) lacks: ${missing.join(', ')}`);
-    if (typeof e.version === 'string' && !/^\d+\.\d+\.\d+(?:-[\w.]+)?$/.test(e.version)) {
-      problems.push(`allowlist entry ${e.package}@${e.version}: version must be exact`);
-    }
-  }
+  const entries = Array.isArray(allowlist?.entries) ? allowlist.entries : [];
+  if (!Array.isArray(allowlist?.entries)) problems.push('allowlist: "entries" must be a list');
+  for (const [i, e] of entries.entries()) problems.push(...validate(e, i));
+  const ids = entries.map((e) => `${e?.package}@${e?.version}`);
+  for (const id of new Set(ids.filter((id, i) => ids.indexOf(id) !== i)))
+    problems.push(`duplicate allowlist entry ${id}`);
   const used = new Set();
   for (const hit of hits) {
     const id = `${hit.name}@${hit.version}`;
@@ -180,8 +240,8 @@ export function judge(hits, allowlist) {
       }
       continue;
     }
-    const files = [...hit.files].sort(byText);
-    const entry = entries.find((e) => e.package === hit.name && e.version === hit.version);
+    const files = [...hit.files.keys()].sort(byText);
+    const entry = entries.find((e) => isObject(e) && e.package === hit.name && e.version === hit.version);
     if (!entry) {
       problems.push(
         `${id}: bundles TypeScript compiler code (TypeScript ${shown}) in ${files.join(', ')} and is not allowlisted`,
@@ -189,31 +249,68 @@ export function judge(hits, allowlist) {
       continue;
     }
     used.add(entry);
-    const listed = String(entry.bundledTypeScript);
-    const versionOk =
-      versions.length === 0
-        ? listed === 'unknown'
-        : listed !== 'unknown' && versions.every((v) => compatible(v, listed));
-    if (!versionOk) problems.push(`${id}: bundled TypeScript is ${shown}, allowlist says ${listed}`);
-    const listedFiles = [...(entry.files ?? [])].sort(byText);
-    if (JSON.stringify(listedFiles) !== JSON.stringify(files)) {
-      problems.push(`${id}: compiler code found in [${files.join(', ')}], allowlist lists [${listedFiles.join(', ')}]`);
+    const before = problems.length;
+    const detected = detectedVersion(versions);
+    if (detected.problem) problems.push(`${id}: ${detected.problem}; T1 requires an explicit version, investigate`);
+    else if (entry.bundledTypeScript !== detected.version) {
+      problems.push(
+        `${id}: detected bundled TypeScript ${detected.version}, allowlist says ${entry.bundledTypeScript}`,
+      );
     }
-    if (problems.every((p) => !p.startsWith(`${id}:`))) {
+    const listed = isObject(entry.files) ? entry.files : {};
+    if (!same(Object.keys(listed), files)) {
+      problems.push(
+        `${id}: compiler code found in [${files.join(', ')}], allowlist lists [${Object.keys(listed).sort(byText).join(', ')}]`,
+      );
+    } else {
+      for (const f of files)
+        if (listed[f] !== hit.files.get(f))
+          problems.push(`${id}: ${f} is ${hit.files.get(f)}, allowlist says ${listed[f]}`);
+    }
+    const consumers = [...(hit.consumers ?? [])].sort(byText);
+    if (consumers.length === 0) problems.push(`${id}: no consumers found in the dependency graph`);
+    else if (!Array.isArray(entry.consumers) || !same(entry.consumers, consumers)) {
+      problems.push(
+        `${id}: consumers are [${consumers.join(', ')}], allowlist says [${[entry.consumers].flat().join(', ')}]`,
+      );
+    }
+    if (problems.length === before) {
       report.push(
-        `ok   ${id}: allowlisted bundled TypeScript ${listed} (${files.join(', ')}); used by ${entry.usedBy}`,
+        `ok   ${id}: TypeScript ${detected.version} in ${files.join(', ')} (digests match); consumers ${consumers.join(', ')}`,
       );
     }
   }
-  for (const e of entries)
-    if (!used.has(e)) problems.push(`stale allowlist entry ${e.package}@${e.version}: no installed package matches`);
+  for (const [i, e] of entries.entries())
+    if (!used.has(e)) problems.push(`stale allowlist entry ${i} (${ids[i]}): no installed package matches`);
   return { problems, report };
+}
+
+/**
+ * Adds `consumers` to every non-`typescript` hit: its direct dependents in the pnpm graph of each
+ * workspace that owns one of the scanned `node_modules` (`<name>@<version>`, or `workspace:<name>`).
+ */
+export function consumersOf(hits, roots) {
+  const names = [...new Set(hits.filter((h) => h.name !== 'typescript').map((h) => h.name))];
+  const graph = new Map();
+  for (const root of roots) {
+    for (const name of names) {
+      const out = execFileSync('pnpm', ['why', name, '-r', '--json'], { cwd: dirname(root), encoding: 'utf8' });
+      for (const pkg of JSON.parse(out)) {
+        const id = `${pkg.name}@${pkg.version}`;
+        if (!graph.has(id)) graph.set(id, new Set());
+        for (const d of pkg.dependents ?? [])
+          graph.get(id).add(d.depField ? `workspace:${d.name}` : `${d.name}@${d.version}`);
+      }
+    }
+  }
+  for (const hit of hits)
+    if (hit.name !== 'typescript') hit.consumers = graph.get(`${hit.name}@${hit.version}`) ?? new Set();
+  return hits;
 }
 
 function run(allowlistPath, roots) {
   const allowlist = JSON.parse(readFileSync(allowlistPath, 'utf8'));
-  const hits = scan(roots);
-  const { problems, report } = judge(hits, allowlist);
+  const { problems, report } = judge(consumersOf(scan(roots), roots), allowlist);
   for (const line of report) console.log(line);
   if (problems.length > 0) {
     console.error(`FAIL bundled TypeScript audit (${roots.join(', ')}):\n  ${problems.join('\n  ')}`);
@@ -241,18 +338,26 @@ function fakePackage(root, storeKey, name, version, files, extra = {}) {
 
 function selfTest() {
   const tmp = mkdtempSync(join(tmpdir(), 'bundled-ts-'));
+  const NOTICE_603 = 'text:## typescript@v6.0.3\n';
   const entry = {
     package: 'fake-formatter',
     version: '1.0.0',
     bundledTypeScript: '6.0.3',
-    files: ['dist/parser.js'],
-    usedBy: 'self-test',
+    files: { 'dist/parser.js': sha256(readFileSync(join(FIXTURES, 'ts6-unminified.js'))) },
+    consumers: ['some-tool@2.0.0'],
     usage: 'formatting',
     reason: 'self-test',
   };
+  // The reviewed fake-formatter@1.0.0: TS 6 parser in dist/parser.js, notice names typescript@v6.0.3.
+  const formatter = (r, files = {}, version = '1.0.0') =>
+    fakePackage(r, `fake-formatter@${version}`, 'fake-formatter', version, {
+      'dist/parser.js': 'ts6-unminified.js',
+      'THIRD-PARTY-NOTICES.md': NOTICE_603,
+      ...files,
+    });
   const cases = [];
-  const check = (name, expectFail, setup, allowlist = { entries: [] }, match) =>
-    cases.push({ name, expectFail, setup, allowlist, match });
+  const check = (name, expectFail, setup, allowlist = { entries: [] }, match, consumers = ['some-tool@2.0.0']) =>
+    cases.push({ name, expectFail, setup, allowlist, match, consumers });
 
   check(
     'rejects an unlisted bundled TypeScript 6 copy (unminified)',
@@ -308,77 +413,147 @@ function selfTest() {
     /typescript@7\.0\.0: TypeScript < 7 is not allowed/,
   );
   check(
-    'rejects a copy with an unreadable version',
+    'rejects typescript < 7 itself, even if allowlisted',
+    true,
+    (r) => {
+      fakePackage(r, 'typescript@6.0.3', 'typescript', '6.0.3', { 'lib/typescript.js': 'ts6-unminified.js' });
+    },
+    { entries: [{ ...entry, package: 'typescript', version: '6.0.3' }] },
+    /typescript@6\.0\.3: TypeScript < 7/,
+  );
+  check(
+    'accepts an allowlisted copy (exact package, version, bundled TS, file digests, consumers)',
+    false,
+    (r) => formatter(r),
+    { entries: [entry] },
+  );
+  check(
+    'rejects an allowlisted package after a version change',
+    true,
+    (r) => formatter(r, {}, '1.0.1'),
+    { entries: [entry] },
+    /fake-formatter@1\.0\.1: .*not allowlisted[\s\S]*stale allowlist entry 0 \(fake-formatter@1\.0\.0\)/,
+  );
+  check(
+    'rejects an allowlisted package whose bundled TypeScript minor changed',
+    true,
+    (r) =>
+      formatter(r, {
+        'dist/parser.js':
+          'text:var versionMajorMinor = "5.9";\nvar E={a:d(1003,1,"Identifier_expected_1003","Identifier expected.")};',
+        'THIRD-PARTY-NOTICES.md': 'text:none\n',
+      }),
+    { entries: [entry] },
+    /detected bundled TypeScript 5\.9, allowlist says 6\.0\.3/,
+  );
+  check(
+    'rejects a same-minor version mismatch (detected 6.0.3, allowlist 6.0.4)',
+    true,
+    (r) => formatter(r),
+    { entries: [{ ...entry, bundledTypeScript: '6.0.4' }] },
+    /detected bundled TypeScript 6\.0\.3, allowlist says 6\.0\.4/,
+  );
+  check(
+    'rejects an entry that claims a patch the scan cannot read (detected 6.0, allowlist 6.0.3)',
+    true,
+    (r) => formatter(r, { 'THIRD-PARTY-NOTICES.md': 'text:none\n' }),
+    { entries: [entry] },
+    /detected bundled TypeScript 6\.0, allowlist says 6\.0\.3/,
+  );
+  check(
+    'rejects a copy with an unreadable version, even if allowlisted',
     true,
     (r) => {
       fakePackage(r, 'opaque@1.0.0', 'opaque', '1.0.0', {
         'index.cjs': 'text:var x={a:d(1002,1,"Unterminated_string_literal_1002","Unterminated string literal.")};',
       });
     },
-    undefined,
-    /opaque@1\.0\.0: .*TypeScript unknown/,
+    {
+      entries: [
+        {
+          ...entry,
+          package: 'opaque',
+          bundledTypeScript: 'unknown',
+          files: { 'index.cjs': entry.files['dist/parser.js'] },
+        },
+      ],
+    },
+    /^(?=[\s\S]*opaque@1\.0\.0: no bundled TypeScript version could be read)(?=[\s\S]*"bundledTypeScript" must be)/,
   );
   check(
-    'rejects typescript < 7 itself, even if allowlisted',
+    'rejects conflicting bundled versions in one package',
+    true,
+    (r) => formatter(r, { 'THIRD-PARTY-NOTICES.md': 'text:typescript@v6.0.3 typescript@v6.0.4\n' }),
+    { entries: [entry] },
+    /conflicting bundled TypeScript versions 6\.0, 6\.0\.3, 6\.0\.4/,
+  );
+  check(
+    'rejects a changed bundled file with the same package version, bundled version and name',
     true,
     (r) => {
-      fakePackage(r, 'typescript@6.0.3', 'typescript', '6.0.3', { 'lib/typescript.js': 'ts6-unminified.js' });
-    },
-    { entries: [{ ...entry, package: 'typescript', version: '6.0.3', files: ['lib/typescript.js'] }] },
-    /typescript@6\.0\.3: TypeScript < 7/,
-  );
-  check(
-    'accepts an allowlisted copy (exact package, version, bundled TS and files)',
-    false,
-    (r) => {
-      fakePackage(r, 'fake-formatter@1.0.0', 'fake-formatter', '1.0.0', {
-        'dist/parser.js': 'ts6-unminified.js',
-        'THIRD-PARTY-NOTICES.md': 'text:## typescript@v6.0.3\n',
-      });
+      const dir = formatter(r);
+      writeFileSync(
+        join(dir, 'dist', 'parser.js'),
+        `${readFileSync(join(dir, 'dist', 'parser.js'), 'utf8')}\n// patched\n`,
+      );
     },
     { entries: [entry] },
-  );
-  check(
-    'rejects an allowlisted package after a version change',
-    true,
-    (r) => {
-      fakePackage(r, 'fake-formatter@1.0.1', 'fake-formatter', '1.0.1', { 'dist/parser.js': 'ts6-unminified.js' });
-    },
-    { entries: [entry] },
-    /fake-formatter@1\.0\.1: .*not allowlisted[\s\S]*stale allowlist entry fake-formatter@1\.0\.0/,
-  );
-  check(
-    'rejects an allowlisted package whose bundled TypeScript changed',
-    true,
-    (r) => {
-      fakePackage(r, 'fake-formatter@1.0.0', 'fake-formatter', '1.0.0', {
-        'dist/parser.js':
-          'text:var versionMajorMinor = "5.9";\nvar E={a:d(1003,1,"Identifier_expected_1003","Identifier expected.")};',
-      });
-    },
-    { entries: [entry] },
-    /bundled TypeScript is 5\.9, allowlist says 6\.0\.3/,
+    /fake-formatter@1\.0\.0: dist\/parser\.js is sha256:[0-9a-f]{64}, allowlist says sha256:/,
   );
   check(
     'rejects an allowlisted package that carries the compiler in a new file',
     true,
-    (r) => {
-      fakePackage(r, 'fake-formatter@1.0.0', 'fake-formatter', '1.0.0', {
-        'dist/parser.js': 'ts6-unminified.js',
-        'dist/extra.mjs': 'ts6-minified.js',
-      });
-    },
+    (r) => formatter(r, { 'dist/extra.mjs': 'ts6-minified.js' }),
     { entries: [entry] },
     /compiler code found in \[dist\/extra\.mjs, dist\/parser\.js\]/,
   );
+  for (const change of [{ usage: '' }, { reason: null }, { usage: '   ' }, { consumers: [] }, { files: {} }]) {
+    const field = Object.keys(change)[0];
+    check(
+      `rejects an entry with ${JSON.stringify(change)}`,
+      true,
+      (r) => formatter(r),
+      { entries: [{ ...entry, ...change }] },
+      new RegExp(`"${field}" must`),
+    );
+  }
   check(
-    'rejects an incomplete allowlist entry',
+    'rejects an entry without a "reason" field',
     true,
-    (r) => {
-      fakePackage(r, 'fake-formatter@1.0.0', 'fake-formatter', '1.0.0', { 'dist/parser.js': 'ts6-unminified.js' });
-    },
-    { entries: [{ ...entry, reason: '' }] },
-    /lacks: reason/,
+    (r) => formatter(r),
+    { entries: [{ ...entry, reason: undefined }] },
+    /"reason" must be a non-empty string/,
+  );
+  check(
+    'rejects an entry with an unknown field',
+    true,
+    (r) => formatter(r),
+    { entries: [{ ...entry, usedBy: 'old field' }] },
+    /unknown field "usedBy"/,
+  );
+  check(
+    'rejects a changed consumer version',
+    true,
+    (r) => formatter(r),
+    { entries: [entry] },
+    /consumers are \[some-tool@2\.1\.0\], allowlist says \[some-tool@2\.0\.0\]/,
+    ['some-tool@2.1.0'],
+  );
+  check(
+    'rejects a new consumer',
+    true,
+    (r) => formatter(r),
+    { entries: [entry] },
+    /consumers are \[other-tool@1\.0\.0, some-tool@2\.0\.0\]/,
+    ['some-tool@2.0.0', 'other-tool@1.0.0'],
+  );
+  check(
+    'rejects a package whose consumers disappeared from the graph',
+    true,
+    (r) => formatter(r),
+    { entries: [entry] },
+    /no consumers found in the dependency graph/,
+    [],
   );
   check('accepts the typescript 7 package and packages without compiler code', false, (r) => {
     fakePackage(r, 'typescript@7.0.2', 'typescript', '7.0.2', {
@@ -388,38 +563,77 @@ function selfTest() {
   });
 
   let failed = 0;
+  const report = (ok, name, detail) => {
+    console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}`);
+    if (!ok) {
+      failed++;
+      if (detail) console.log(`     ${detail}`);
+    }
+  };
   for (const [i, c] of cases.entries()) {
     const root = join(tmp, String(i), 'node_modules');
     mkdirSync(root, { recursive: true });
     c.setup(root);
-    const { problems } = judge(scan([root]), c.allowlist);
+    const hits = scan([root]);
+    for (const h of hits) h.consumers = new Set(c.consumers);
+    const { problems } = judge(hits, c.allowlist);
     const text = problems.join('\n');
     const ok = c.expectFail ? problems.length > 0 && (!c.match || c.match.test(text)) : problems.length === 0;
-    console.log(`${ok ? 'ok  ' : 'FAIL'} ${c.name}`);
-    if (!ok) {
-      failed++;
-      console.log(`     problems: ${text || '(none)'}`);
-    }
-  }
-
-  // Regression on the real install: Prettier 3.10.1 bundles the TypeScript 6.0.3 parser.
-  const prettier = join(here, '..', 'node_modules', '.pnpm', 'prettier@3.10.1');
-  if (existsSync(prettier)) {
-    const hit = scan([prettier]).find((h) => h.name === 'prettier');
-    const ok =
-      hit !== undefined &&
-      hit.files.has('plugins/typescript.mjs') &&
-      hit.versions.has('6.0') &&
-      hit.versions.has('6.0.3');
-    console.log(
-      `${ok ? 'ok  ' : 'FAIL'} detects TypeScript 6.0.3 in the installed prettier@3.10.1 (${hit ? [...hit.files].sort(byText).join(', ') : 'not detected'})`,
-    );
-    if (!ok) failed++;
-  } else {
-    console.log('FAIL prettier@3.10.1 regression: not installed (update this check if Prettier left the graph)');
-    failed++;
+    report(ok, c.name, `problems: ${text || '(none)'}`);
   }
   rmSync(tmp, { recursive: true, force: true });
+
+  // Regressions on the real install and the real allowlist (review findings on PR #97).
+  const roots = [join(here, '..', 'node_modules')];
+  if (!existsSync(join(roots[0], '.pnpm', 'prettier@3.10.1'))) {
+    report(false, 'prettier@3.10.1 regression: not installed (update these checks if Prettier left the graph)');
+    process.exit(1);
+  }
+  const hits = consumersOf(scan(roots), roots);
+  const allowlist = JSON.parse(readFileSync(join(here, '..', 'ts-bundled-allowlist.json'), 'utf8'));
+  const prettier = hits.find((h) => h.name === 'prettier' && h.version === '3.10.1');
+  report(
+    prettier !== undefined &&
+      prettier.files.has('plugins/typescript.mjs') &&
+      detectedVersion([...prettier.versions]).version === '6.0.3' &&
+      prettier.consumers.has('@tanstack/router-generator@1.168.0'),
+    'detects TypeScript 6.0.3 and its TanStack consumer in the installed prettier@3.10.1',
+  );
+  const oxfmt = hits.find((h) => h.name === 'oxfmt');
+  report(
+    oxfmt !== undefined && detectedVersion([...oxfmt.versions]).version === '6.0',
+    'reads only TypeScript 6.0 from the installed oxfmt bundle (so its entry records 6.0 plus digests)',
+  );
+  const mutate = (pkg, change) => ({
+    entries: allowlist.entries.map((e) => (e.package === pkg ? { ...e, ...change } : e)),
+  });
+  const realFails = (name, list, re) => {
+    const text = judge(hits, list).problems.join('\n');
+    report(re.test(text), name, `problems: ${text || '(none)'}`);
+  };
+  realFails(
+    'real oxfmt entry with 6.0.3 fails',
+    mutate('oxfmt', { bundledTypeScript: '6.0.3' }),
+    /oxfmt@.*allowlist says 6\.0\.3/,
+  );
+  realFails(
+    'real oxfmt entry with 6.0.4 fails',
+    mutate('oxfmt', { bundledTypeScript: '6.0.4' }),
+    /oxfmt@.*allowlist says 6\.0\.4/,
+  );
+  const tanstack = prettier?.consumers
+    ? [...prettier.consumers].map((c) => c.replace(/^(@tanstack\/router-generator)@.*/, '$1@1.167.0'))
+    : [];
+  realFails(
+    'real prettier entry with a changed TanStack consumer version fails',
+    mutate('prettier', { consumers: tanstack }),
+    /prettier@3\.10\.1: consumers are/,
+  );
+  realFails(
+    'real prettier entry with null usage and reason fails',
+    mutate('prettier', { usage: null, reason: null }),
+    /"usage" must[\s\S]*"reason" must/,
+  );
   if (failed > 0) process.exit(1);
 }
 
