@@ -1,3 +1,4 @@
+import { Controller, Get, Post } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -5,11 +6,26 @@ import { HealthController } from '../src/health/health.controller.js';
 import { HealthService } from '../src/health/health.service.js';
 import { createTestApp, http, testEnv } from './support.js';
 
+const problemType = /^application\/problem\+json/;
+
+@Controller('boom')
+class BoomController {
+  @Get()
+  fail(): never {
+    throw new Error('internal detail');
+  }
+
+  @Post()
+  accept(): { readonly ok: true } {
+    return { ok: true };
+  }
+}
+
 describe('GET /v1/health (e2e, SWC)', () => {
   let app: NestExpressApplication;
 
   beforeAll(async () => {
-    app = await createTestApp(testEnv());
+    app = await createTestApp(testEnv(), { controllers: [BoomController] });
   });
 
   afterAll(async () => {
@@ -29,9 +45,31 @@ describe('GET /v1/health (e2e, SWC)', () => {
     expect(res.headers['x-powered-by']).toBeUndefined();
   });
 
-  it('serves the health routes only under /v1', async () => {
-    for (const path of ['/health', '/v2/health']) {
-      expect((await http(app).get(path)).status).toBe(404);
+  it('answers unknown routes, inside and outside /v1, with a problem', async () => {
+    for (const path of ['/v1/nope', '/nope', '/health', '/v2/health']) {
+      const res = await http(app).get(path);
+      expect(res.status).toBe(404);
+      expect(res.headers['content-type']).toMatch(problemType);
+      expect(res.body).toEqual({ type: 'about:blank', title: 'Not Found', status: 404, code: 'not_found' });
     }
+  });
+
+  it('answers a malformed body with a problem', async () => {
+    const res = await http(app).post('/v1/boom').set('content-type', 'application/json').send('{"oops');
+    expect(res.status).toBe(400);
+    expect(res.headers['content-type']).toMatch(problemType);
+    expect(res.body).toEqual({ type: 'about:blank', title: 'Bad Request', status: 400, code: 'bad_request' });
+  });
+
+  it('hides unexpected errors behind internal_error', async () => {
+    const res = await http(app).get('/v1/boom');
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({
+      type: 'about:blank',
+      title: 'Internal Server Error',
+      status: 500,
+      code: 'internal_error',
+    });
+    expect(res.text).not.toContain('internal detail');
   });
 });

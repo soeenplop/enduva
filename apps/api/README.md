@@ -35,11 +35,15 @@ process with exit code 1 and a list of the offending variable names (never their
 - **Routes** live under `/v1` through Nest's URI versioning (`defaultVersion: '1'`), not a global prefix, so
   Nest's 404 handling also covers paths outside `/v1`.
 - **Health:** `GET /v1/health` is liveness and touches nothing else.
+- **Errors:** every error is RFC 9457 problem details (`application/problem+json`) with `type: about:blank`, the
+  status phrase as `title`, `status` and a stable `code` from [`src/problem/problem.ts`](src/problem/problem.ts).
+  Throw `ProblemException(code)` for expected errors. Messages of Nest and Express exceptions are not passed on.
+  Unexpected errors become `500` `internal_error`; their message is logged, never sent.
 
 ## Tests
 
-- Unit tests for the env schema.
-- `test/health.e2e.test.ts` boots the real `AppModule` under SWC and checks that DI works through decorator
-  metadata.
+- Unit tests for the env schema and the problem mapping.
+- `test/health.e2e.test.ts` boots the real `AppModule` under SWC: DI through decorator metadata, liveness and
+  problem bodies (404 inside and outside `/v1`, malformed body, unexpected error).
 - `test/dist.e2e.test.ts` runs the SWC build with plain `node`: it boots, serves `/v1/health`, and refuses to boot
   with an invalid environment. The worker entrypoint runs and exits.
