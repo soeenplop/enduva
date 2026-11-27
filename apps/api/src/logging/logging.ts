@@ -77,7 +77,11 @@ export function createHttpLogger(env: Env, destination?: DestinationStream): Htt
   return pinoHttp(options, destination);
 }
 
-/** nestjs-pino reuses the request logger above (`useExisting`), so Nest's own logs share its output. */
+/**
+ * nestjs-pino reuses the request logger above (`useExisting`), so Nest's own logs share its output. For logs outside
+ * a request it wraps that logger in another pino-http instance, whose child logger would otherwise get pino-http's
+ * default serializers (full `err` with message and stack), so the same serializers are passed again.
+ */
 export function loggerParams(http: HttpLogger): Params {
-  return { pinoHttp: { logger: http.logger }, useExisting: true };
+  return { pinoHttp: { logger: http.logger, serializers, wrapSerializers: false }, useExisting: true };
 }
