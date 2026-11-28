@@ -96,6 +96,28 @@ jobs:
       - name: E2E (turbo, after the builds)
         run: pnpm test:e2e
 
+  # Isolated bootstrap check (0.12b): a fresh local Supabase stack applies every migration from scratch (plus the
+  # synthetic seed), then the cross-tenant suite and the rest of the database integration tests run against it.
+  supabase-bootstrap:
+    name: supabase-bootstrap
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13 # v3.2.0
+        with:
+          version: 3.2.0
+      # The suite needs the database, its pooler, Auth (JWKS) and the Data API behind Kong; the rest stays off.
+      - name: Start a fresh local Supabase stack (all migrations, then the seed)
+        run: |
+          pnpm --filter @enduva/db db:keys
+          supabase start --exclude studio,imgproxy,edge-runtime,logflare,vector,realtime,postgres-meta,storage-api
+      - name: Cross-tenant suite and database integration tests
+        run: pnpm --filter @enduva/db test:integration
+
   # Required (lead decision on PR #126): the committed Swift client matches the committed apps/api/openapi.json,
   # compiles, and its middlewares and body decoding pass their tests. No pnpm needed: the build job's
   # drift check keeps the spec in sync with the contracts. It runs on every PR (no path filter), as a required
