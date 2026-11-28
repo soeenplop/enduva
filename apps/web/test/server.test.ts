@@ -46,7 +46,21 @@ const call = (headers: Record<string, string>) => fetch(`${backend}/_serverFn/an
 
 describe('server.mjs behind TLS termination', () => {
   it('accepts a server-function call from the public https origin', async () => {
-    expect((await call({ origin: PUBLIC_ORIGIN })).status).not.toBe(403);
+    // Same answer as a call TanStack treats as same-origin (Fetch Metadata): the CSRF check passed.
+    const sameOrigin = (await call({ 'sec-fetch-site': 'same-origin' })).status;
+    expect(sameOrigin).not.toBe(403);
+    expect((await call({ origin: PUBLIC_ORIGIN })).status).toBe(sameOrigin);
+  });
+
+  it('keeps the configured origin for a path that starts with two slashes', async () => {
+    const res = await fetch(`${backend}//evil.example/_serverFn/any`, {
+      method: 'POST',
+      headers: { origin: 'https://evil.example' },
+      redirect: 'manual',
+    });
+    // The router normalises the path with a redirect, which must stay on the configured origin; never a 2xx.
+    expect([403, 308]).toContain(res.status);
+    expect(new URL(res.headers.get('location') ?? '/', PUBLIC_ORIGIN).origin).toBe(PUBLIC_ORIGIN);
   });
 
   it('refuses the plain-HTTP backend origin', async () => {

@@ -34,7 +34,11 @@ const publicOrigin = process.env['ENDUVA_WEB_ORIGIN'] ? new URL(process.env['END
 const atPublicOrigin = (request) => {
   if (publicOrigin === undefined) return request;
   const { pathname, search } = new URL(request.url);
-  return new Request(new URL(`${pathname}${search}`, publicOrigin), {
+  // Assigned, not resolved against the origin: a path such as `//evil.example/…` must not pick its own host.
+  const url = new URL(publicOrigin);
+  url.pathname = pathname;
+  url.search = search;
+  return new Request(url, {
     method: request.method,
     headers: request.headers,
     body: request.body,
