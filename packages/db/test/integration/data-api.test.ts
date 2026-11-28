@@ -12,11 +12,18 @@ const { apiUrl: supabaseUrl, publishableKey } = inject('supabase');
 const issuer = `${supabaseUrl}/auth/v1`;
 const jwks = createRemoteJWKSet(new URL(`${issuer}/.well-known/jwks.json`));
 
+/** Cloudflare's documented Turnstile test token, accepted by the local stack's test secret (supabase/config.toml). */
+const TURNSTILE_TEST_TOKEN = 'XXXX.DUMMY.TOKEN.XXXX';
+
 async function signIn(userId: string): Promise<string> {
   const response = await fetch(`${issuer}/token?grant_type=password`, {
     method: 'POST',
     headers: { apikey: publishableKey, 'content-type': 'application/json' },
-    body: JSON.stringify({ email: EMAILS[userId], password: PASSWORDS[userId] }),
+    body: JSON.stringify({
+      email: EMAILS[userId],
+      password: PASSWORDS[userId],
+      gotrue_meta_security: { captcha_token: TURNSTILE_TEST_TOKEN },
+    }),
   });
   expect(response.status).toBe(200);
   const body = (await response.json()) as { access_token: string };
