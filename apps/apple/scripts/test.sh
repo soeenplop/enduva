@@ -2,7 +2,7 @@
 # Builds the apps and runs their unit tests and EnduvaKit's on the simulators: `scripts/test.sh [ios|watchos]`,
 # both by default. IOS_SIMULATOR and WATCHOS_SIMULATOR override the device names; the newest installed runtime is
 # used. Then checks each app's String Catalog against the keys the compiler extracted (scripts/check-strings.sh).
-set -eu
+set -euo pipefail
 cd "$(dirname "$0")/.."
 
 derived=.build/DerivedData
@@ -42,6 +42,10 @@ watchos() { run EnduvaWatch watchOS "${WATCHOS_SIMULATOR:-Apple Watch Series 12 
 case "${1:-all}" in
   ios) ios ;;
   watchos) watchos ;;
-  all) ios && watchos ;;
+  # Two plain commands: on the left of `&&`, a failure inside `ios` wouldn't stop it (set -e is off there).
+  all)
+    ios
+    watchos
+    ;;
   *) echo "usage: $0 [ios|watchos]" >&2; exit 64 ;;
 esac
