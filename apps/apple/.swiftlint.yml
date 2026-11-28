@@ -4,7 +4,6 @@ included:
   - Enduva
   - EnduvaWatch
   - EnduvaTests
-  - EnduvaWatchTests
   - EnduvaKit/Sources
   - EnduvaKit/Tests
   - EnduvaAPIClient/Sources

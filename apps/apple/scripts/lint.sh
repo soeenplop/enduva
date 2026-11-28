@@ -5,7 +5,7 @@
 set -eu
 cd "$(dirname "$0")/.."
 
-xcrun swift-format lint --strict --recursive Enduva EnduvaWatch EnduvaTests EnduvaWatchTests EnduvaKit/Package.swift \
+xcrun swift-format lint --strict --recursive Enduva EnduvaWatch EnduvaTests EnduvaKit/Package.swift \
   EnduvaKit/Sources EnduvaKit/Tests EnduvaAPIClient/Package.swift EnduvaAPIClient/Tests \
   EnduvaAPIClient/Sources/EnduvaAPIClient/*.swift
 "${SWIFTLINT:-swiftlint}" lint --strict --quiet

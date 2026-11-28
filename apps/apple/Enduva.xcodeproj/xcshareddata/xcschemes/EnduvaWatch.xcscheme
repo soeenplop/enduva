@@ -32,16 +32,6 @@
             skipped = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "E1A000000000000000000704"
-               BuildableName = "EnduvaWatchTests.xctest"
-               BlueprintName = "EnduvaWatchTests"
-               ReferencedContainer = "container:Enduva.xcodeproj">
-            </BuildableReference>
-         </TestableReference>
-         <TestableReference
-            skipped = "NO">
-            <BuildableReference
-               BuildableIdentifier = "primary"
                BlueprintIdentifier = "EnduvaKitTests"
                BuildableName = "EnduvaKitTests"
                BlueprintName = "EnduvaKitTests"

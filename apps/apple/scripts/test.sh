@@ -17,8 +17,8 @@ simulator() {
 }
 
 # Builds first, then boots the simulator and waits until it has fully booted, and only then runs the tests by UDID.
-# Launching the test host on a device that is still booting fails on watchOS ("Application has termination
-# assertions").
+# The Watch scheme runs only EnduvaKit's tests, which need no app: launching a test host app on CI's watchOS simulator
+# fails (README.md, "Watch tests").
 run() {
   scheme=$1
   udid=$(simulator "$2" "$3")
