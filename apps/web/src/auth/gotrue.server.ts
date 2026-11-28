@@ -44,5 +44,55 @@ function toSession(result: AuthResult<unknown>): AuthResult<AuthSession> {
   return { ok: false, status: 502, code: 'unexpected_response' };
 }
 
+const security = (captchaToken: string) => ({ gotrue_meta_security: { captcha_token: captchaToken } });
+
+/** Creates an unconfirmed user; Auth mails the confirmation link (supabase/templates/confirmation.html). */
+export const signUp = (email: string, password: string, captchaToken: string, locale: string) =>
+  post('signup', { email, password, data: { locale }, ...security(captchaToken) });
+
+export const signInWithPassword = async (email: string, password: string, captchaToken: string) =>
+  toSession(await post('token?grant_type=password', { email, password, ...security(captchaToken) }));
+
+/** Mails a sign-in link to an existing user (`create_user: false`: a magic link never signs anyone up). */
+export const sendMagicLink = (email: string, captchaToken: string) =>
+  post('otp', { email, create_user: false, ...security(captchaToken) });
+
+/** Redeems the token hash of a confirmation or magic-link mail (single use). */
+export const verifyEmailLink = async (tokenHash: string) =>
+  toSession(await post('verify', { type: 'email', token_hash: tokenHash }));
+
 export const refreshSession = async (refreshToken: string) =>
   toSession(await post('token?grant_type=refresh_token', { refresh_token: refreshToken }));
+
+/** Exchanges an OAuth authorization code for a session, with the PKCE verifier this browser holds. */
+export const exchangeCode = async (authCode: string, codeVerifier: string) =>
+  toSession(await post('token?grant_type=pkce', { auth_code: authCode, code_verifier: codeVerifier }));
+
+/** Ends this session at Auth (`scope=local`: the user's other devices stay signed in). */
+export const signOut = (accessToken: string) => post('logout?scope=local', {}, accessToken);
+
+/** The URL that starts an OAuth sign-in at Auth, which redirects back to `redirectTo` with `?code=`. */
+export function authorizeUrl(provider: 'google', redirectTo: string, codeChallenge: string): string {
+  const url = new URL('auth/v1/authorize', authBaseUrl());
+  url.search = new URLSearchParams({
+    provider,
+    redirect_to: redirectTo,
+    code_challenge: codeChallenge,
+    code_challenge_method: 's256',
+  }).toString();
+  return url.href;
+}
+
+/** Whether Google sign-in is enabled for the project (Auth's public settings). False if Auth can't be asked. */
+export async function googleEnabled(): Promise<boolean> {
+  try {
+    const res = await fetch(new URL('auth/v1/settings', authBaseUrl()), {
+      headers: { apikey: authPublishableKey() },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    const body = (await res.json()) as { external?: { google?: unknown } };
+    return res.ok && body.external?.google === true;
+  } catch {
+    return false;
+  }
+}
