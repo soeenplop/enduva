@@ -75,8 +75,16 @@ services:
   web:
     build: { <<: *build, target: web }
     image: enduva-web:local
+    <<: *host-gateway
     environment:
       ENDUVA_API_URL: http://api:3000
+      # Sign-in against the local stack (apps/web README, Environment). The publishable key comes from
+      # `supabase status`; without it signed-out pages still work.
+      ENDUVA_AUTH_URL: http://host.docker.internal:54321
+      ENDUVA_AUTH_PUBLISHABLE_KEY: ${ENDUVA_AUTH_PUBLISHABLE_KEY:-}
+      ENDUVA_WEB_ORIGIN: http://127.0.0.1:3001
+      # Cloudflare's documented always-passing test key, matching the local stack's test secret.
+      ENDUVA_TURNSTILE_SITE_KEY: 1x00000000000000000000AA
     ports:
       - 127.0.0.1:3001:3000
     depends_on:

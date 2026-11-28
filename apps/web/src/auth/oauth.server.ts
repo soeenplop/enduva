@@ -3,7 +3,7 @@ import { deleteCookie, getCookie, getRequest, setCookie } from '@tanstack/react-
 import { webOrigin } from '../config.server';
 import { authorizeUrl, exchangeCode } from './gotrue.server';
 import { safeRedirect } from './redirect';
-import { authCookie, writeSession } from './session.server';
+import { authCookie, startLogin } from './session.server';
 
 /**
  * OAuth sign-in with PKCE. The verifier and the page to return to stay in an HttpOnly cookie of this browser for ten
@@ -42,7 +42,7 @@ export async function finishOAuth(request: Request): Promise<Response> {
     try {
       const result = await exchangeCode(code, state.verifier);
       if (result.ok) {
-        writeSession(result.value);
+        await startLogin(result.value);
         target = state.redirect;
       }
     } catch (error) {

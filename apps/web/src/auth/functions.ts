@@ -5,7 +5,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import * as gotrue from './gotrue.server';
 import { serverErrors, sessionMiddleware } from './middleware';
 import { beginOAuth } from './oauth.server';
-import { clearSession, writeSession } from './session.server';
+import { dropSession, endSession, startLogin } from './session.server';
 
 /**
  * Sign-in, sign-up and sign-out as server functions: the browser posts the form here, the web server talks to Auth
@@ -54,7 +54,7 @@ const credentials = z.object({
 /** The signed-in user, for the page chrome (email only), or null. */
 export const getViewer = createServerFn({ method: 'GET' })
   .middleware([sessionMiddleware])
-  .handler(({ context }) => {
+  .handler(async ({ context }) => {
     if (context.session === null) return null;
     // Display only: the API verifies the token itself on every call. A cookie that isn't a JWT is dropped.
     try {
@@ -62,7 +62,7 @@ export const getViewer = createServerFn({ method: 'GET' })
       const claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as { email?: unknown } | null;
       return { email: typeof claims?.email === 'string' ? claims.email : '' };
     } catch {
-      clearSession();
+      await dropSession();
       return null;
     }
   });
@@ -92,7 +92,7 @@ export const signIn = createServerFn({ method: 'POST' })
     guarded('signIn', async () => {
       const result = await gotrue.signInWithPassword(data.email, data.password, data.captchaToken);
       if (result.ok) {
-        writeSession(result.value);
+        await startLogin(result.value);
         return ok;
       }
       // Unknown email, wrong password and unconfirmed email look the same.
@@ -118,7 +118,7 @@ export const confirmEmail = createServerFn({ method: 'POST' })
     guarded('confirmEmail', async () => {
       const result = await gotrue.verifyEmailLink(data.tokenHash);
       if (result.ok) {
-        writeSession(result.value);
+        await startLogin(result.value);
         return ok;
       }
       return fail(commonError(result) ?? 'link_invalid');
@@ -140,6 +140,6 @@ export const signOut = createServerFn({ method: 'POST' })
         .signOut(context.session.accessToken)
         .catch((error: unknown) => console.error('signOut failed', error));
     }
-    clearSession();
+    await endSession();
     return ok;
   });
