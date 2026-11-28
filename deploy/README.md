@@ -36,6 +36,8 @@ the context (CI, `image (api)`). No build step needs a credential.
 - **Behind TLS termination** the web server sees the plain-HTTP backend origin (srvx ignores `X-Forwarded-Proto`),
   so server-function calls that rely on TanStack's `Origin` fallback get 403. Trusting forwarded headers from the
   configured ingress only belongs to 0.12c (#136).
+- **No query strings in access logs for `/auth/confirm`:** its URL carries an unspent single-use sign-in token
+  until the page replaces it (apps/web README, Sign-in). The ingress set up in 0.12c must not log it.
 
 ## CI
 

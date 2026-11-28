@@ -3,7 +3,7 @@ import { getLocale, locales, setLocale } from '../paraglide/runtime.js';
 
 /**
  * Stores the chosen locale in the locale cookie and reloads the page, which the server then renders
- * in that language. The cookie stands in for the profile setting until 0.9b.
+ * in that language. Saving a language on the profile page does the same.
  */
 export function LanguageSwitch() {
   const current = getLocale();

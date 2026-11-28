@@ -76,7 +76,7 @@ server functions ([`src/auth/functions.ts`](src/auth/functions.ts)), so no token
   address the mail went to, and the session is kept only if the link belongs to it, so someone else's link can't
   switch this browser to their account.
 - **Sign-out** ends the session at Auth and clears the cookies. If Auth can't confirm it (outage, or a session that
-  could no longer be refreshed), the cookies still go, `signOut` answers `revoked: false` and the page says that
+  could no longer be refreshed), the cookies still go, `signOut` answers `revoked: false` and the home page (`/?signedOut=local`, which never redirects) says that
   tokens already issued stay valid until they expire (at most an hour).
 - **Google** (PKCE): `startGoogleSignIn` keeps the verifier and the page to return to in an `HttpOnly` cookie for ten
   minutes and sends the browser to Auth; [`/auth/callback`](src/routes/auth/callback.ts) redeems the code with it.
@@ -85,6 +85,16 @@ server functions ([`src/auth/functions.ts`](src/auth/functions.ts)), so no token
   your own OAuth client (`supabase/config.toml`).
 - **Return path:** `safeRedirect` ([`src/auth/redirect.ts`](src/auth/redirect.ts)) keeps only paths on this app and
   never the auth pages, checked after URL normalisation (dot segments can turn `/a/..//x` into `//x`).
+- **Pages:** `/sign-up`, `/sign-in` (password, magic link, Google), `/auth/confirm` and `/profile` (`GET`/`PATCH
+  /v1/me` with `If-Match`; a conflict reloads the form with the current profile). Signing in or out reloads the page,
+  so the query cache starts empty. A session the API refuses (`401`) is dropped, the cached viewer with it, and the
+  page goes to sign-in. `/profile` re-reads the profile on every visit and shows the email of the session it read it
+  with; a save names the account the form was rendered for, and if this browser has signed in as someone else since,
+  nothing is written and the page reloads. Every form posts natively (`method="post"`) and can't be submitted before hydration, so no
+  personal field or credential ever lands in a URL.
+- **`/auth/confirm`** answers with `Referrer-Policy: no-referrer` and replaces its URL without the token once it
+  runs. The first request still carries the unspent token in its query string: **the ingress must not log query
+  strings for `/auth/confirm`** (deployment requirement, 0.12c). The web server logs no request URLs.
 - **Errors:** server functions log anything unexpected and send a generic error (`serverErrors`), because Start
   would put the message into the page.
 - **Turnstile:** Auth verifies the token on sign-up, password sign-in and magic links. Locally and in CI Cloudflare's
@@ -103,9 +113,9 @@ show its own answer; with a module-level `QueryClient` it fails.
 ## Locale
 
 No locale in the URL (02-architecture.md, Internationalisation). [`src/server.ts`](src/server.ts) resolves it per
-request: the `enduva-locale` cookie (a stand-in for the profile setting until 0.9b), then `Accept-Language`, then
-`en`. In the browser, [`src/locale.ts`](src/locale.ts) takes the locale from the `<html lang>` the server rendered, so
-hydration never renegotiates it from `navigator.languages`. The language switch sets the cookie and reloads. Messages
+request: the `enduva-locale` cookie, then `Accept-Language`, then `en`. In the browser, [`src/locale.ts`](src/locale.ts) takes the locale from the `<html lang>` the server rendered, so
+hydration never renegotiates it from `navigator.languages`. The language switch sets the cookie and reloads, and so
+does saving another language on the profile page. Messages
 live in [`packages/i18n/messages`](../../packages/i18n/messages); every key must exist in `de` and `en` (unit test).
 
 ## Design

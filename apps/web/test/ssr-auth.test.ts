@@ -179,6 +179,7 @@ describe('session cookies', () => {
     const jar = signedIn(LOGIN_A, ['not-a-jwt', 'refresh-1', 4_102_444_800]);
     const res = await page(jar);
     expect(res.status).toBe(200);
+    expect(await res.text()).toContain('Sign in');
     jar.apply(res);
     expect(jar.cookies.has('__Host-enduva-session-a')).toBe(false);
   });
@@ -188,6 +189,7 @@ describe('session cookies', () => {
     const before = calls.length;
     const res = await page(jar);
     expect(calls.slice(before).map((c) => c.path)).toEqual(['/auth/v1/token?grant_type=refresh_token']);
+    expect(await res.text()).toContain('Sign out');
     const set = res.headers.getSetCookie();
     expect(set).toHaveLength(1);
     expect(set[0]).toMatch(
