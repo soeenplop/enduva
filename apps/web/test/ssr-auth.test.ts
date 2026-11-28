@@ -159,12 +159,31 @@ describe('session cookies', () => {
   ])('keeps a signed-out login dead when a late refresh wrote it back (%s)', async (_, tokens) => {
     // Sign-out of A marked it ended; a refresh of A that answered afterwards stored A's tokens again.
     const jar = signedIn(LOGIN_A, tokens);
-    jar.cookies.set('__Host-enduva-ended', `${LOGIN_A}.local`);
+    jar.cookies.set('__Host-enduva-ended-a', `${LOGIN_A}.local`);
     const before = calls.length;
     jar.apply(await page(jar));
     expect(calls.length).toBe(before);
     expect(jar.cookies.has('__Host-enduva-session-a')).toBe(false);
-    expect(jar.cookies.get('__Host-enduva-ended')).toBe(`${LOGIN_A}.local`);
+    expect(jar.cookies.get('__Host-enduva-ended-a')).toBe(`${LOGIN_A}.local`);
+  });
+
+  it("keeps a newer login's local sign-out when an older sign-out answers late", async () => {
+    // A (slot a) signs out; before that answer lands, B signs in (slot b) and signs out locally. A late refresh of B
+    // even put B's tokens back. Then A's sign-out answer arrives: it deletes slot a and marks A in slot a's marker.
+    const tokensB = `${LOGIN_B}.${encode([jwt('b@example.com'), 'refresh-b', 4_102_444_800])}`;
+    const jar = new Jar({
+      '__Host-enduva-login': `b.${LOGIN_B}`,
+      '__Host-enduva-session-b': tokensB,
+      '__Host-enduva-ended-b': `${LOGIN_B}.local`,
+      '__Host-enduva-ended-a': `${LOGIN_A}.revoked`,
+    });
+    const before = calls.length;
+    const res = await page(jar);
+    expect(await res.text()).not.toContain('b@example.com');
+    expect(calls.length).toBe(before);
+    jar.apply(res);
+    expect(jar.cookies.has('__Host-enduva-session-b')).toBe(false);
+    expect(jar.cookies.get('__Host-enduva-ended-b')).toBe(`${LOGIN_B}.local`);
   });
 
   it('signs out, never switches, when another login ended up in the active slot', async () => {
@@ -185,7 +204,7 @@ describe('session cookies', () => {
     let release = () => {};
     refreshGate = new Promise((resolve) => (release = resolve));
     const jar = signedIn(LOGIN_A, expiring('refresh-ok'));
-    jar.cookies.set('__Host-enduva-ended', `${LOGIN_B}.local`);
+    jar.cookies.set('__Host-enduva-ended-b', `${LOGIN_B}.local`);
     const header = jar.header();
     const answers = Array.from({ length: 20 }, () =>
       server.fetch(new Request('https://app.example/', { headers: { cookie: header } })),
@@ -195,7 +214,7 @@ describe('session cookies', () => {
     for (const res of await Promise.all(answers)) jar.apply(res);
     refreshGate = Promise.resolve();
     expect([...jar.cookies.keys()].sort()).toEqual([
-      '__Host-enduva-ended',
+      '__Host-enduva-ended-b',
       '__Host-enduva-login',
       '__Host-enduva-session-a',
     ]);
