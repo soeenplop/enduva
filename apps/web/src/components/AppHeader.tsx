@@ -16,7 +16,7 @@ export function AppHeader() {
 
   /**
    * Navigates only on an answer from the server, with a full page load so nothing of the user stays in the query
-   * cache: home if Auth confirmed it, the sign-in page's notice if only this device is signed out. A request that
+   * cache: home, with a notice if only this device is signed out. A request that
    * never got an answer changed nothing, so the user stays here, is told, and can try again.
    */
   async function signOutAndReload() {
@@ -24,7 +24,7 @@ export function AppHeader() {
     setSignOutFailed(false);
     try {
       const { revoked } = await signOut();
-      window.location.assign(revoked ? '/' : '/sign-in?signedOut=local');
+      window.location.assign(revoked ? '/' : '/?signedOut=local');
     } catch {
       setSigningOut(false);
       setSignOutFailed(true);

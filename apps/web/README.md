@@ -75,7 +75,7 @@ server functions ([`src/auth/functions.ts`](src/auth/functions.ts)), so no token
   address the mail went to, and the session is kept only if the link belongs to it, so someone else's link can't
   switch this browser to their account.
 - **Sign-out** ends the session at Auth and clears the cookies. If Auth can't confirm it (outage, or a session that
-  could no longer be refreshed), the cookies still go, `signOut` answers `revoked: false` and the page says that
+  could no longer be refreshed), the cookies still go, `signOut` answers `revoked: false` and the home page (`/?signedOut=local`, which never redirects) says that
   tokens already issued stay valid until they expire (at most an hour).
 - **Google** (PKCE): `startGoogleSignIn` keeps the verifier and the page to return to in an `HttpOnly` cookie for ten
   minutes and sends the browser to Auth; [`/auth/callback`](src/routes/auth/callback.ts) redeems the code with it.
