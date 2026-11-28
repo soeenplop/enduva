@@ -8,6 +8,18 @@ set -eu
 check() {
   catalog=$1
   shift
+  # xcstringstool sync only warns about a missing or broken .stringsdata and then compares nothing, so check them
+  # first. An unmatched glob in test.sh arrives here as a path that doesn't exist.
+  if [ $# -eq 0 ]; then
+    echo "error: $catalog: no .stringsdata files to compare with" >&2
+    return 1
+  fi
+  for data in "$@"; do
+    if ! [ -s "$data" ] || ! jq -e '.tables | type == "object"' "$data" >/dev/null 2>&1; then
+      echo "error: $catalog: $data is missing, empty or not extracted strings data" >&2
+      return 1
+    fi
+  done
   work=$(mktemp -d)
   cp "$catalog" "$work/"
   synced="$work/$(basename "$catalog")"
@@ -45,6 +57,16 @@ JSON
   for case in empty untranslated missing unused; do
     if check "$dir/$case/Localizable.xcstrings" "$dir/Uses-swift.stringsdata" 2>/dev/null; then
       echo "error: self-test: the check accepted a catalog with the $case case" >&2
+      exit 1
+    fi
+  done
+  good="$dir/good/Localizable.xcstrings"
+  : >"$dir/empty.stringsdata"
+  echo '{"source": "Uses.swift"' >"$dir/invalid.stringsdata"
+  for data in "" "$dir/absent.stringsdata" "$dir/empty.stringsdata" "$dir/invalid.stringsdata"; do
+    # shellcheck disable=SC2086 # an empty $data passes no extraction file at all
+    if check "$good" $data 2>/dev/null; then
+      echo "error: self-test: the check accepted the extraction input \"${data:-none}\"" >&2
       exit 1
     fi
   done
