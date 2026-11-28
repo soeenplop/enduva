@@ -108,6 +108,11 @@ function deleteSessionCookie(loginId: string): void {
   deleteCookie(name, options);
 }
 
+/** Whether this request came from a signed-in browser (a login cookie), whatever state its session is in. */
+export async function hasLogin(): Promise<boolean> {
+  return (await requestSession()).loginId !== undefined;
+}
+
 /** A new sign-in: a new login ID becomes the active one, and this request's previous login cookie goes. */
 export async function startLogin(session: AuthSession): Promise<void> {
   const previous = (await requestSession()).loginId;

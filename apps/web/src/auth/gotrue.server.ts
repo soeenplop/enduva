@@ -58,8 +58,15 @@ export const sendMagicLink = (email: string, captchaToken: string) =>
   post('otp', { email, create_user: false, ...security(captchaToken) });
 
 /** Redeems the token hash of a confirmation or magic-link mail (single use). */
-export const verifyEmailLink = async (tokenHash: string) =>
-  toSession(await post('verify', { type: 'email', token_hash: tokenHash }));
+/** Redeems the token hash and returns the session with the address the link belongs to. */
+export async function verifyEmailLink(tokenHash: string): Promise<AuthResult<{ session: AuthSession; email: string }>> {
+  const result = await post('verify', { type: 'email', token_hash: tokenHash });
+  const session = toSession(result);
+  if (!session.ok || !result.ok) return session.ok ? { ok: false, status: 502, code: 'unexpected_response' } : session;
+  const email = (result.value as { user?: { email?: unknown } }).user?.email;
+  if (typeof email !== 'string') return { ok: false, status: 502, code: 'unexpected_response' };
+  return { ok: true, value: { session: session.value, email } };
+}
 
 export const refreshSession = async (refreshToken: string) =>
   toSession(await post('token?grant_type=refresh_token', { refresh_token: refreshToken }));
