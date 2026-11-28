@@ -7,7 +7,7 @@ import * as gotrue from './gotrue.server';
 import { serverErrors, sessionMiddleware } from './middleware';
 import { beginOAuth } from './oauth.server';
 import { type AuthOutcome, emailFlowOutcome, fail, linkOutcome, ok, signInOutcome } from './outcomes';
-import { dropSession, endSession, hasLogin, startLogin } from './session.server';
+import { dropSession, endedLocally, endSession, hasLogin, startLogin } from './session.server';
 
 export type { AuthError, AuthOutcome } from './outcomes';
 
@@ -16,6 +16,23 @@ export type { AuthError, AuthOutcome } from './outcomes';
  * and keeps the session in its HttpOnly cookies. Start's default CSRF middleware refuses cross-site calls (README,
  * Sign-in). What the browser learns from Auth's answers is decided in ./outcomes: never whether an account exists.
  */
+
+/** Ends a session Auth created but that won't be kept (too large for its cookie, or the wrong account). */
+async function endAtAuth(session: gotrue.AuthSession, reason: string): Promise<void> {
+  await gotrue.signOut(session.accessToken).then(
+    (ended) => {
+      if (!ended.ok) console.error(`Ending the ${reason} session failed`, ended.status, ended.code);
+    },
+    (error: unknown) => console.error(`Ending the ${reason} session failed`, error),
+  );
+}
+
+/** Starts the login, or ends the new session at Auth if its cookie would be too large (false). */
+async function keepLogin(session: gotrue.AuthSession): Promise<boolean> {
+  if (await startLogin(session)) return true;
+  await endAtAuth(session, 'oversized');
+  return false;
+}
 
 /** Auth unreachable or misconfigured: logged here, generic for the browser. */
 async function guarded<T>(name: string, run: () => Promise<T>, unavailable: T): Promise<T> {
@@ -70,8 +87,7 @@ export const signIn = createServerFn({ method: 'POST' })
       async (): Promise<AuthOutcome> => {
         const result = await gotrue.signInWithPassword(data.email, data.password, data.captchaToken);
         if (!result.ok) return signInOutcome(result);
-        await startLogin(result.value);
-        return ok;
+        return (await keepLogin(result.value)) ? ok : fail('unavailable');
       },
       fail('unavailable'),
     ),
@@ -107,16 +123,10 @@ export const confirmEmail = createServerFn({ method: 'POST' })
         if (email.toLowerCase() !== data.email.toLowerCase()) {
           // The link is spent either way; the session it created is ended rather than left unused. The browser keeps
           // its current login whatever Auth answers.
-          await gotrue.signOut(session.accessToken).then(
-            (ended) => {
-              if (!ended.ok) console.error('Ending the mismatched session failed', ended.status, ended.code);
-            },
-            (error: unknown) => console.error('Ending the mismatched session failed', error),
-          );
+          await endAtAuth(session, 'mismatched');
           return { ok: false, error: 'email_mismatch' };
         }
-        await startLogin(session);
-        return ok;
+        return (await keepLogin(session)) ? ok : fail('unavailable');
       },
       fail('unavailable'),
     ),
@@ -136,7 +146,9 @@ export const startGoogleSignIn = createServerFn({ method: 'POST' })
 export const signOut = createServerFn({ method: 'POST' })
   .middleware([sessionMiddleware])
   .handler(async ({ context }): Promise<{ ok: true; revoked: boolean }> => {
-    let revoked = !(await hasLogin());
+    // Already signed out (a retry whose first answer got lost): report what that sign-out recorded.
+    if (!(await hasLogin())) return { ok: true, revoked: !(await endedLocally()) };
+    let revoked = false;
     if (context.session !== null) {
       try {
         const result = await gotrue.signOut(context.session.accessToken);
@@ -145,7 +157,7 @@ export const signOut = createServerFn({ method: 'POST' })
       } catch (error) {
         console.error('Auth logout failed', error);
       }
-    } else if (!revoked) console.error('Auth logout skipped: the session could not be refreshed');
+    } else console.error('Auth logout skipped: the session could not be refreshed');
     await endSession(revoked);
     return { ok: true, revoked };
   });
