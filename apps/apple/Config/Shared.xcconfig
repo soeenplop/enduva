@@ -1,0 +1,31 @@
+// Build settings shared by every target. All settings live in these files rather than in project.pbxproj, so a
+// change shows up as one readable line in review. The project assigns Debug.xcconfig or Release.xcconfig at project
+// level and one file per target on top.
+
+SWIFT_VERSION = 6.0
+IPHONEOS_DEPLOYMENT_TARGET = 27.0
+WATCHOS_DEPLOYMENT_TARGET = 27.0
+MARKETING_VERSION = 0.1.0
+CURRENT_PROJECT_VERSION = 1
+
+// The bundle IDs are permanent once registered with Apple.
+ENDUVA_BUNDLE_ID = dev.soeenplop.enduva
+
+// Signing is automatic with the owner's Apple Developer team (owner decision, 2026-11-28). The git-ignored
+// Local.xcconfig can override it. Simulator builds and CI don't sign.
+CODE_SIGN_STYLE = Automatic
+DEVELOPMENT_TEAM = 4K9Y59Z87Y
+
+SWIFT_TREAT_WARNINGS_AS_ERRORS = YES
+GCC_TREAT_WARNINGS_AS_ERRORS = YES
+SWIFT_EMIT_LOC_STRINGS = YES
+LOCALIZATION_PREFERS_STRING_CATALOGS = YES
+ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES
+ENABLE_USER_SCRIPT_SANDBOXING = YES
+ENABLE_MODULE_VERIFIER = YES
+DEAD_CODE_STRIPPING = YES
+ALWAYS_SEARCH_USER_PATHS = NO
+CLANG_ENABLE_MODULES = YES
+ENABLE_STRICT_OBJC_MSGSEND = YES
+
+#include? "Local.xcconfig"

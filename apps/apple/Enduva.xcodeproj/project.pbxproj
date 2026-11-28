@@ -1,0 +1,432 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		E1A000000000000000000001 /* EnduvaKit in Frameworks */ = {isa = PBXBuildFile; productRef = E1A000000000000000000301 /* EnduvaKit */; };
+		E1A000000000000000000002 /* EnduvaKit in Frameworks */ = {isa = PBXBuildFile; productRef = E1A000000000000000000302 /* EnduvaKit */; };
+		E1A000000000000000000003 /* EnduvaWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = E1A000000000000000000102 /* EnduvaWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		E1A000000000000000000501 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E1A000000000000000000900 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E1A000000000000000000702;
+			remoteInfo = EnduvaWatch;
+		};
+		E1A000000000000000000502 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E1A000000000000000000900 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E1A000000000000000000701;
+			remoteInfo = Enduva;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		E1A000000000000000000604 /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				E1A000000000000000000003 /* EnduvaWatch.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		E1A000000000000000000101 /* Enduva.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Enduva.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E1A000000000000000000102 /* EnduvaWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EnduvaWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E1A000000000000000000103 /* EnduvaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EnduvaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		E1A000000000000000000111 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
+		E1A000000000000000000112 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
+		E1A000000000000000000113 /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Shared.xcconfig; sourceTree = "<group>"; };
+		E1A000000000000000000114 /* App.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = App.xcconfig; sourceTree = "<group>"; };
+		E1A000000000000000000115 /* Enduva.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Enduva.xcconfig; sourceTree = "<group>"; };
+		E1A000000000000000000116 /* EnduvaWatch.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = EnduvaWatch.xcconfig; sourceTree = "<group>"; };
+		E1A000000000000000000117 /* Tests.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Tests.xcconfig; sourceTree = "<group>"; };
+		E1A000000000000000000118 /* EnduvaTests.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = EnduvaTests.xcconfig; sourceTree = "<group>"; };
+		E1A00000000000000000011A /* Enduva-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Enduva-Info.plist"; sourceTree = "<group>"; };
+		E1A00000000000000000011B /* EnduvaKit */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = EnduvaKit; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		E1A000000000000000000201 /* Enduva */ = {isa = PBXFileSystemSynchronizedRootGroup; path = Enduva; sourceTree = "<group>"; };
+		E1A000000000000000000202 /* EnduvaWatch */ = {isa = PBXFileSystemSynchronizedRootGroup; path = EnduvaWatch; sourceTree = "<group>"; };
+		E1A000000000000000000203 /* EnduvaTests */ = {isa = PBXFileSystemSynchronizedRootGroup; path = EnduvaTests; sourceTree = "<group>"; };
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		E1A000000000000000000602 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E1A000000000000000000001 /* EnduvaKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E1A000000000000000000612 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E1A000000000000000000002 /* EnduvaKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E1A000000000000000000622 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		E1A000000000000000000801 = {
+			isa = PBXGroup;
+			children = (
+				E1A000000000000000000201 /* Enduva */,
+				E1A000000000000000000202 /* EnduvaWatch */,
+				E1A00000000000000000011B /* EnduvaKit */,
+				E1A000000000000000000203 /* EnduvaTests */,
+				E1A000000000000000000803 /* Config */,
+				E1A000000000000000000802 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		E1A000000000000000000802 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				E1A000000000000000000101 /* Enduva.app */,
+				E1A000000000000000000102 /* EnduvaWatch.app */,
+				E1A000000000000000000103 /* EnduvaTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		E1A000000000000000000803 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				E1A000000000000000000113 /* Shared.xcconfig */,
+				E1A000000000000000000111 /* Debug.xcconfig */,
+				E1A000000000000000000112 /* Release.xcconfig */,
+				E1A000000000000000000114 /* App.xcconfig */,
+				E1A000000000000000000115 /* Enduva.xcconfig */,
+				E1A00000000000000000011A /* Enduva-Info.plist */,
+				E1A000000000000000000116 /* EnduvaWatch.xcconfig */,
+				E1A000000000000000000117 /* Tests.xcconfig */,
+				E1A000000000000000000118 /* EnduvaTests.xcconfig */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		E1A000000000000000000701 /* Enduva */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E1A000000000000000000A10 /* Build configuration list for PBXNativeTarget "Enduva" */;
+			buildPhases = (
+				E1A000000000000000000601 /* Sources */,
+				E1A000000000000000000602 /* Frameworks */,
+				E1A000000000000000000603 /* Resources */,
+				E1A000000000000000000604 /* Embed Watch Content */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				E1A000000000000000000401 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				E1A000000000000000000201 /* Enduva */,
+			);
+			name = Enduva;
+			packageProductDependencies = (
+				E1A000000000000000000301 /* EnduvaKit */,
+			);
+			productName = Enduva;
+			productReference = E1A000000000000000000101 /* Enduva.app */;
+			productType = "com.apple.product-type.application";
+		};
+		E1A000000000000000000702 /* EnduvaWatch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E1A000000000000000000A20 /* Build configuration list for PBXNativeTarget "EnduvaWatch" */;
+			buildPhases = (
+				E1A000000000000000000611 /* Sources */,
+				E1A000000000000000000612 /* Frameworks */,
+				E1A000000000000000000613 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				E1A000000000000000000202 /* EnduvaWatch */,
+			);
+			name = EnduvaWatch;
+			packageProductDependencies = (
+				E1A000000000000000000302 /* EnduvaKit */,
+			);
+			productName = EnduvaWatch;
+			productReference = E1A000000000000000000102 /* EnduvaWatch.app */;
+			productType = "com.apple.product-type.application";
+		};
+		E1A000000000000000000703 /* EnduvaTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E1A000000000000000000A30 /* Build configuration list for PBXNativeTarget "EnduvaTests" */;
+			buildPhases = (
+				E1A000000000000000000621 /* Sources */,
+				E1A000000000000000000622 /* Frameworks */,
+				E1A000000000000000000623 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				E1A000000000000000000402 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				E1A000000000000000000203 /* EnduvaTests */,
+			);
+			name = EnduvaTests;
+			productName = EnduvaTests;
+			productReference = E1A000000000000000000103 /* EnduvaTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		E1A000000000000000000900 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2720;
+				LastUpgradeCheck = 2720;
+				TargetAttributes = {
+					E1A000000000000000000701 = {
+						CreatedOnToolsVersion = 27.2;
+					};
+					E1A000000000000000000702 = {
+						CreatedOnToolsVersion = 27.2;
+					};
+					E1A000000000000000000703 = {
+						CreatedOnToolsVersion = 27.2;
+						TestTargetID = E1A000000000000000000701;
+					};
+				};
+			};
+			buildConfigurationList = E1A000000000000000000A00 /* Build configuration list for PBXProject "Enduva" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				de,
+				Base,
+			);
+			mainGroup = E1A000000000000000000801;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				E1A000000000000000000300 /* XCLocalSwiftPackageReference "EnduvaKit" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = E1A000000000000000000802 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				E1A000000000000000000701 /* Enduva */,
+				E1A000000000000000000702 /* EnduvaWatch */,
+				E1A000000000000000000703 /* EnduvaTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		E1A000000000000000000603 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E1A000000000000000000613 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E1A000000000000000000623 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		E1A000000000000000000601 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E1A000000000000000000611 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E1A000000000000000000621 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		E1A000000000000000000401 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E1A000000000000000000702 /* EnduvaWatch */;
+			targetProxy = E1A000000000000000000501 /* PBXContainerItemProxy */;
+		};
+		E1A000000000000000000402 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E1A000000000000000000701 /* Enduva */;
+			targetProxy = E1A000000000000000000502 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		E1A00000000000000000A001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = E1A000000000000000000111 /* Debug.xcconfig */;
+			buildSettings = {
+			};
+			name = Debug;
+		};
+		E1A00000000000000000A002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = E1A000000000000000000112 /* Release.xcconfig */;
+			buildSettings = {
+			};
+			name = Release;
+		};
+		E1A00000000000000000A101 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = E1A000000000000000000115 /* Enduva.xcconfig */;
+			buildSettings = {
+			};
+			name = Debug;
+		};
+		E1A00000000000000000A102 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = E1A000000000000000000115 /* Enduva.xcconfig */;
+			buildSettings = {
+			};
+			name = Release;
+		};
+		E1A00000000000000000A201 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = E1A000000000000000000116 /* EnduvaWatch.xcconfig */;
+			buildSettings = {
+			};
+			name = Debug;
+		};
+		E1A00000000000000000A202 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = E1A000000000000000000116 /* EnduvaWatch.xcconfig */;
+			buildSettings = {
+			};
+			name = Release;
+		};
+		E1A00000000000000000A301 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = E1A000000000000000000118 /* EnduvaTests.xcconfig */;
+			buildSettings = {
+			};
+			name = Debug;
+		};
+		E1A00000000000000000A302 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = E1A000000000000000000118 /* EnduvaTests.xcconfig */;
+			buildSettings = {
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		E1A000000000000000000A00 /* Build configuration list for PBXProject "Enduva" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E1A00000000000000000A001 /* Debug */,
+				E1A00000000000000000A002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E1A000000000000000000A10 /* Build configuration list for PBXNativeTarget "Enduva" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E1A00000000000000000A101 /* Debug */,
+				E1A00000000000000000A102 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E1A000000000000000000A20 /* Build configuration list for PBXNativeTarget "EnduvaWatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E1A00000000000000000A201 /* Debug */,
+				E1A00000000000000000A202 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E1A000000000000000000A30 /* Build configuration list for PBXNativeTarget "EnduvaTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E1A00000000000000000A301 /* Debug */,
+				E1A00000000000000000A302 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		E1A000000000000000000300 /* XCLocalSwiftPackageReference "EnduvaKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = EnduvaKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		E1A000000000000000000301 /* EnduvaKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E1A000000000000000000300 /* XCLocalSwiftPackageReference "EnduvaKit" */;
+			productName = EnduvaKit;
+		};
+		E1A000000000000000000302 /* EnduvaKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E1A000000000000000000300 /* XCLocalSwiftPackageReference "EnduvaKit" */;
+			productName = EnduvaKit;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = E1A000000000000000000900 /* Project object */;
+}

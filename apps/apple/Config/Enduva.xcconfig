@@ -1,0 +1,14 @@
+#include "App.xcconfig"
+
+PRODUCT_NAME = Enduva
+PRODUCT_BUNDLE_IDENTIFIER = $(ENDUVA_BUNDLE_ID)
+SDKROOT = iphoneos
+SUPPORTED_PLATFORMS = iphoneos iphonesimulator
+SUPPORTS_MACCATALYST = NO
+SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO
+SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO
+TARGETED_DEVICE_FAMILY = 1
+// The launch screen (UILaunchScreen) lives in this partial Info.plist; Xcode generates the rest.
+INFOPLIST_FILE = Config/Enduva-Info.plist
+INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES
+INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait
