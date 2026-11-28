@@ -5,8 +5,10 @@ follow in 0.12c ([`06-deployment.md`](../docs/plan/06-deployment.md)).
 
 ## Images
 
-One multi-stage [`Dockerfile`](Dockerfile), one target per image. The build context is the repository root
-([`.dockerignore`](../.dockerignore) keeps it to a clean checkout without installs, build output or `.env` files).
+One multi-stage [`Dockerfile`](Dockerfile), one target per image. The build context is the repository root, cut
+down by an allowlist in [`.dockerignore`](../.dockerignore): only the workspace manifests and the packages the
+images build from, without installs, build output, generated sources or any credential and env file (`.npmrc`,
+`.env*`, `.envrc`, …). No build step needs a credential.
 
 | Target | Image | Runtime | Runs | Health check |
 | --- | --- | --- | --- | --- |
@@ -20,8 +22,16 @@ One multi-stage [`Dockerfile`](Dockerfile), one target per image. The build cont
   packages copied in). The web build bundles its SSR dependencies, so its image holds `dist/`, `server.mjs` and srvx
   only; `@tanstack/react-start`'s build-time dependencies (Vite, Babel, Prettier) never reach it. The landing page is
   static and needs no Node at all.
-- **Pins:** base images by tag and digest (Renovate updates both), actions by commit SHA.
+- **Pins:** base images by tag and digest (Renovate updates both), actions by commit SHA. In CI also the builder:
+  Buildx by release, the BuildKit image and the SBOM scanner by digest.
+- **SBOM:** the image attestation comes from the pinned Syft scanner. The web bundle inlines its dependencies, so
+  no `package.json` of React, TanStack Start or Seroval is left for a scanner to find: the image carries
+  `sbom/web.cdx.json` (CycloneDX, `pnpm sbom --prod` from the lockfile: the web app's production dependency
+  closure, a superset of what is bundled), which the scanner merges into the attestation.
 - **No configuration baked in:** every value comes from the environment at start, so one image runs everywhere.
+- **Behind TLS termination** the web server sees the plain-HTTP backend origin (srvx ignores `X-Forwarded-Proto`),
+  so server-function calls that rely on TanStack's `Origin` fallback get 403. Trusting forwarded headers from the
+  configured ingress only belongs to 0.12c (#136).
 
 ## CI
 
