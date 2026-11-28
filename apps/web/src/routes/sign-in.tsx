@@ -12,15 +12,12 @@ export interface SignInSearch {
   /** A path on this app to return to (`safeRedirect`). */
   readonly redirect?: string;
   readonly error?: 'oauth';
-  /** Set after a sign-out Auth couldn't confirm (`signOut` answered `revoked: false`). */
-  readonly signedOut?: 'local';
 }
 
 export const Route = createFileRoute('/sign-in')({
   validateSearch: (search: Record<string, unknown>): SignInSearch => ({
     ...(search['redirect'] === undefined ? {} : { redirect: safeRedirect(search['redirect'], '/profile') }),
     ...(search['error'] === 'oauth' ? { error: 'oauth' } : {}),
-    ...(search['signedOut'] === 'local' ? { signedOut: 'local' } : {}),
   }),
   beforeLoad: ({ context, search }) => {
     if (context.viewer !== null) throw redirect({ href: search.redirect ?? '/profile' });
@@ -79,11 +76,6 @@ function SignInPage() {
       <h1 id="sign-in-title" className="text-heading font-extrabold">
         {m.sign_in_title()}
       </h1>
-      {search.signedOut === 'local' && (
-        <p role="status" className="text-warning">
-          {m.sign_out_not_confirmed()}
-        </p>
-      )}
       <form method="post" className="flex flex-col gap-4" onSubmit={(event) => void submit(event)}>
         <Field label={m.field_email()} name="email" type="email" autoComplete="email" required />
         <Field

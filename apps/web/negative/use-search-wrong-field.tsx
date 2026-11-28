@@ -4,6 +4,6 @@ import { getRouteApi } from '@tanstack/react-router';
 const route = getRouteApi('/');
 
 export function Page() {
-  // The home route declares no search params.
+  // The home route's only search param is `signedOut`.
   return <p>{route.useSearch().tab}</p>;
 }
