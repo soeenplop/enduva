@@ -17,7 +17,7 @@ mirrors [`supabase/config.toml`](../../supabase/config.toml), but with the produ
 | Email | email + password on, confirmation required, secure email change, password ≥ 8. Phone, anonymous sign-in and manual linking off |
 | Email templates | confirmation and magic link from [`supabase/templates`](../../supabase/templates) (de/en), with their subjects |
 | Captcha | Turnstile, with the production secret |
-| SMTP | Resend: `smtp.resend.com`, port 465, user `resend`, the restricted API key, sender `SMTP_ADMIN_EMAIL` as `Enduva` |
+| SMTP | Resend: `smtp.resend.com`, port 465, user `resend`, the restricted API key, sender `noreply@soeenplop.dev` (override with `SMTP_ADMIN_EMAIL`) as `Enduva` |
 | Google | on only if `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set, off otherwise |
 | Sessions | access tokens 1 h, refresh token rotation, reuse interval 10 s |
 
@@ -36,19 +36,21 @@ any other key in use (legacy HS256, RS256) means step 4 rotates it in the dashbo
 - PR #138 (email templates) is merged, and you run the steps from an up-to-date `main` checkout.
 - Node 24 and the 1Password CLI (`op`).
 - **Resend is set up** (owner, once):
-  1. In Resend, add the sending domain (for example `mail.enduva.soeenplop.dev`) in region **eu-west-1** (Ireland).
+  1. In Resend, add the sending domain `soeenplop.dev` in region **eu-west-1** (Ireland).
   2. Add the SPF and DKIM DNS records that Resend shows, and wait until the domain is verified.
-  3. Create an API key with **sending access only**, restricted to that domain, and store it in 1Password.
+  3. Create an API key with **sending access only**, restricted to that domain, and store it as `RESEND_API_KEY` in the
+     1Password Environment "Enduva".
   4. Separately, list Resend as a processor in the privacy text (owner task, before real users).
-- An env file **outside the repo**, never the repo's `.env`. It holds only 1Password references, for example
-  `~/enduva-bootstrap.env`:
+- An env file **outside the repo** that holds only 1Password references, for example `~/enduva-bootstrap.env`.
+  `RESEND_API_KEY` comes from the 1Password Environment "Enduva": either reference it here, or run the commands with
+  that Environment's mounted `.env` loaded in addition.
 
   ```sh
   SUPABASE_PROJECT_REF=op://<vault>/<item>/project-ref
   SUPABASE_ACCESS_TOKEN=op://<vault>/<item>/management-token   # personal access token, revoke it afterwards
   TURNSTILE_SECRET=op://<vault>/<item>/turnstile-secret
-  SMTP_PASS=op://<vault>/<item>/resend-api-key              # sending-only key, restricted to the domain
-  SMTP_ADMIN_EMAIL=no-reply@<verified-domain>                # plain value: the verified Resend domain
+  RESEND_API_KEY=op://<vault>/<item>/RESEND_API_KEY        # Environment "Enduva"; sending-only, restricted
+  # SMTP_ADMIN_EMAIL=noreply@soeenplop.dev                   # optional, this is the default
   SUPABASE_PUBLISHABLE_KEY=op://<vault>/<item>/publishable-key
   SUPABASE_SECRET_KEY=op://<vault>/<item>/secret-key
   # Optional, only once the Google OAuth client exists:

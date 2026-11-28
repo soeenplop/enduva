@@ -8,7 +8,8 @@
 //
 // Env:  SUPABASE_ACCESS_TOKEN, SUPABASE_PROJECT_REF       always
 //       TURNSTILE_SECRET                                   dry run and --apply (production Turnstile secret)
-//       SMTP_PASS, SMTP_ADMIN_EMAIL                         dry run and --apply (Resend API key, sender address)
+//       RESEND_API_KEY                                     dry run and --apply (1Password Environment "Enduva")
+//       SMTP_ADMIN_EMAIL                                   optional sender address, default noreply@soeenplop.dev
 //       GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET             optional; without them Google stays disabled
 //       SUPABASE_PUBLISHABLE_KEY                           --verify
 // Usage: node tools/supabase-auth-bootstrap.mjs [--apply | --verify]
@@ -47,8 +48,8 @@ export function desiredConfig(env, readTemplate = template) {
     smtp_host: 'smtp.resend.com',
     smtp_port: '465',
     smtp_user: 'resend',
-    smtp_pass: env.SMTP_PASS,
-    smtp_admin_email: env.SMTP_ADMIN_EMAIL,
+    smtp_pass: env.RESEND_API_KEY,
+    smtp_admin_email: env.SMTP_ADMIN_EMAIL || 'noreply@soeenplop.dev',
     smtp_sender_name: 'Enduva',
     mailer_subjects_confirmation: 'Enduva: confirm your email address · Bestätige deine E-Mail-Adresse',
     mailer_templates_confirmation_content: readTemplate('confirmation'),
@@ -92,15 +93,7 @@ async function call(method, path, body) {
 }
 
 async function bootstrap(apply) {
-  need(
-    process.env,
-    'SUPABASE_ACCESS_TOKEN',
-    'SUPABASE_PROJECT_REF',
-    'TURNSTILE_SECRET',
-    'SMTP_PASS',
-    'SMTP_ADMIN_EMAIL',
-  );
-  if (process.env.SMTP_ADMIN_EMAIL.includes('<')) throw new Error('SMTP_ADMIN_EMAIL is still the placeholder');
+  need(process.env, 'SUPABASE_ACCESS_TOKEN', 'SUPABASE_PROJECT_REF', 'TURNSTILE_SECRET', 'RESEND_API_KEY');
   const desired = desiredConfig(process.env);
   const changes = diff(await call('GET', '/config/auth'), desired);
   const keys = Object.keys(changes);
@@ -160,7 +153,7 @@ function selfTest() {
   const checks = [
     ['sign-up is locked', desired.disable_signup === true],
     ['templates are set', desired.mailer_templates_confirmation_content === '<p>confirmation</p>'],
-    ['SMTP password is redacted', isSecret('smtp_pass') && desired.smtp_port === '465'],
+    ['SMTP password is redacted', isSecret('smtp_pass') && desired.smtp_admin_email === 'noreply@soeenplop.dev'],
     [
       'Google stays off without a client',
       desired.external_google_enabled === false && !('external_google_secret' in desired),
