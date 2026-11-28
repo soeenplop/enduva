@@ -7,8 +7,10 @@ follow in 0.12c ([`06-deployment.md`](../docs/plan/06-deployment.md)).
 
 One multi-stage [`Dockerfile`](Dockerfile), one target per image. The build context is the repository root, cut
 down by an allowlist in [`.dockerignore`](../.dockerignore): only the workspace manifests and the packages the
-images build from, without installs, build output, generated sources or any credential and env file (`.npmrc`,
-`.env*`, `.envrc`, …). No build step needs a credential.
+images build from, without installs, build output or generated sources. At any depth, no dotfile or dot-directory
+(`.npmrc`, `.env*`, `.envrc*`, `.ssh/`, `.aws/`, `.config/`, …) and no key or credential-named file gets in.
+[`tools/check-docker-context.sh`](../tools/check-docker-context.sh) plants such files and checks that none reaches
+the context (CI, `image (api)`). No build step needs a credential.
 
 | Target | Image | Runtime | Runs | Health check |
 | --- | --- | --- | --- | --- |
@@ -26,8 +28,10 @@ images build from, without installs, build output, generated sources or any cred
   Buildx by release, the BuildKit image and the SBOM scanner by digest.
 - **SBOM:** the image attestation comes from the pinned Syft scanner. The web bundle inlines its dependencies, so
   no `package.json` of React, TanStack Start or Seroval is left for a scanner to find: the image carries
-  `sbom/web.cdx.json` (CycloneDX, `pnpm sbom --prod` from the lockfile: the web app's production dependency
-  closure, a superset of what is bundled), which the scanner merges into the attestation.
+  `sbom/web.cdx.json` (CycloneDX: `pnpm sbom --prod`, the web app's production dependency closure from the
+  lockfile, plus the build-time packages whose generated or injected code ships, such as the Paraglide runtime
+  and Tailwind's CSS; [`apps/web/scripts/sbom.mjs`](../apps/web/scripts/sbom.mjs)), which the scanner merges into
+  the attestation.
 - **No configuration baked in:** every value comes from the environment at start, so one image runs everywhere.
 - **Behind TLS termination** the web server sees the plain-HTTP backend origin (srvx ignores `X-Forwarded-Proto`),
   so server-function calls that rely on TanStack's `Origin` fallback get 403. Trusting forwarded headers from the
