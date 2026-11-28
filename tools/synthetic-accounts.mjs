@@ -1,6 +1,6 @@
 // Pre-provisioned synthetic accounts on the hosted project (roadmap 0.12b, docs/runbooks/supabase-bootstrap.md).
 // Sign-up is off (G1.0), so test accounts are created through the Auth admin API. Run by the owner only.
-// Every account is `synthetic-<label>@example.com`, confirmed, and marked `app_metadata.synthetic = true`. Cleanup
+// Every account is `synthetic-<label>@enduva.de`, confirmed, and marked `app_metadata.synthetic = true`. Cleanup
 // deletes only the labels it is given, and only accounts that carry the marker. Synthetic data only.
 // Without --apply, create and delete only print what they would do.
 //
@@ -13,8 +13,8 @@
 import { createInterface } from 'node:readline/promises';
 import { Writable } from 'node:stream';
 
-const email = (label) => `synthetic-${label}@example.com`;
-const PATTERN = /^synthetic-[a-z0-9-]+@example\.com$/;
+const email = (label) => `synthetic-${label}@enduva.de`;
+const PATTERN = /^synthetic-[a-z0-9-]+@enduva\.de$/;
 
 /** True only for accounts this script created. */
 export const isSynthetic = (user) => user.app_metadata?.synthetic === true && PATTERN.test(user.email ?? '');
