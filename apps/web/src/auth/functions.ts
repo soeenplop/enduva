@@ -105,10 +105,14 @@ export const confirmEmail = createServerFn({ method: 'POST' })
         if (!result.ok) return linkOutcome(result);
         const { session, email } = result.value;
         if (email.toLowerCase() !== data.email.toLowerCase()) {
-          // The link is spent either way; the session it created is ended rather than left unused.
-          await gotrue
-            .signOut(session.accessToken)
-            .catch((error: unknown) => console.error('Ending the mismatched session failed', error));
+          // The link is spent either way; the session it created is ended rather than left unused. The browser keeps
+          // its current login whatever Auth answers.
+          await gotrue.signOut(session.accessToken).then(
+            (ended) => {
+              if (!ended.ok) console.error('Ending the mismatched session failed', ended.status, ended.code);
+            },
+            (error: unknown) => console.error('Ending the mismatched session failed', error),
+          );
           return { ok: false, error: 'email_mismatch' };
         }
         await startLogin(session);
