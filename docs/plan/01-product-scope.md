@@ -10,11 +10,11 @@
 
 | Surface | URL / target | Purpose |
 | --- | --- | --- |
-| Landing page | `enduva.soeenplop.dev` | Explain Enduva, show features and screenshots, link to sign up / TestFlight, legal pages |
-| Web app | `app.enduva.soeenplop.dev` | Full app: analysis, planning, diary, settings. Best for large-screen analysis and routine editing |
+| Landing page | `enduva.de` (`www.enduva.de` redirects) | Explain Enduva, show features and screenshots, link to sign up / TestFlight, legal pages |
+| Web app | `app.enduva.de` | Full app: analysis, planning, diary, settings. Best for large-screen analysis and routine editing |
 | iPhone app | TestFlight → App Store | Daily driver: diary, barcode/photo logging, workout logging, HealthKit sync, Live Activities, widgets |
 | Watch app | bundled with iPhone app | Standalone strength (and similar) session logging, quick water/food logging later |
-| API | `api.enduva.soeenplop.dev` | Single backend for all clients |
+| API | `api.enduva.de` | Single backend for all clients |
 
 ## Feature scope by pillar
 

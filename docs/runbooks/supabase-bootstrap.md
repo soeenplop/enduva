@@ -12,12 +12,12 @@ mirrors [`supabase/config.toml`](../../supabase/config.toml), but with the produ
 | Setting | Value |
 | --- | --- |
 | Sign-up | **off** (`disable_signup`, G1.0 sign-up lock). Existing users can still sign in |
-| Site URL | `https://app.enduva.soeenplop.dev` |
-| Redirect allow-list | `https://app.enduva.soeenplop.dev/auth/callback`, `…/auth/confirm` |
+| Site URL | `https://app.enduva.de` |
+| Redirect allow-list | `https://app.enduva.de/auth/callback`, `…/auth/confirm` |
 | Email | email + password on, confirmation required, secure email change, password ≥ 8. Phone, anonymous sign-in and manual linking off |
 | Email templates | confirmation and magic link from [`supabase/templates`](../../supabase/templates) (de/en), with their subjects |
 | Captcha | Turnstile, with the production secret |
-| SMTP | Resend: `smtp.resend.com`, port 465, user `resend`, the restricted API key, sender `noreply@soeenplop.dev` (override with `SMTP_ADMIN_EMAIL`) as `Enduva` |
+| SMTP | Resend: `smtp.resend.com`, port 465, user `resend`, the restricted API key, sender `noreply@enduva.de` (override with `SMTP_ADMIN_EMAIL`) as `Enduva` |
 | Google | on only if `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set, off otherwise |
 | Sessions | access tokens 1 h, refresh token rotation, reuse interval 10 s |
 
@@ -36,7 +36,7 @@ any other key in use (legacy HS256, RS256) means step 4 rotates it in the dashbo
 - PR #138 (email templates) is merged, and you run the steps from an up-to-date `main` checkout.
 - Node 24.
 - **Resend is set up** (owner, once):
-  1. In Resend, add the sending domain `soeenplop.dev` in region **eu-west-1** (Ireland).
+  1. In Resend, add the sending domain `enduva.de` in region **eu-west-1** (Ireland).
   2. Add the SPF and DKIM DNS records that Resend shows, and wait until the domain is verified.
   3. Create an API key with **sending access only**, restricted to that domain. It becomes
      `RESEND_API_KEY` below.
@@ -48,7 +48,7 @@ any other key in use (legacy HS256, RS256) means step 4 rotates it in the dashbo
   SUPABASE_ACCESS_TOKEN=<personal access token>   # create one for this run, revoke it afterwards
   TURNSTILE_SECRET=<production Turnstile secret>
   RESEND_API_KEY=<sending-only Resend API key>
-  # SMTP_ADMIN_EMAIL=noreply@soeenplop.dev         # optional, this is the default
+  # SMTP_ADMIN_EMAIL=noreply@enduva.de         # optional, this is the default
   SUPABASE_PUBLISHABLE_KEY=<publishable key>
   SUPABASE_SECRET_KEY=<secret key>
   # Optional, only once the Google OAuth client exists:

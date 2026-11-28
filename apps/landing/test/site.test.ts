@@ -10,9 +10,9 @@ describe('site', () => {
   });
 
   it('builds canonical and x-default URLs on the production origin', () => {
-    expect(pageUrl('/imprint/', 'de')).toBe('https://enduva.soeenplop.dev/de/imprint/');
-    expect(pageUrl('/', 'en')).toBe('https://enduva.soeenplop.dev/en/');
-    expect(xDefaultUrl('/')).toBe('https://enduva.soeenplop.dev/');
-    expect(xDefaultUrl('/terms/')).toBe('https://enduva.soeenplop.dev/en/terms/');
+    expect(pageUrl('/imprint/', 'de')).toBe('https://enduva.de/de/imprint/');
+    expect(pageUrl('/', 'en')).toBe('https://enduva.de/en/');
+    expect(xDefaultUrl('/')).toBe('https://enduva.de/');
+    expect(xDefaultUrl('/terms/')).toBe('https://enduva.de/en/terms/');
   });
 });

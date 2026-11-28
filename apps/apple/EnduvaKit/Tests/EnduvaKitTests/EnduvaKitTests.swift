@@ -4,7 +4,7 @@ import Testing
 @testable import EnduvaKit
 
 @Test func productionTalksToTheProductionAPIOverHTTPS() {
-    #expect(APIEnvironment.production.baseURL.absoluteString == "https://api.enduva.soeenplop.dev")
+    #expect(APIEnvironment.production.baseURL.absoluteString == "https://api.enduva.de")
 }
 
 @Test(arguments: Palette.names)

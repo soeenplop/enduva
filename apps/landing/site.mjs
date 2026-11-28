@@ -3,7 +3,7 @@
 import settings from './project.inlang/settings.json' with { type: 'json' };
 
 /** Production origin (T4). Canonical, hreflang, Open Graph and sitemap URLs are absolute on it. */
-export const siteOrigin = 'https://enduva.soeenplop.dev';
+export const siteOrigin = 'https://enduva.de';
 
 /** The public repository, linked from the licence note. */
 export const repositoryUrl = 'https://github.com/soeenplop/enduva';
