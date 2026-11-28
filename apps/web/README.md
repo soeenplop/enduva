@@ -48,27 +48,38 @@ Email + password, magic link and Google, all through Supabase Auth (02-architect
 the web server over Auth's REST API ([`src/auth/gotrue.server.ts`](src/auth/gotrue.server.ts)). The pages post to
 server functions ([`src/auth/functions.ts`](src/auth/functions.ts)), so no token ever reaches the browser.
 
-- **Session cookie** ([`src/auth/session.server.ts`](src/auth/session.server.ts)): one cookie with the access token,
-  the refresh token and the expiry. `HttpOnly`, `SameSite=Lax`, `Path=/`, 30 days; over https also `Secure` with the
-  `__Host-` prefix. A request whose access token expires within 60 s refreshes it first, once per request however
-  many server functions run; a refresh token that Auth refuses ends the session, an outage or rate limit doesn't.
-  Server functions get the session from `sessionMiddleware` as `context.session`. The web server only forwards the
-  access token: the API verifies it on every call. Every response from the server is `Cache-Control: private,
-  no-store` unless it sets its own, so no shared cache keeps a page or a cookie.
+- **Session cookies** ([`src/auth/session.server.ts`](src/auth/session.server.ts)): each sign-in gets a random
+  login ID; `enduva-login` names the active one and `enduva-session-<id>` holds its access token, refresh token and
+  expiry. All are `HttpOnly`, `SameSite=Lax`, `Path=/`, 30 days; over https also `Secure` with the `__Host-` prefix.
+  A request whose access token expires within 60 s refreshes it first, once per request however many server
+  functions run; a refresh token that Auth refuses ends that login, an outage or rate limit doesn't. A refresh or a
+  dropped session only writes the cookie of the login it started from, so a late response from one tab can't replace
+  or clear a newer sign-in from another. Server functions get the session from `sessionMiddleware` as
+  `context.session`. The web server only forwards the access token: the API verifies it on every call. Every response
+  from the server is `Cache-Control: private, no-store` unless it sets its own, so no shared cache keeps a page or a
+  cookie.
 - **CSRF:** Start's default CSRF middleware guards every server function: `Sec-Fetch-Site` must be `same-origin`, or
   without it the `Origin` (then `Referer`) must be the request's origin; a call without any of them is refused.
   Mutations are `POST`. `SameSite=Lax` keeps the cookie off cross-site subrequests too.
-- **No account enumeration:** a wrong password, an unknown email and an unconfirmed email are the same error;
-  sign-up and the magic link answer the same whether the account exists (Auth's `user_already_exists` and
-  `otp_disabled` are mapped to success). Only captcha, rate-limit and availability errors are shown as such.
+- **No account enumeration** ([`src/auth/outcomes.ts`](src/auth/outcomes.ts)): a wrong password, an unknown email
+  and an unconfirmed email are the same error; sign-up and the magic link answer the same whether the account
+  exists. Auth's recipient-dependent answers (`user_already_exists`, `otp_disabled`, and its per-recipient mail
+  cooldown `over_email_send_rate_limit`) all map to success. Only captcha, request-rate and availability errors
+  are shown as such.
 - **Email links** (`supabase/templates`) point at `/auth/confirm?token_hash=…`. That page posts the hash back, so a
-  mail scanner that follows links can't spend the single-use link, and it works in any browser.
+  mail scanner that follows links can't spend the single-use link, and it works in any browser. The user types the
+  address the mail went to, and the session is kept only if the link belongs to it, so someone else's link can't
+  switch this browser to their account.
+- **Sign-out** ends the session at Auth and clears the cookies. If Auth can't confirm it (outage, or a session that
+  could no longer be refreshed), the cookies still go, `signOut` answers `revoked: false` and the page says that
+  tokens already issued stay valid until they expire (at most an hour).
 - **Google** (PKCE): `startGoogleSignIn` keeps the verifier and the page to return to in an `HttpOnly` cookie for ten
   minutes and sends the browser to Auth; [`/auth/callback`](src/routes/auth/callback.ts) redeems the code with it.
+  Only a verified exchange spends that state, so a callback anyone can trigger leaves a pending sign-in alone.
   The sign-in page shows Google only when Auth reports the provider as enabled. Locally it is off: enabling it needs
   your own OAuth client (`supabase/config.toml`).
 - **Return path:** `safeRedirect` ([`src/auth/redirect.ts`](src/auth/redirect.ts)) keeps only paths on this app and
-  never the auth pages.
+  never the auth pages, checked after URL normalisation (dot segments can turn `/a/..//x` into `//x`).
 - **Pages:** `/sign-up`, `/sign-in` (password, magic link, Google), `/auth/confirm` and `/profile` (`GET`/`PATCH
   /v1/me` with `If-Match`; a conflict reloads the form with the current profile). Signing in or out reloads the page,
   so the query cache starts empty. A session the API refuses (`401`) is dropped and the page goes to sign-in.

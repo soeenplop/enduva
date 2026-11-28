@@ -3,7 +3,7 @@ import { deleteCookie, getCookie, getRequest, setCookie } from '@tanstack/react-
 import { webOrigin } from '../config.server';
 import { authorizeUrl, exchangeCode } from './gotrue.server';
 import { safeRedirect } from './redirect';
-import { authCookie, writeSession } from './session.server';
+import { authCookie, startLogin } from './session.server';
 
 /**
  * OAuth sign-in with PKCE. The verifier and the page to return to stay in an HttpOnly cookie of this browser for ten
@@ -35,14 +35,15 @@ export async function finishOAuth(request: Request): Promise<Response> {
   const origin = webOrigin(request.url);
   const { name, options } = authCookie('enduva-oauth');
   const state = readState(getCookie(name));
-  deleteCookie(name, options);
   const code = new URL(request.url).searchParams.get('code');
   let target = '/sign-in?error=oauth';
   if (state !== undefined && code !== null && code.length <= 512) {
     try {
       const result = await exchangeCode(code, state.verifier);
       if (result.ok) {
-        writeSession(result.value);
+        // Spent only by a verified exchange: a callback anyone can trigger (a cross-site link) leaves it alone.
+        deleteCookie(name, options);
+        await startLogin(result.value);
         target = state.redirect;
       }
     } catch (error) {

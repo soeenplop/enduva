@@ -41,7 +41,7 @@
   "sign_up_to_sign_in": "Anmelden",
   "sign_up_check_inbox": "Schau in dein Postfach: Wir haben dir einen Link geschickt, mit dem du deine Adresse bestätigst. Wenn du schon ein Konto hast, melde dich stattdessen an.",
   "confirm_title": "E-Mail-Adresse bestätigen",
-  "confirm_body": "Mit „Weiter“ bestätigst du deine Adresse und meldest dich an.",
+  "confirm_body": "Gib die E-Mail-Adresse ein, an die dieser Link geschickt wurde, und mach dann weiter.",
   "confirm_submit": "Weiter",
   "captcha_label": "Sicherheitsprüfung",
   "captcha_unavailable": "Die Sicherheitsprüfung konnte nicht geladen werden. Prüfe deine Verbindung oder erlaube challenges.cloudflare.com für diese Seite.",
@@ -67,5 +67,7 @@
   "profile_saved": "Gespeichert.",
   "profile_error_conflict": "Dein Profil wurde woanders geändert. Das Formular zeigt jetzt den aktuellen Stand: Prüf ihn und speichere noch einmal.",
   "profile_error_invalid": "Einige Angaben sind ungültig. Prüf sie und versuch es noch einmal.",
-  "profile_error_unavailable": "Dein Profil konnte nicht gespeichert werden. Versuch es später noch einmal."
+  "profile_error_unavailable": "Dein Profil konnte nicht gespeichert werden. Versuch es später noch einmal.",
+  "sign_out_not_confirmed": "Du bist auf diesem Gerät abgemeldet. Wir konnten die Sitzung auf unserem Server nicht beenden, dort bleibt sie noch bis zu einer Stunde gültig.",
+  "auth_error_email_mismatch": "Dieser Link wurde an eine andere Adresse geschickt. Fordere auf der Anmeldeseite mit deiner eigenen Adresse einen neuen Link an."
 }

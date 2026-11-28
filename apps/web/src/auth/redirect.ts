@@ -14,7 +14,8 @@ export function safeRedirect(value: unknown, fallback = '/'): string {
   } catch {
     return fallback;
   }
-  if (url.origin !== BASE) return fallback;
+  // Checked again after normalisation: dot segments (`/a/..//x`, `/%2e%2e//x`) can leave a protocol-relative path.
+  if (url.origin !== BASE || url.pathname.startsWith('//')) return fallback;
   if (['/sign-in', '/sign-up'].includes(url.pathname) || url.pathname.startsWith('/auth/')) return fallback;
   return `${url.pathname}${url.search}${url.hash}`;
 }
