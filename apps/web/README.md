@@ -82,7 +82,12 @@ server functions ([`src/auth/functions.ts`](src/auth/functions.ts)), so no token
   never the auth pages, checked after URL normalisation (dot segments can turn `/a/..//x` into `//x`).
 - **Pages:** `/sign-up`, `/sign-in` (password, magic link, Google), `/auth/confirm` and `/profile` (`GET`/`PATCH
   /v1/me` with `If-Match`; a conflict reloads the form with the current profile). Signing in or out reloads the page,
-  so the query cache starts empty. A session the API refuses (`401`) is dropped and the page goes to sign-in.
+  so the query cache starts empty. A session the API refuses (`401`) is dropped, the cached viewer with it, and the
+  page goes to sign-in. Every form posts natively (`method="post"`) and can't be submitted before hydration, so no
+  personal field or credential ever lands in a URL.
+- **`/auth/confirm`** answers with `Referrer-Policy: no-referrer` and replaces its URL without the token once it
+  runs. The first request still carries the unspent token in its query string: **the ingress must not log query
+  strings for `/auth/confirm`** (deployment requirement, 0.12c). The web server logs no request URLs.
 - **Errors:** server functions log anything unexpected and send a generic error (`serverErrors`), because Start
   would put the message into the page.
 - **Turnstile:** Auth verifies the token on sign-up, password sign-in and magic links. Locally and in CI Cloudflare's
