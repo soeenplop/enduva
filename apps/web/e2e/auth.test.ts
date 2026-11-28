@@ -73,15 +73,21 @@ const openMailedLink = async (page: Page, email: string, typed = email) => {
   return link;
 };
 
-/** The browser's active login (`enduva-login`) and its session cookie. */
+/**
+ * The browser's active login (`enduva-login` = `<slot>.<id>`), its ID, and its session: the slot's cookie if it holds
+ * that ID. `tokens` is the session's value without the ID prefix.
+ */
 async function loginCookies(page: Page) {
   const cookies = await page.context().cookies();
   const login = cookies.find((c) => c.name === 'enduva-login');
-  const session = cookies.find((c) => c.name === `enduva-session-${login?.value ?? ''}`);
+  const [slot = '', loginId] = login?.value.split('.') ?? [];
+  const session = cookies.find((c) => c.name === `enduva-session-${slot}` && c.value.startsWith(`${loginId ?? ''}.`));
   return {
     login,
+    loginId,
     session,
-    all: cookies.filter((c) => /^enduva-(session-|ended-|login$)/.test(c.name)),
+    tokens: session?.value.slice((loginId?.length ?? 0) + 1),
+    all: cookies.filter((c) => /^enduva-(session-[ab]|ended|login)$/.test(c.name)),
   };
 }
 
@@ -103,18 +109,15 @@ describe.skipIf(stack === undefined)(`sign-in (local Supabase${stack ? '' : ': S
     expect(await page.getByText(email).isVisible()).toBe(true);
 
     // The login and session cookies are HttpOnly and Lax, and the tokens are nowhere in the page.
-    const { login, session, all } = await loginCookies(page);
-    expect(session).toBeDefined();
+    const { loginId, tokens, all } = await loginCookies(page);
+    expect(tokens).toBeDefined();
     for (const cookie of all) expect(cookie).toMatchObject({ httpOnly: true, sameSite: 'Lax', path: '/' });
-    const [accessToken, refreshToken] = JSON.parse(Buffer.from(session!.value, 'base64url').toString()) as [
-      string,
-      string,
-    ];
+    const [accessToken, refreshToken] = JSON.parse(Buffer.from(tokens!, 'base64url').toString()) as [string, string];
     const html = await page.content();
     expect(html).not.toContain(accessToken);
     expect(html).not.toContain(refreshToken);
     expect(await page.evaluate(() => document.cookie)).not.toMatch(/enduva-(session|login)/);
-    expect(login?.value).toMatch(/^[A-Za-z0-9_-]{16}$/);
+    expect(loginId).toMatch(/^[A-Za-z0-9_-]{16}$/);
 
     await page.getByLabel('Name').fill('Ada Runner');
     await page.getByLabel('Height (cm)').fill('171.5');
@@ -128,10 +131,10 @@ describe.skipIf(stack === undefined)(`sign-in (local Supabase${stack ? '' : ': S
     const me = (token: string) => fetch(`${apiUrl}/v1/me`, { headers: { authorization: `Bearer ${token}` } });
     expect((await me(accessToken)).status).toBe(200);
     await Promise.all([page.waitForURL(`${origin}/`), page.getByRole('button', { name: 'Sign out' }).click()]);
-    // The login's session is gone and its tombstone stays; `enduva-login` itself is left to the next sign-in.
+    // The login's session is gone and the marker names it as revoked; `enduva-login` is left to the next sign-in.
     const after = await loginCookies(page);
     expect(after.session).toBeUndefined();
-    expect(after.all.map((c) => c.name)).toContain(`enduva-ended-${login!.value}`);
+    expect(after.all.find((c) => c.name === 'enduva-ended')?.value).toBe(`${loginId!}.revoked`);
     expect((await me(accessToken)).status).toBe(401);
     await page.goto(`${origin}/profile`);
     await page.waitForURL(`${origin}/sign-in?redirect=%2Fprofile`);
@@ -234,10 +237,10 @@ const revokeAtAuth = (user: User) =>
 const encodeSession = (user: User) =>
   Buffer.from(JSON.stringify([user.accessToken, user.refreshToken, user.expiresAt])).toString('base64url');
 
-/** The cookies the web server sets when `user` signs in (a fixed login ID per test user role). */
-const sessionCookies = (user: User, loginId = 'E2Evictim0000000') => [
-  { name: 'enduva-login', value: loginId, url: origin },
-  { name: `enduva-session-${loginId}`, value: encodeSession(user), url: origin },
+/** The cookies the web server sets when `user` signs in into `slot` (a fixed login ID per test user role). */
+const sessionCookies = (user: User, loginId = 'E2Evictim0000000', slot: 'a' | 'b' = 'a') => [
+  { name: 'enduva-login', value: `${slot}.${loginId}`, url: origin },
+  { name: `enduva-session-${slot}`, value: `${loginId}.${encodeSession(user)}`, url: origin },
 ];
 const cookieHeader = (user: User, loginId: string) =>
   sessionCookies(user, loginId)
@@ -296,8 +299,8 @@ describe.skipIf(stack === undefined)('account boundaries', () => {
     await openMailedLink(page, other.email, victim.email);
     await page.getByRole('alert').filter({ hasText: 'sent to a different address' }).waitFor();
     // Still the victim's login and nothing else.
-    const { login, all } = await loginCookies(page);
-    expect(login?.value).toBe('E2Evictim0000000');
+    const { loginId, all } = await loginCookies(page);
+    expect(loginId).toBe('E2Evictim0000000');
     expect(all).toHaveLength(2);
     expect(errors).toEqual([]);
     await close();
@@ -337,13 +340,13 @@ describe.skipIf(stack === undefined)('two tabs, one browser', () => {
     expect((await apiMe(a.accessToken)).status).toBe(401);
     // The browser hasn't seen the sign-out's cookies yet: A is still fully in place.
     const before = await loginCookies(tab1);
-    expect(before.login?.value).toBe('E2EloginA0000000');
+    expect(before.loginId).toBe('E2EloginA0000000');
     expect(before.session).toBeDefined();
-    await tab2.context().addCookies(sessionCookies(b, 'E2EloginB0000000'));
+    await tab2.context().addCookies(sessionCookies(b, 'E2EloginB0000000', 'b'));
     held.release();
     await reloaded;
     await held.dispose();
-    expect((await loginCookies(tab2)).login?.value).toBe('E2EloginB0000000');
+    expect((await loginCookies(tab2)).loginId).toBe('E2EloginB0000000');
     await tab2.goto(`${origin}/profile`);
     await tab2.getByText(b.email).waitFor();
     expect(errors).toEqual([]);
@@ -358,7 +361,7 @@ describe.skipIf(stack === undefined)('two tabs, one browser', () => {
     await tab1.goto(`${origin}/profile`);
     await tab1.getByText(a.email).waitFor();
     // Another tab signs in as B (the cookies a sign-in sets); tab 1 still shows A's form.
-    await tab1.context().addCookies(sessionCookies(b, 'E2EloginB0000000'));
+    await tab1.context().addCookies(sessionCookies(b, 'E2EloginB0000000', 'b'));
     await tab1.getByLabel('Name').fill('Changed');
     const reloaded = tab1.waitForEvent('load');
     await tab1.getByRole('button', { name: 'Save' }).click();
@@ -388,7 +391,7 @@ describe.skipIf(stack === undefined)('late answers after an account switch', () 
     await tab1.getByLabel('Name').fill('Alpha 2');
     await tab1.getByRole('button', { name: 'Save' }).click();
     await held.sent;
-    await tab1.context().addCookies(sessionCookies(b, 'E2EloginB0000000'));
+    await tab1.context().addCookies(sessionCookies(b, 'E2EloginB0000000', 'b'));
     await tab1.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Home' }).click();
     await tab1.getByRole('link', { name: 'Profile' }).click();
     await tab1.getByText(b.email).waitFor();
