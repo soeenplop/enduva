@@ -14,14 +14,14 @@ All of these names (and `errors.enduva.soeenplop.dev` for GlitchTip) already res
 
 ## Docker Compose
 
-`deploy/compose.yaml` defines one stack per environment in Dokploy:
+`deploy/compose.yaml` defines one stack per environment in Dokploy. Until 0.12c turns it into the Dokploy stack (images by digest, env from Dokploy), it builds the images and starts them locally against the local Supabase stack (0.12a, [`deploy/README.md`](../../deploy/README.md)).
 
 | Service | Image | Command | Notes |
 | --- | --- | --- | --- |
 | `api` | `ghcr.io/soeenplop/enduva-api:<tag>` | `node dist/main.js` | Port 3000, health check `/v1/health` |
 | `worker` | same image as `api` | `node dist/worker.js` | pg-boss consumers. Scale independently |
-| `web` | `ghcr.io/soeenplop/enduva-web:<tag>` | `node .output/server/index.mjs` (Node server output; exact preset pinned in 0.12a) | TanStack Start SSR |
-| `landing` | `ghcr.io/soeenplop/enduva-landing:<tag>` | static server (Caddy/nginx) | Prerendered |
+| `web` | `ghcr.io/soeenplop/enduva-web:<tag>` | `node server.mjs` (srvx on Node, SSR bundle with its dependencies, pinned in 0.12a) | TanStack Start SSR. Health check `/healthz` |
+| `landing` | `ghcr.io/soeenplop/enduva-landing:<tag>` | static server (unprivileged nginx, 0.12a) | Prerendered |
 | `tiles` | Caddy/nginx (pinned digest) | caching reverse proxy | `tiles.enduva.soeenplop.dev` → OpenFreeMap. Strips cookies, `Referer`, user agents. Disk cache |
 
 - There is no database in the compose file: Supabase Cloud is used for production (and staging from G1.6).
