@@ -19,7 +19,7 @@
     }
   },
   "scripts": {
-    "build": "swc src -d dist --strip-leading-paths --delete-dir-on-start --config-file node_modules/@enduva/config/swc/react.json && node generate-css.mjs",
+    "build": "swc src -d dist --strip-leading-paths --delete-dir-on-start --config-file node_modules/@enduva/config/swc/react.json && node generate-css.mjs && node generate-apple-colors.mjs",
     "typecheck": "tsc -p tsconfig.json",
     "lint": "oxlint -c node_modules/@enduva/config/oxlint.json --type-aware --deny-warnings src test",
     "test": "vitest run"

@@ -18,6 +18,15 @@
       "dependsOn": ["^build", "generate"],
       "outputs": ["dist/**"]
     },
+    "@enduva/ui#build": {
+      "dependsOn": ["^build", "generate"],
+      "outputs": [
+        "dist/**",
+        "$TURBO_ROOT$/apps/apple/EnduvaKit/Sources/EnduvaKit/Colors.xcassets/**",
+        "$TURBO_ROOT$/apps/apple/Enduva/Assets.xcassets/**",
+        "$TURBO_ROOT$/apps/apple/EnduvaWatch/Assets.xcassets/**"
+      ]
+    },
     "@enduva/landing#build": {
       "dependsOn": ["^build", "generate"],
       "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/assets/brand/final/web/**"],
