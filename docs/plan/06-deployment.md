@@ -14,7 +14,7 @@ All of these names (and `errors.enduva.de` for GlitchTip, `tiles.enduva.de` for 
 
 ## Docker Compose
 
-`deploy/compose.production.yaml` is the production stack in Dokploy (0.12c): images by digest, filled in by the deploy script, and env from Dokploy. `deploy/compose.yaml` builds the images and starts them locally against the local Supabase stack (0.12a, [`deploy/README.md`](../../deploy/README.md)).
+`deploy/compose.production.yaml` is the production stack in Dokploy (0.12c): images by digest, filled in by the deploy script, and env from Dokploy. `deploy/compose.yaml` builds the images and starts them locally against the local Supabase stack (0.12a), and the isolated candidate verifier uses it with the pipeline's digests ([`deploy/README.md`](../../deploy/README.md)).
 
 | Service | Image | Command | Notes |
 | --- | --- | --- | --- |
@@ -94,7 +94,7 @@ flowchart LR
 | Where | What |
 | --- | --- |
 | 1Password Environments | Local `.env` files (Supabase local keys, OpenAI key, map style URL (OpenFreeMap by default, no key), Google + Apple OAuth) mounted per developer |
-| GitHub Actions secrets (per environment) | `DOKPLOY_URL`, `DOKPLOY_TOKEN`, `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`, project refs, `GHCR` (via `GITHUB_TOKEN`), Apple signing (later) |
+| GitHub Actions secrets and variables (per environment) | `production` (0.12c, [deploy runbook](../runbooks/deploy.md)): secrets `SUPABASE_DB_URL`, `DOKPLOY_API_KEY`; variables `DOKPLOY_URL`, `DOKPLOY_COMPOSE_ID`, `SUPABASE_PROJECT_REF`, `SUPABASE_PUBLISHABLE_KEY`. GHCR via `GITHUB_TOKEN`. Apple signing (later) |
 | Dokploy environment | Runtime env for `api`, `worker` and `web` (DB URLs, Supabase URL + publishable key, OpenAI key, GlitchTip DSN, …) |
 
 - `.env.example` per app documents every variable. The API validates env at boot with Zod and refuses to start if something is missing.

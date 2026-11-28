@@ -4,6 +4,9 @@
 #   docker compose -f deploy/compose.yaml up --build --wait
 #
 # Host ports are bound to 127.0.0.1 only: API :3000, web :3001, landing :3002.
+#
+# The isolated candidate verifier (deploy/scripts/verify-candidate.sh) starts the pipeline's images instead:
+# API_IMAGE, WEB_IMAGE and LANDING_IMAGE set to `…@sha256:…`, with `up --no-build`.
 
 name: enduva-local
 
@@ -27,7 +30,7 @@ x-api-env: &api-env
 services:
   api:
     build: { <<: *build, target: api }
-    image: enduva-api:local
+    image: ${API_IMAGE:-enduva-api:local}
     <<: *host-gateway
     environment: *api-env
     ports:
@@ -37,7 +40,7 @@ services:
   # Relays 127.0.0.1:54321 inside the API's network namespace to the host's Supabase API gateway, so the issuer
   # stays the loopback URL of local tokens. Local only: production's issuer is the hosted https URL.
   auth-forward:
-    image: enduva-api:local
+    image: ${API_IMAGE:-enduva-api:local}
     network_mode: service:api
     depends_on:
       api:
@@ -60,7 +63,7 @@ services:
   # pg-boss over the direct port as the worker login: the local pooler runs in transaction mode, and the worker
   # needs a session (apps/api README, Worker). Hosted, it uses the session pooler.
   worker:
-    image: enduva-api:local
+    image: ${API_IMAGE:-enduva-api:local}
     depends_on:
       api:
         condition: service_started
@@ -76,7 +79,7 @@ services:
 
   web:
     build: { <<: *build, target: web }
-    image: enduva-web:local
+    image: ${WEB_IMAGE:-enduva-web:local}
     <<: *host-gateway
     environment:
       ENDUVA_API_URL: http://api:3000
@@ -96,7 +99,7 @@ services:
 
   landing:
     build: { <<: *build, target: landing }
-    image: enduva-landing:local
+    image: ${LANDING_IMAGE:-enduva-landing:local}
     ports:
       - 127.0.0.1:3002:8080
     restart: unless-stopped

@@ -106,8 +106,7 @@ marker. `testflight` and `smoke` are standing accounts: never name them in a cle
 
 The migrations create the login roles `enduva_api_login` and `enduva_worker_login` without a password
 ([ADR-0002](../adr/0002-db-access-and-rls.md)). Once the first receipt-gated migration has run, set their passwords
-in the SQL editor (`alter role … password '…'`). Generate each password in your password manager and give it
-to Dokploy as part of the connection strings.
+in the SQL editor. The steps are in [deploy.md → First deploy](deploy.md#first-deploy).
 
 ## Undo
 

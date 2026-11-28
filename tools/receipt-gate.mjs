@@ -11,6 +11,8 @@
 //
 // Usage: node tools/receipt-gate.mjs --receipt <file> --sha <commit> --digests <json file> --applied <file>
 //          (--applied: one applied version per line, empty file = nothing applied yet)
+//        node tools/receipt-gate.mjs --write <file> --sha <commit> --digests <json file> --applied <file>
+//          (the isolated verifier, deploy/scripts/verify-candidate.sh, after it passed: writes the receipt)
 //        node tools/receipt-gate.mjs --self-test
 import { createHash } from 'node:crypto';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -43,6 +45,11 @@ const pinned = (d) =>
   Object.keys(d).length > 0 &&
   Object.values(d).every((v) => /^sha256:[0-9a-f]{64}$/.test(v));
 
+/** The production receipt the isolated verifier writes once the candidate passed against `baseline`. */
+export function receiptFor({ sha, digests, migrations, baseline }) {
+  return { kind: 'production', result: 'passed', sha, digests, migrations, baseline };
+}
+
 /** Every reason to refuse the production write; empty means the receipt authorises it. */
 export function judge({ receipt, sha, digests, migrations, applied }) {
   if (receipt === undefined) return ['no receipt for this SHA'];
@@ -64,21 +71,31 @@ function main() {
   const { values } = parseArgs({
     options: {
       receipt: { type: 'string' },
+      write: { type: 'string' },
       sha: { type: 'string' },
       digests: { type: 'string' },
       applied: { type: 'string' },
     },
   });
-  for (const name of ['receipt', 'sha', 'digests', 'applied']) {
+  for (const name of [values.write ? 'write' : 'receipt', 'sha', 'digests', 'applied']) {
     if (!values[name]) throw new Error(`--${name} is required`);
   }
   const readJson = (file) => JSON.parse(readFileSync(file, 'utf8'));
+  const digests = readJson(values.digests);
+  const applied = readFileSync(values.applied, 'utf8').split('\n').filter(Boolean);
+  if (values.write) {
+    if (!pinned(digests)) throw new Error('--digests must map image names to sha256 digests');
+    const receipt = receiptFor({ sha: values.sha, digests, migrations: migrationSet(), baseline: applied });
+    writeFileSync(values.write, `${JSON.stringify(receipt, null, 2)}\n`);
+    console.log(`Production receipt for ${values.sha} written to ${values.write}.`);
+    return;
+  }
   const problems = judge({
     receipt: existsSync(values.receipt) ? readJson(values.receipt) : undefined,
     sha: values.sha,
-    digests: readJson(values.digests),
+    digests,
     migrations: migrationSet(),
-    applied: readFileSync(values.applied, 'utf8').split('\n').filter(Boolean),
+    applied,
   });
   if (problems.length > 0) {
     for (const p of problems) console.error(`::error::receipt gate: ${p}`);
@@ -96,7 +113,7 @@ function selfTest() {
   const sha = 'a'.repeat(40);
   const [d1, d2, d3] = ['1', '2', '3'].map((c) => `sha256:${c.repeat(64)}`);
   const digests = { api: d1, web: d2 };
-  const receipt = { kind: 'production', result: 'passed', sha, digests, migrations, baseline: ['001'] };
+  const receipt = receiptFor({ sha, digests, migrations, baseline: ['001'] });
   const ok = { receipt, sha, digests, migrations, applied: ['001'] };
   const cases = [
     ['valid receipt', ok, null],
