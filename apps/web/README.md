@@ -137,12 +137,19 @@ tests can never reach another server. The landing page's reflow check lives in [
 [`e2e/auth.test.ts`](e2e/auth.test.ts) runs sign-in end to end against the local Supabase stack (`pnpm --filter
 @enduva/db db:start`) and the built API, which it starts itself ([`e2e/local-stack.ts`](e2e/local-stack.ts)):
 
-- sign up → the confirmation mail from Mailpit → confirm → edit the profile (saved, still there after a reload) →
-  sign out → a wrong password → sign in; the session cookie is `HttpOnly` and `SameSite=Lax`, and neither token
-  appears in the page or `document.cookie`;
+- sign up → the confirmation mail from Mailpit → confirm (typing the address) → edit the profile (saved, still there
+  after a reload) → sign out → a wrong password → sign in. The login and session cookies are `HttpOnly` and
+  `SameSite=Lax`, neither token appears in the page or `document.cookie`, and after sign-out the old access token gets
+  `401` from the API;
+- `/auth/confirm` answers with `Referrer-Policy: no-referrer` and drops the token from its URL;
 - an unknown email gets the same answers as a known one; magic-link sign-in, and the link works only once;
+- a link to another account, confirmed with the signed-in user's address, leaves that login in place;
+- a session the API refuses during client navigation ends on `/sign-in` without bouncing back;
+- captcha: the stack refuses a sign-in without a token, and the web server forwards the widget's token. Cloudflare's
+  test secret accepts any token, so a *rejected* token can't be produced locally;
 - **SSR isolation with real sessions:** two users request `/profile` at once and each page shows only that user's
-  email and name from `GET /v1/me` (fails with a module-level `QueryClient`).
+  email and name from `GET /v1/me` (fails with a module-level `QueryClient`); the server-rendered form posts and its
+  Save button is disabled until hydration.
 
 It needs `ENDUVA_WEB_ORIGIN` before the preview starts, so it picks a free port first; `--strictPort` makes the
 preview fail rather than share it. Without a running stack the suite is skipped locally (`CI=true` fails instead).
