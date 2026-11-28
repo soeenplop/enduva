@@ -44,7 +44,7 @@ every call goes through the web server, which holds the session.
 
 ## Sign-in
 
-Sign-in goes through Supabase Auth (02-architecture.md, Authentication), called by
+Email + password, magic link and Google, all through Supabase Auth (02-architecture.md, Authentication), called by
 the web server over Auth's REST API ([`src/auth/gotrue.server.ts`](src/auth/gotrue.server.ts)). The pages post to
 server functions ([`src/auth/functions.ts`](src/auth/functions.ts)), so no token ever reaches the browser.
 
@@ -66,10 +66,29 @@ server functions ([`src/auth/functions.ts`](src/auth/functions.ts)), so no token
 - **CSRF:** Start's default CSRF middleware guards every server function: `Sec-Fetch-Site` must be `same-origin`, or
   without it the `Origin` (then `Referer`) must be the request's origin; a call without any of them is refused.
   Mutations are `POST`. `SameSite=Lax` keeps the cookie off cross-site subrequests too.
+- **No account enumeration** ([`src/auth/outcomes.ts`](src/auth/outcomes.ts)): a wrong password, an unknown email
+  and an unconfirmed email are the same error; sign-up and the magic link answer the same whether the account
+  exists. Auth's recipient-dependent answers (`user_already_exists`, `otp_disabled`, and its per-recipient mail
+  cooldown `over_email_send_rate_limit`) all map to success. Only captcha, request-rate and availability errors
+  are shown as such.
+- **Email links** (`supabase/templates`) point at `/auth/confirm?token_hash=…`. That page posts the hash back, so a
+  mail scanner that follows links can't spend the single-use link, and it works in any browser. The user types the
+  address the mail went to, and the session is kept only if the link belongs to it, so someone else's link can't
+  switch this browser to their account.
+- **Sign-out** ends the session at Auth and clears the cookies. If Auth can't confirm it (outage, or a session that
+  could no longer be refreshed), the cookies still go, `signOut` answers `revoked: false` and the page says that
+  tokens already issued stay valid until they expire (at most an hour).
+- **Google** (PKCE): `startGoogleSignIn` keeps the verifier and the page to return to in an `HttpOnly` cookie for ten
+  minutes and sends the browser to Auth; [`/auth/callback`](src/routes/auth/callback.ts) redeems the code with it.
+  Only a verified exchange spends that state, so a callback anyone can trigger leaves a pending sign-in alone.
+  The sign-in page shows Google only when Auth reports the provider as enabled. Locally it is off: enabling it needs
+  your own OAuth client (`supabase/config.toml`).
 - **Return path:** `safeRedirect` ([`src/auth/redirect.ts`](src/auth/redirect.ts)) keeps only paths on this app and
   never the auth pages, checked after URL normalisation (dot segments can turn `/a/..//x` into `//x`).
 - **Errors:** server functions log anything unexpected and send a generic error (`serverErrors`), because Start
   would put the message into the page.
+- **Turnstile:** Auth verifies the token on sign-up, password sign-in and magic links. Locally and in CI Cloudflare's
+  test keys are used (`supabase/config.toml`); production keys come with the deploy (0.12b).
 
 ## API
 

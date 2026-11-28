@@ -1,4 +1,4 @@
-// The session cookies and the CSRF check, through the production SSR bundle against a stub Auth server. The app
+// The session cookies, the OAuth callback and the CSRF check, through the production SSR bundle against a stub Auth server. The app
 // runs as https://app.example, so its cookies must be `__Host-` prefixed and Secure.
 import { once } from 'node:events';
 import { createServer } from 'node:http';
@@ -9,6 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 const jwt = (email: string) =>
   `e30.${Buffer.from(JSON.stringify({ sub: `user-${email}`, email })).toString('base64url')}.sig`;
 const encode = (tokens: [string, string, number]) => Buffer.from(JSON.stringify(tokens)).toString('base64url');
+const VERIFIER = 'v'.repeat(43);
 const LOGIN_A = 'AAAAAAAAAAAAAAAA';
 const LOGIN_B = 'BBBBBBBBBBBBBBBB';
 
@@ -47,6 +48,10 @@ const stub = createServer((req, res) => {
     calls.push({ path: req.url ?? '', body });
     const json = (status: number, value: object) =>
       res.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify(value));
+    if (req.url === '/auth/v1/token?grant_type=pkce' && body['auth_code'] === 'good-code')
+      return body['code_verifier'] === VERIFIER
+        ? json(200, { access_token: 'a.b.c', refresh_token: 'refresh-1', expires_at: 4_102_444_800 })
+        : json(400, { error_code: 'bad_code_verifier' });
     if (req.url === '/auth/v1/token?grant_type=refresh_token') {
       return void refreshGate.then(() => {
         if (body['refresh_token'] === 'refresh-ok')
@@ -88,6 +93,78 @@ beforeAll(async () => {
 
 afterAll(() => {
   stub.close();
+});
+
+const oauthState = (redirect: string) =>
+  `__Host-enduva-oauth=${Buffer.from(JSON.stringify([VERIFIER, redirect])).toString('base64url')}`;
+
+const callback = (query: string, cookie?: string) =>
+  server.fetch(
+    new Request(`http://internal:3000/auth/callback${query}`, { headers: cookie === undefined ? {} : { cookie } }),
+  );
+
+describe('OAuth callback', () => {
+  it('signs in with a new __Host- login and returns to the saved page', async () => {
+    const res = await callback('?code=good-code', oauthState('/status?tab=1'));
+    expect(res.status).toBe(303);
+    expect(res.headers.get('location')).toBe('https://app.example/status?tab=1');
+    const jar = new Jar({ '__Host-enduva-oauth': 'x' });
+    jar.apply(res);
+    const pointer = jar.cookies.get('__Host-enduva-login') ?? '';
+    expect(pointer).toMatch(/^a\.[A-Za-z0-9_-]{16}$/);
+    expect(jar.cookies.get('__Host-enduva-session-a')).toBe(
+      `${pointer.slice(2)}.${encode(['a.b.c', 'refresh-1', 4_102_444_800])}`,
+    );
+    for (const line of res.headers.getSetCookie().filter((c) => !c.startsWith('__Host-enduva-oauth=')))
+      expect(line).toMatch(/; Path=\/; HttpOnly; Secure; SameSite=Lax/i);
+    // The PKCE state is spent.
+    expect(jar.cookies.has('__Host-enduva-oauth')).toBe(false);
+  });
+
+  it('keeps the fixed cookie set however many sign-ins overlap', async () => {
+    // Forty sign-ins (Google callbacks) in two waves, each wave sent from one snapshot of an A-signed-in browser and
+    // answered in shuffled order.
+    const jar = signedIn(LOGIN_A, [jwt('a@example.com'), 'refresh-a', 4_102_444_800]);
+    const fixed = [
+      '__Host-enduva-ended-a',
+      '__Host-enduva-ended-b',
+      '__Host-enduva-login',
+      '__Host-enduva-session-a',
+      '__Host-enduva-session-b',
+    ];
+    for (let wave = 0; wave < 2; wave++) {
+      const cookie = `${jar.header()}; ${oauthState('/')}`;
+      const answers = await Promise.all(Array.from({ length: 20 }, () => callback('?code=good-code', cookie)));
+      for (const res of answers.sort(() => Math.random() - 0.5)) jar.apply(res);
+      for (const name of jar.cookies.keys()) expect(fixed).toContain(name);
+      expect(Buffer.byteLength(jar.header())).toBeLessThan(8 * 1024);
+    }
+    // The browser ends up in one consistent login: the pointer's ID is the one in its slot.
+    const [slot, id] = (jar.cookies.get('__Host-enduva-login') ?? '').split('.');
+    expect(jar.cookies.get(`__Host-enduva-session-${slot ?? ''}`)?.startsWith(`${id ?? ''}.`)).toBe(true);
+  });
+
+  it('never redirects off the app', async () => {
+    const res = await callback('?code=good-code', oauthState('//evil.example/'));
+    expect(res.headers.get('location')).toBe('https://app.example/');
+  });
+
+  it.each([
+    ['without the state cookie', '?code=good-code', undefined],
+    [
+      'with another verifier',
+      '?code=good-code',
+      `__Host-enduva-oauth=${Buffer.from('["other","/"]').toString('base64url')}`,
+    ],
+    ['without a code', '?error=access_denied', oauthState('/')],
+  ])('goes back to sign-in %s', async (_, query, cookie) => {
+    const res = await callback(query, cookie);
+    expect(res.status).toBe(303);
+    expect(res.headers.get('location')).toBe('https://app.example/sign-in?error=oauth');
+    expect(res.headers.getSetCookie().some((c) => c.startsWith('__Host-enduva-login='))).toBe(false);
+    // An unverified callback leaves a pending sign-in's state alone.
+    expect(res.headers.getSetCookie().some((c) => c.startsWith('__Host-enduva-oauth='))).toBe(false);
+  });
 });
 
 describe('session cookies', () => {
