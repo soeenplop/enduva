@@ -30,8 +30,8 @@ CI runs both in the `apple` job on the `xcode-27` image. Package versions come o
 - **Colors:** `Palette` in EnduvaKit. Its catalog and the apps' `AccentColor`/`LaunchBackground` are generated from
   [`packages/ui/src/tokens.ts`](../../packages/ui/src/tokens.ts) by `pnpm --filter @enduva/ui build`; change the
   tokens, not the catalogs. CI fails on stale catalogs.
-- **Signing:** automatic. The Team ID is not committed; put `DEVELOPMENT_TEAM = …` in the git-ignored
-  `Config/Local.xcconfig` to run on a device. Bundle IDs: `dev.soeenplop.enduva` and `.watchkitapp`.
+- **Signing:** automatic, Team ID `4K9Y59Z87Y` in `Config/Shared.xcconfig`; the git-ignored `Config/Local.xcconfig`
+  can override it. Bundle IDs: `dev.soeenplop.enduva` and `.watchkitapp`.
 - **Watch tests:** there is no hosted Watch test target. On CI's watchOS simulator, a test host app fails to launch
   ("Application has termination assertions", then "The test runner hung before establishing connection"). So the
   Watch scheme runs EnduvaKit's tests, which need no app, and `EnduvaTests` checks the Watch app's bundle (strings,

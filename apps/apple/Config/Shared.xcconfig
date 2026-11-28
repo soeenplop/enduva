@@ -11,10 +11,10 @@ CURRENT_PROJECT_VERSION = 1
 // The bundle IDs are permanent once registered with Apple.
 ENDUVA_BUNDLE_ID = dev.soeenplop.enduva
 
-// Signing is automatic. The Team ID isn't committed: set DEVELOPMENT_TEAM in the git-ignored Local.xcconfig to run
-// on a device. Simulator builds and CI need no team.
+// Signing is automatic with the owner's Apple Developer team (owner decision, 2026-11-28). The git-ignored
+// Local.xcconfig can override it. Simulator builds and CI don't sign.
 CODE_SIGN_STYLE = Automatic
-DEVELOPMENT_TEAM =
+DEVELOPMENT_TEAM = 4K9Y59Z87Y
 
 SWIFT_TREAT_WARNINGS_AS_ERRORS = YES
 GCC_TREAT_WARNINGS_AS_ERRORS = YES
