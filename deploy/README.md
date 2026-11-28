@@ -33,9 +33,9 @@ the context (CI, `image (api)`). No build step needs a credential.
   and Tailwind's CSS; [`apps/web/scripts/sbom.mjs`](../apps/web/scripts/sbom.mjs)), which the scanner merges into
   the attestation.
 - **No configuration baked in:** every value comes from the environment at start, so one image runs everywhere.
-- **Behind TLS termination** the web server sees the plain-HTTP backend origin (srvx ignores `X-Forwarded-Proto`),
-  so server-function calls that rely on TanStack's `Origin` fallback get 403. Trusting forwarded headers from the
-  configured ingress only belongs to 0.12c (#136).
+- **Behind TLS termination** the web server's socket sees the plain-HTTP backend origin. `server.mjs` therefore
+  hands every request to the SSR handler at `ENDUVA_WEB_ORIGIN` (the public https origin), so server-function
+  calls pass TanStack's `Origin` check. It never reads `X-Forwarded-*`, so no peer can change that origin (#136).
 - **No query strings in access logs for `/auth/confirm`:** its URL carries an unspent single-use sign-in token
   until the page replaces it (apps/web README, Sign-in). The ingress set up in 0.12c must not log it.
 

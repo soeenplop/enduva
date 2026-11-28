@@ -36,7 +36,7 @@ holds user data) at module scope. Loaders fill the cache with `context.queryClie
 | `ENDUVA_API_URL` | the server, at call time ([`src/config.server.ts`](src/config.server.ts)) | Origin of the API for server-side calls. Required in a production build |
 | `ENDUVA_AUTH_URL` | the server | Supabase project URL (`https://<ref>.supabase.co`); Auth is under `/auth/v1`. Required in a production build, `pnpm dev` defaults to `http://127.0.0.1:54321` |
 | `ENDUVA_AUTH_PUBLISHABLE_KEY` | the server | Supabase publishable key. Always required; locally `PUBLISHABLE_KEY` from `supabase status` |
-| `ENDUVA_WEB_ORIGIN` | the server | This app's public origin (`https://app.enduva.de`): https makes the auth cookies `Secure` and `__Host-`, and it builds the OAuth callback URL. Required in a production build, `pnpm dev` uses the request's origin |
+| `ENDUVA_WEB_ORIGIN` | the server | This app's public origin (`https://app.enduva.de`): https makes the auth cookies `Secure` and `__Host-`, and it builds the OAuth callback URL. `server.mjs` serves every request at this origin, whatever the socket or `X-Forwarded-*` say, so server-function calls pass the `Origin` check behind TLS termination. Required in a production build, `pnpm dev` uses the request's origin |
 | `ENDUVA_TURNSTILE_SITE_KEY` | the server, sent to the sign-in pages | Turnstile site key (public). Required in a production build, `pnpm dev` defaults to Cloudflare's always-passing test key |
 
 Nothing is baked in at build time, so one image serves every environment. The browser never calls the API or Auth:
