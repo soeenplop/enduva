@@ -125,7 +125,13 @@ describe('OAuth callback', () => {
     // Forty sign-ins (Google callbacks) in two waves, each wave sent from one snapshot of an A-signed-in browser and
     // answered in shuffled order.
     const jar = signedIn(LOGIN_A, [jwt('a@example.com'), 'refresh-a', 4_102_444_800]);
-    const fixed = ['__Host-enduva-ended', '__Host-enduva-login', '__Host-enduva-session-a', '__Host-enduva-session-b'];
+    const fixed = [
+      '__Host-enduva-ended-a',
+      '__Host-enduva-ended-b',
+      '__Host-enduva-login',
+      '__Host-enduva-session-a',
+      '__Host-enduva-session-b',
+    ];
     for (let wave = 0; wave < 2; wave++) {
       const cookie = `${jar.header()}; ${oauthState('/')}`;
       const answers = await Promise.all(Array.from({ length: 20 }, () => callback('?code=good-code', cookie)));
