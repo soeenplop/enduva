@@ -8,7 +8,7 @@
 //
 // Env:  SUPABASE_ACCESS_TOKEN, SUPABASE_PROJECT_REF       always
 //       TURNSTILE_SECRET                                   dry run and --apply (production Turnstile secret)
-//       RESEND_API_KEY                                     dry run and --apply (1Password Environment "Enduva")
+//       RESEND_API_KEY                                     dry run and --apply (sending-only Resend API key)
 //       SMTP_ADMIN_EMAIL                                   optional sender address, default noreply@soeenplop.dev
 //       GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET             optional; without them Google stays disabled
 //       SUPABASE_PUBLISHABLE_KEY                           --verify

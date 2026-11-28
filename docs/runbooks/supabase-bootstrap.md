@@ -34,61 +34,58 @@ any other key in use (legacy HS256, RS256) means step 4 rotates it in the dashbo
 ## Prerequisites
 
 - PR #138 (email templates) is merged, and you run the steps from an up-to-date `main` checkout.
-- Node 24 and the 1Password CLI (`op`).
+- Node 24.
 - **Resend is set up** (owner, once):
   1. In Resend, add the sending domain `soeenplop.dev` in region **eu-west-1** (Ireland).
   2. Add the SPF and DKIM DNS records that Resend shows, and wait until the domain is verified.
-  3. Create an API key with **sending access only**, restricted to that domain, and store it as `RESEND_API_KEY` in the
-     1Password Environment "Enduva".
+  3. Create an API key with **sending access only**, restricted to that domain. It becomes
+     `RESEND_API_KEY` below.
   4. Separately, list Resend as a processor in the privacy text (owner task, before real users).
-- The ID of the 1Password Environment "Enduva", which holds `RESEND_API_KEY`: in the 1Password app, Developer →
-  View Environments → Enduva → Manage environment → Copy environment ID. `op run --environment <id>` loads it.
-- An env file **outside the repo** for everything else, holding only 1Password references, for example
-  `~/enduva-bootstrap.env`:
+- An env file **outside the repo** with the values, for example `~/enduva-bootstrap.env` (`chmod 600`):
 
   ```sh
-  SUPABASE_PROJECT_REF=op://<vault>/<item>/project-ref
-  SUPABASE_ACCESS_TOKEN=op://<vault>/<item>/management-token   # personal access token, revoke it afterwards
-  TURNSTILE_SECRET=op://<vault>/<item>/turnstile-secret
-  # SMTP_ADMIN_EMAIL=noreply@soeenplop.dev                   # optional, this is the default
-  SUPABASE_PUBLISHABLE_KEY=op://<vault>/<item>/publishable-key
-  SUPABASE_SECRET_KEY=op://<vault>/<item>/secret-key
+  SUPABASE_PROJECT_REF=<project ref>
+  SUPABASE_ACCESS_TOKEN=<personal access token>   # create one for this run, revoke it afterwards
+  TURNSTILE_SECRET=<production Turnstile secret>
+  RESEND_API_KEY=<sending-only Resend API key>
+  # SMTP_ADMIN_EMAIL=noreply@soeenplop.dev         # optional, this is the default
+  SUPABASE_PUBLISHABLE_KEY=<publishable key>
+  SUPABASE_SECRET_KEY=<secret key>
   # Optional, only once the Google OAuth client exists:
-  # GOOGLE_CLIENT_ID=op://<vault>/<item>/google-client-id
-  # GOOGLE_CLIENT_SECRET=op://<vault>/<item>/google-client-secret
+  # GOOGLE_CLIENT_ID=<client id>
+  # GOOGLE_CLIENT_SECRET=<client secret>
   ```
 
-Below, `run` means:
+  **Never put this file in the repo**, and delete it when you're done. The scripts read plain environment
+  variables only, so exported variables work as well.
 
-```sh
-op run --environment <enduva-environment-id> --env-file ~/enduva-bootstrap.env --
-```
+Below, `run` means `node --env-file="$HOME/enduva-bootstrap.env"`, for example `run tools/supabase-auth-bootstrap.mjs`.
 
-`op run` accepts both flags together. On a name clash the Environment wins over the env file, so keep
-`RESEND_API_KEY` out of the env file.
+> Optional, for 1Password users: keep `op://` references in the env file instead of values, or load them from a
+> 1Password Environment, and run `op run --env-file ~/enduva-bootstrap.env [--environment <id>] -- node …` instead.
 
 ## Steps
 
-1. **Dry run.** `run node tools/supabase-auth-bootstrap.mjs`. Read the list of differing fields. Secrets are shown
+1. **Dry run.** `run tools/supabase-auth-bootstrap.mjs`. Read the list of differing fields. Secrets are shown
    as `<redacted>`, and they may show up as differing on every run because the API doesn't return them in plain
    text.
-2. **Apply.** `run node tools/supabase-auth-bootstrap.mjs --apply`. It ends with `Auth config: updated.`
+2. **Apply.** `run tools/supabase-auth-bootstrap.mjs --apply`. It ends with `Auth config: updated.`
 3. **Dry run again.** The only fields left should be the secrets, if any. Everything else must be up to date.
 4. **JWT signing key.** If the script printed `ACTION NEEDED`, go to the dashboard → Project Settings → JWT Keys.
    Migrate the legacy JWT secret if asked to, create a standby **ES256** key, then **rotate** it in. No user or app
    depends on the old key yet. Run step 1 again: it must print `JWT signing: ES256 key in use.`
-5. **Verify the sign-up lock.** `run node tools/supabase-auth-bootstrap.mjs --verify`. It must print
+5. **Verify the sign-up lock.** `run tools/supabase-auth-bootstrap.mjs --verify`. It must print
    `Sign-up via the Auth API is rejected.` It first reads `/auth/v1/settings` and stops, without sending anything, unless
    that reports `disable_signup: true`. Only then does it send a direct `POST /auth/v1/signup` with the publishable key,
    which must be refused with `signup_disabled`, or with `captcha_failed` because Turnstile runs before the sign-up
    handler. A 429, a 5xx or any other answer fails the check.
-6. **Synthetic accounts.** `run node tools/synthetic-accounts.mjs create testflight smoke` shows what it would
+6. **Synthetic accounts.** `run tools/synthetic-accounts.mjs create testflight smoke` shows what it would
    create; add `--apply` to create them. This creates
    `synthetic-testflight@example.com` (iOS sign-in, 0.11b) and `synthetic-smoke@example.com` (smoke tests, 0.12c),
    already confirmed. With `--apply` it asks for each password (at least 16 characters, typing hidden) and never
    prints or logs it. Running it again leaves existing accounts unchanged.
 7. **Record it.** Comment in #19 with the outputs of steps 3 and 5 (they contain no secrets) and the date. Revoke
-   the personal access token if you created one just for this.
+   the personal access token and delete `~/enduva-bootstrap.env`.
 
 ## Synthetic accounts and cleanup
 
@@ -97,8 +94,8 @@ Until G1.6, production holds synthetic data only (T25). Every account created by
 `app_metadata.synthetic = true`. Cleanup deletes only the labels you name, and only accounts that carry the
 marker. `testflight` and `smoke` are standing accounts: never name them in a cleanup.
 
-- `run node tools/synthetic-accounts.mjs list` lists them.
-- `run node tools/synthetic-accounts.mjs delete xt-a xt-b` shows what it would delete; add `--apply` to delete them.
+- `run tools/synthetic-accounts.mjs list` lists them.
+- `run tools/synthetic-accounts.mjs delete xt-a xt-b` shows what it would delete; add `--apply` to delete them.
   Their app rows go too, because every account table cascades from `auth.users` via `profiles`.
 - Before G1.6, the cross-tenant suite may run against production only with such fixtures, and you delete them
   afterwards (0.12c, once the schema exists): `create xt-a xt-b --apply`, run the suite, then
@@ -109,8 +106,8 @@ marker. `testflight` and `smoke` are standing accounts: never name them in a cle
 
 The migrations create the login roles `enduva_api_login` and `enduva_worker_login` without a password
 ([ADR-0002](../adr/0002-db-access-and-rls.md)). Once the first receipt-gated migration has run, set their passwords
-in the SQL editor (`alter role … password '…'`). Generate each password in 1Password and give it to Dokploy as part
-of the connection strings.
+in the SQL editor (`alter role … password '…'`). Generate each password in your password manager and give it
+to Dokploy as part of the connection strings.
 
 ## Undo
 
