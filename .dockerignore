@@ -1,0 +1,48 @@
+# Build context of deploy/Dockerfile (the repository root). Allowlist: everything is excluded, then only the build
+# inputs are let back in, and within them no dotfile or credential-named file at any depth (below). No build step
+# needs a credential.
+*
+
+# Workspace root and the packages the images build from. tools/package.json only, because it is a workspace
+# importer of the lockfile.
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!turbo.json
+!tools/package.json
+!apps/api
+!apps/web
+!apps/landing
+!packages
+!assets/brand/final/web
+!deploy/landing.nginx.conf
+
+# Excluded again inside the allowed directories, at any depth (these rules come after the exceptions above, so
+# they win): installs, build output, caches, generated sources (the build regenerates them, as in a clean
+# checkout) and credentials. No build input is a dotfile, so every dotfile and dot-directory is out: `.npmrc`,
+# `.env*`, `.envrc*`, `.ssh/`, `.aws/`, `.config/`, `.docker/`, … Key and credential files by name as well.
+# tools/check-docker-context.sh plants such files and fails if any reaches the context (CI: images.yml).
+**/.*
+**/node_modules
+**/dist
+**/coverage
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/*.jks
+**/*.keystore
+**/*.kdbx
+**/*.ppk
+**/id_rsa*
+**/id_dsa*
+**/id_ecdsa*
+**/id_ed25519*
+**/*credentials*
+**/signing_keys.json
+**/service-account*.json
+apps/*/src/routeTree.gen.ts
+apps/*/src/paraglide
+apps/*/project.inlang/cache
+apps/*/tsconfig.negative.json
+packages/api-client/src/generated
