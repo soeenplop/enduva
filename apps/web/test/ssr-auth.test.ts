@@ -108,6 +108,7 @@ describe('session cookie', () => {
       new Request('https://app.example/', { headers: { cookie: `__Host-enduva-session=${value}` } }),
     );
     expect(res.status).toBe(200);
+    expect(await res.text()).toContain('Sign in');
     expect(res.headers.getSetCookie().find((c) => c.startsWith('__Host-enduva-session='))).toMatch(
       /Max-Age=0|Expires=Thu, 01 Jan 1970/,
     );
@@ -121,6 +122,7 @@ describe('session cookie', () => {
     const before = calls.length;
     const res = await page(cookieOf([jwt('old@example.com'), 'refresh-ok', Math.floor(Date.now() / 1000) + 30]));
     expect(calls.slice(before).map((c) => c.path)).toEqual(['/auth/v1/token?grant_type=refresh_token']);
+    expect(await res.text()).toContain('Sign out');
     expect(sessionSetCookie(res)).toContain(
       Buffer.from(JSON.stringify([jwt('fresh@example.com'), 'refresh-2', 4_102_444_800])).toString('base64url'),
     );
@@ -128,11 +130,13 @@ describe('session cookie', () => {
 
   it('ends the session when Auth refuses the refresh token', async () => {
     const res = await page(cookieOf([jwt('old@example.com'), 'refresh-revoked', 1]));
+    expect(await res.text()).toContain('Sign in');
     expect(sessionSetCookie(res)).toMatch(/Max-Age=0|Expires=Thu, 01 Jan 1970/);
   });
 
   it('keeps the session through an Auth outage', async () => {
     const res = await page(cookieOf([jwt('old@example.com'), 'refresh-down', 1]));
+    expect(await res.text()).toContain('Sign in');
     expect(sessionSetCookie(res)).toBeUndefined();
   });
 

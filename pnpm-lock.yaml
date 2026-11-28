@@ -381,6 +381,9 @@ importers:
       '@enduva/api-client':
         specifier: workspace:*
         version: link:../../packages/api-client
+      '@enduva/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@enduva/ui':
         specifier: workspace:*
         version: link:../../packages/ui

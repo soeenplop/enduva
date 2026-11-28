@@ -65,6 +65,9 @@ server functions ([`src/auth/functions.ts`](src/auth/functions.ts)), so no token
   your own OAuth client (`supabase/config.toml`).
 - **Return path:** `safeRedirect` ([`src/auth/redirect.ts`](src/auth/redirect.ts)) keeps only paths on this app and
   never the auth pages.
+- **Pages:** `/sign-up`, `/sign-in` (password, magic link, Google), `/auth/confirm` and `/profile` (`GET`/`PATCH
+  /v1/me` with `If-Match`; a conflict reloads the form with the current profile). Signing in or out reloads the page,
+  so the query cache starts empty. A session the API refuses (`401`) is dropped and the page goes to sign-in.
 - **Errors:** server functions log anything unexpected and send a generic error (`serverErrors`), because Start
   would put the message into the page.
 - **Turnstile:** Auth verifies the token on sign-up, password sign-in and magic links. Locally and in CI Cloudflare's
@@ -83,9 +86,9 @@ show its own answer; with a module-level `QueryClient` it fails.
 ## Locale
 
 No locale in the URL (02-architecture.md, Internationalisation). [`src/server.ts`](src/server.ts) resolves it per
-request: the `enduva-locale` cookie (a stand-in for the profile setting until 0.9b), then `Accept-Language`, then
-`en`. In the browser, [`src/locale.ts`](src/locale.ts) takes the locale from the `<html lang>` the server rendered, so
-hydration never renegotiates it from `navigator.languages`. The language switch sets the cookie and reloads. Messages
+request: the `enduva-locale` cookie, then `Accept-Language`, then `en`. In the browser, [`src/locale.ts`](src/locale.ts) takes the locale from the `<html lang>` the server rendered, so
+hydration never renegotiates it from `navigator.languages`. The language switch sets the cookie and reloads, and so
+does saving another language on the profile page. Messages
 live in [`packages/i18n/messages`](../../packages/i18n/messages); every key must exist in `de` and `en` (unit test).
 
 ## Design
