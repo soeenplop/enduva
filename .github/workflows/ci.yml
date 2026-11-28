@@ -162,7 +162,7 @@ jobs:
         run: SWIFTLINT="$RUNNER_TEMP/swiftlint/swiftlint" scripts/lint.sh
       - name: Build and test the iPhone app
         run: scripts/test.sh ios
-      - name: Build and test the Watch app
+      - name: Build the Watch app
         run: scripts/test.sh watchos
 
   gitleaks:
