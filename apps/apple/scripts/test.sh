@@ -1,7 +1,9 @@
 #!/bin/sh
-# Builds the apps and runs their unit tests and EnduvaKit's on the simulators: `scripts/test.sh [ios|watchos]`,
-# both by default. IOS_SIMULATOR and WATCHOS_SIMULATOR override the device names; the newest installed runtime is
-# used. Then checks each app's String Catalog against the keys the compiler extracted (scripts/check-strings.sh).
+# `scripts/test.sh [ios|watchos]`, both by default. ios builds the iPhone app (with the embedded Watch app) and runs
+# EnduvaTests and EnduvaKitTests on the simulator; IOS_SIMULATOR overrides the device name, the newest installed
+# runtime is used. watchos only builds the Watch app: EnduvaKitTests already run in the iPhone scheme, and starting
+# the test runner on CI's watchOS simulator alone took ~20 minutes (README.md, "Watch tests"). Both then check the
+# app's String Catalog against the keys the compiler extracted (scripts/check-strings.sh).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -16,28 +18,36 @@ simulator() {
     | sort_by(.version) | last | .udid // empty'
 }
 
-# Builds first, then boots the simulator and waits until it has fully booted, and only then runs the tests by UDID.
-# The Watch scheme runs only EnduvaKit's tests, which need no app: launching a test host app on CI's watchOS simulator
-# fails (README.md, "Watch tests").
-run() {
-  scheme=$1
-  udid=$(simulator "$2" "$3")
-  if [ -z "$udid" ]; then
-    echo "error: no available $2 simulator named \"$3\"" >&2
-    exit 1
-  fi
-  # Only the committed Package.resolved counts; simulator builds need no signing.
-  set -- -project Enduva.xcodeproj -scheme "$scheme" -destination "id=$udid" -derivedDataPath "$derived" \
-    -onlyUsePackageVersionsFromResolvedFile CODE_SIGNING_ALLOWED=NO -quiet
-  xcodebuild build-for-testing "$@"
-  xcrun simctl bootstatus "$udid" -b
-  xcodebuild test-without-building "$@"
-  scripts/check-strings.sh "$scheme/Localizable.xcstrings" \
-    "$derived"/Build/Intermediates.noindex/Enduva.build/Debug-*simulator/"$scheme".build/Objects-normal/*/*.stringsdata
+# Checks the String Catalog of scheme $1 against the keys extracted by its last simulator build.
+check_strings() {
+  scripts/check-strings.sh "$1/Localizable.xcstrings" \
+    "$derived"/Build/Intermediates.noindex/Enduva.build/Debug-*simulator/"$1".build/Objects-normal/*/*.stringsdata
 }
 
-ios() { run Enduva iOS "${IOS_SIMULATOR:-iPhone 18 Pro}"; }
-watchos() { run EnduvaWatch watchOS "${WATCHOS_SIMULATOR:-Apple Watch Series 12 (46mm)}"; }
+# Only the committed Package.resolved counts; simulator builds need no signing.
+common="-project Enduva.xcodeproj -derivedDataPath $derived -onlyUsePackageVersionsFromResolvedFile CODE_SIGNING_ALLOWED=NO -quiet"
+
+# Builds first, then boots the simulator and waits until it has fully booted, and only then runs the tests by UDID.
+ios() {
+  name=${IOS_SIMULATOR:-iPhone 18 Pro}
+  udid=$(simulator iOS "$name")
+  if [ -z "$udid" ]; then
+    echo "error: no available iOS simulator named \"$name\"" >&2
+    exit 1
+  fi
+  # shellcheck disable=SC2086 # $common is a list of plain words.
+  xcodebuild build-for-testing $common -scheme Enduva -destination "id=$udid"
+  xcrun simctl bootstatus "$udid" -b
+  # shellcheck disable=SC2086
+  xcodebuild test-without-building $common -scheme Enduva -destination "id=$udid"
+  check_strings Enduva
+}
+
+watchos() {
+  # shellcheck disable=SC2086
+  xcodebuild build $common -scheme EnduvaWatch -destination 'generic/platform=watchOS Simulator'
+  check_strings EnduvaWatch
+}
 
 case "${1:-all}" in
   ios) ios ;;
