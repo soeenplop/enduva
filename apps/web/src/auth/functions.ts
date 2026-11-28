@@ -5,42 +5,24 @@ import { getLocale } from '../paraglide/runtime.js';
 import * as gotrue from './gotrue.server';
 import { serverErrors, sessionMiddleware } from './middleware';
 import { beginOAuth } from './oauth.server';
-import { clearSession, writeSession } from './session.server';
+import { type AuthOutcome, emailFlowOutcome, fail, linkOutcome, ok, signInOutcome } from './outcomes';
+import { dropSession, endSession, hasLogin, startLogin } from './session.server';
+
+export type { AuthError, AuthOutcome } from './outcomes';
 
 /**
  * Sign-in, sign-up and sign-out as server functions: the browser posts the form here, the web server talks to Auth
- * and keeps the session in its HttpOnly cookie. Start's default CSRF middleware refuses cross-site calls (README,
- * Sign-in). Errors never tell whether an account exists: an unknown email and a wrong password are the same
- * `invalid_credentials`, and sign-up and magic links answer `ok` either way.
+ * and keeps the session in its HttpOnly cookies. Start's default CSRF middleware refuses cross-site calls (README,
+ * Sign-in). What the browser learns from Auth's answers is decided in ./outcomes: never whether an account exists.
  */
 
-export type AuthError =
-  | 'invalid_credentials'
-  | 'captcha'
-  | 'weak_password'
-  | 'rate_limited'
-  | 'link_invalid'
-  | 'unavailable';
-export type AuthOutcome = { ok: true } | { ok: false; error: AuthError };
-
-const ok = { ok: true } as const;
-const fail = (error: AuthError) => ({ ok: false, error }) as const;
-
-/** Errors that can't depend on the account: anything else is the caller's generic error. */
-function commonError({ status, code }: { status: number; code: string }): AuthError | undefined {
-  if (code === 'captcha_failed') return 'captcha';
-  if (status === 429 || code.startsWith('over_')) return 'rate_limited';
-  if (status >= 500 || code === 'unexpected_response') return 'unavailable';
-  return undefined;
-}
-
 /** Auth unreachable or misconfigured: logged here, generic for the browser. */
-async function guarded(name: string, run: () => Promise<AuthOutcome>): Promise<AuthOutcome> {
+async function guarded<T>(name: string, run: () => Promise<T>, unavailable: T): Promise<T> {
   try {
     return await run();
   } catch (error) {
     console.error(`${name} failed`, error);
-    return fail('unavailable');
+    return unavailable;
   }
 }
 
@@ -54,7 +36,7 @@ const credentials = z.object({
 /** The signed-in user, for the page chrome (email only), or null. */
 export const getViewer = createServerFn({ method: 'GET' })
   .middleware([sessionMiddleware])
-  .handler(({ context }) => {
+  .handler(async ({ context }) => {
     if (context.session === null) return null;
     // Display only: the API verifies the token itself on every call. A cookie that isn't a JWT is dropped.
     try {
@@ -62,7 +44,7 @@ export const getViewer = createServerFn({ method: 'GET' })
       const claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as { email?: unknown } | null;
       return { email: typeof claims?.email === 'string' ? claims.email : '' };
     } catch {
-      clearSession();
+      await dropSession();
       return null;
     }
   });
@@ -78,51 +60,67 @@ export const getAuthOptions = createServerFn({ method: 'GET' })
 export const signUp = createServerFn({ method: 'POST' })
   .validator(credentials)
   .handler(({ data }) =>
-    guarded('signUp', async () => {
-      const result = await gotrue.signUp(data.email, data.password, data.captchaToken, getLocale());
-      // An existing account gets the same answer as a new one.
-      if (result.ok || result.code === 'user_already_exists') return ok;
-      return fail(commonError(result) ?? (result.code === 'weak_password' ? 'weak_password' : 'unavailable'));
-    }),
+    guarded(
+      'signUp',
+      async () => emailFlowOutcome(await gotrue.signUp(data.email, data.password, data.captchaToken, getLocale())),
+      fail('unavailable'),
+    ),
   );
 
 export const signIn = createServerFn({ method: 'POST' })
   .validator(credentials)
   .handler(({ data }) =>
-    guarded('signIn', async () => {
-      const result = await gotrue.signInWithPassword(data.email, data.password, data.captchaToken);
-      if (result.ok) {
-        writeSession(result.value);
+    guarded(
+      'signIn',
+      async (): Promise<AuthOutcome> => {
+        const result = await gotrue.signInWithPassword(data.email, data.password, data.captchaToken);
+        if (!result.ok) return signInOutcome(result);
+        await startLogin(result.value);
         return ok;
-      }
-      // Unknown email, wrong password and unconfirmed email look the same.
-      return fail(commonError(result) ?? 'invalid_credentials');
-    }),
+      },
+      fail('unavailable'),
+    ),
   );
 
 export const sendMagicLink = createServerFn({ method: 'POST' })
   .validator(credentials.pick({ email: true, captchaToken: true }))
   .handler(({ data }) =>
-    guarded('sendMagicLink', async () => {
-      const result = await gotrue.sendMagicLink(data.email, data.captchaToken);
-      // `otp_disabled`: no account with this email (magic links never sign anyone up). Same answer as a sent link.
-      if (result.ok || result.code === 'otp_disabled') return ok;
-      return fail(commonError(result) ?? 'unavailable');
-    }),
+    guarded(
+      'sendMagicLink',
+      async () => emailFlowOutcome(await gotrue.sendMagicLink(data.email, data.captchaToken)),
+      fail('unavailable'),
+    ),
   );
 
-/** Redeems a confirmation or magic-link mail. A POST from the confirm page, so link scanners can't spend it. */
+/** `email_mismatch`: the link belongs to another address than the one the user typed. */
+export type ConfirmOutcome = AuthOutcome | { ok: false; error: 'email_mismatch' };
+
+/**
+ * Redeems a confirmation or magic-link mail. A POST from the confirm page, so link scanners can't spend it. The user
+ * types the address the mail went to, and the session is kept only if the link belongs to it: holding someone else's
+ * link (a forwarded mail, an attacker's own link) can't switch this browser to that account.
+ */
 export const confirmEmail = createServerFn({ method: 'POST' })
-  .validator(z.object({ tokenHash: z.string().min(1).max(256) }))
+  .validator(z.object({ tokenHash: z.string().min(1).max(256), email: z.email().max(254) }))
   .handler(({ data }) =>
-    guarded('confirmEmail', async () => {
-      const result = await gotrue.verifyEmailLink(data.tokenHash);
-      if (result.ok) {
-        writeSession(result.value);
+    guarded(
+      'confirmEmail',
+      async (): Promise<ConfirmOutcome> => {
+        const result = await gotrue.verifyEmailLink(data.tokenHash);
+        if (!result.ok) return linkOutcome(result);
+        const { session, email } = result.value;
+        if (email.toLowerCase() !== data.email.toLowerCase()) {
+          // The link is spent either way; the session it created is ended rather than left unused.
+          await gotrue
+            .signOut(session.accessToken)
+            .catch((error: unknown) => console.error('Ending the mismatched session failed', error));
+          return { ok: false, error: 'email_mismatch' };
+        }
+        await startLogin(session);
         return ok;
-      }
-      return fail(commonError(result) ?? 'link_invalid');
-    }),
+      },
+      fail('unavailable'),
+    ),
   );
 
 /** Starts Google sign-in; the browser goes to the returned Auth URL, and `/auth/callback` finishes it. */
@@ -131,15 +129,24 @@ export const startGoogleSignIn = createServerFn({ method: 'POST' })
   .validator(z.object({ redirect: z.string().max(2048) }))
   .handler(({ data }) => ({ url: beginOAuth('google', data.redirect) }));
 
+/**
+ * Signs out. The cookies go in every case; `revoked` says whether Auth confirmed it ended the session. If it didn't
+ * (Auth down, or the session could no longer be refreshed), tokens issued to it stay valid at the API until their
+ * expiry (at most an hour), and the page tells the user so.
+ */
 export const signOut = createServerFn({ method: 'POST' })
   .middleware([sessionMiddleware])
-  .handler(async ({ context }) => {
+  .handler(async ({ context }): Promise<{ ok: true; revoked: boolean }> => {
+    let revoked = !(await hasLogin());
     if (context.session !== null) {
-      // Best effort: the cookie goes either way.
-      await gotrue
-        .signOut(context.session.accessToken)
-        .catch((error: unknown) => console.error('signOut failed', error));
-    }
-    clearSession();
-    return ok;
+      try {
+        const result = await gotrue.signOut(context.session.accessToken);
+        revoked = result.ok;
+        if (!result.ok) console.error('Auth logout failed', result.status, result.code);
+      } catch (error) {
+        console.error('Auth logout failed', error);
+      }
+    } else if (!revoked) console.error('Auth logout skipped: the session could not be refreshed');
+    await endSession();
+    return { ok: true, revoked };
   });
