@@ -3,6 +3,8 @@
 export default {
   test: {
     include: ['e2e/**/*.test.ts'],
+    // Vite allows one preview server per project at a time, and each file starts its own.
+    fileParallelism: false,
     testTimeout: 60_000,
     hookTimeout: 60_000,
   },

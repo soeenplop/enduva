@@ -72,6 +72,10 @@
       "dependsOn": ["build"],
       "cache": false
     },
+    "@enduva/web#test:e2e": {
+      "dependsOn": ["build", "@enduva/api#build"],
+      "cache": false
+    },
     "//#format:check": {
       "cache": false
     }
