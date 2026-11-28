@@ -41,15 +41,15 @@ any other key in use (legacy HS256, RS256) means step 4 rotates it in the dashbo
   3. Create an API key with **sending access only**, restricted to that domain, and store it as `RESEND_API_KEY` in the
      1Password Environment "Enduva".
   4. Separately, list Resend as a processor in the privacy text (owner task, before real users).
-- An env file **outside the repo** that holds only 1Password references, for example `~/enduva-bootstrap.env`.
-  `RESEND_API_KEY` comes from the 1Password Environment "Enduva": either reference it here, or run the commands with
-  that Environment's mounted `.env` loaded in addition.
+- The ID of the 1Password Environment "Enduva", which holds `RESEND_API_KEY`: in the 1Password app, Developer →
+  View Environments → Enduva → Manage environment → Copy environment ID. `op run --environment <id>` loads it.
+- An env file **outside the repo** for everything else, holding only 1Password references, for example
+  `~/enduva-bootstrap.env`:
 
   ```sh
   SUPABASE_PROJECT_REF=op://<vault>/<item>/project-ref
   SUPABASE_ACCESS_TOKEN=op://<vault>/<item>/management-token   # personal access token, revoke it afterwards
   TURNSTILE_SECRET=op://<vault>/<item>/turnstile-secret
-  RESEND_API_KEY=op://<vault>/<item>/RESEND_API_KEY        # Environment "Enduva"; sending-only, restricted
   # SMTP_ADMIN_EMAIL=noreply@soeenplop.dev                   # optional, this is the default
   SUPABASE_PUBLISHABLE_KEY=op://<vault>/<item>/publishable-key
   SUPABASE_SECRET_KEY=op://<vault>/<item>/secret-key
@@ -58,7 +58,14 @@ any other key in use (legacy HS256, RS256) means step 4 rotates it in the dashbo
   # GOOGLE_CLIENT_SECRET=op://<vault>/<item>/google-client-secret
   ```
 
-Below, `run` means `op run --env-file ~/enduva-bootstrap.env --`.
+Below, `run` means:
+
+```sh
+op run --environment <enduva-environment-id> --env-file ~/enduva-bootstrap.env --
+```
+
+`op run` accepts both flags together. On a name clash the Environment wins over the env file, so keep
+`RESEND_API_KEY` out of the env file.
 
 ## Steps
 
