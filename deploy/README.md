@@ -66,3 +66,22 @@ docker compose -f deploy/compose.yaml up --build --wait
   signed-out pages work. Mailed links point at the stack's `site_url` (the `vite dev` server).
 - The worker is a stub until 0.12c and exits right away: `docker compose -f deploy/compose.yaml --profile worker up worker`.
 - Stop with `docker compose -f deploy/compose.yaml down`.
+
+## Production migrations (receipt gate)
+
+Schema changes reach production only through `supabase db push` in the production deploy job, never by hand
+(roadmap 0.12b/0.12c, [`06-deployment.md` → Pipeline](../docs/plan/06-deployment.md#pipeline)).
+
+- [`.github/workflows/deploy-production.yml`](../.github/workflows/deploy-production.yml) is the job skeleton: one
+  job under the `deploy-production` lock that migrates and then deploys the same digests. It is `workflow_call` only
+  and nothing calls it yet; 0.12c calls it after the isolated candidate verifier, passes the secrets and adds the
+  Dokploy step.
+- [`scripts/db-push.sh`](scripts/db-push.sh) reads the applied production migration history, runs the gate and only
+  then pushes the checkout's migrations.
+- [`tools/receipt-gate.mjs`](../tools/receipt-gate.mjs) refuses unless there is a **production** receipt that passed,
+  for exactly this SHA, with the same image digests and migration files, verified against exactly the applied
+  history. A staging receipt, a failed or missing one, or a stale one (production moved on, e.g. migrations
+  succeeded but the deploy failed) means no production write: re-verify the SHA in isolation. Its self-test runs
+  in `pnpm --filter @enduva/tools test`.
+- The `supabase-bootstrap` CI job is the isolated bootstrap check: a fresh local stack applies every migration from
+  scratch and the cross-tenant suite runs against it.

@@ -2,11 +2,11 @@
   "name": "@enduva/tools",
   "version": "0.0.0",
   "private": true,
-  "description": "Repository audits (TypeScript 7 only, T1), the negative-test runner and the interim CLA gate (cla-gate.mjs, run by the `cla` workflow). Run them from the root: `pnpm audit:ts`, `pnpm test:negative`.",
+  "description": "Repository audits (TypeScript 7 only, T1), the negative-test runner the interim CLA gate (cla-gate.mjs, run by the `cla` workflow) and the production receipt gate (receipt-gate.mjs, deploy/scripts/db-push.sh). Run them from the root: `pnpm audit:ts`, `pnpm test:negative`.",
   "type": "module",
   "scripts": {
     "lint": "oxlint -c node_modules/@enduva/config/oxlint.json --deny-warnings *.mjs",
-    "test": "node audit-lockfile.mjs --self-test && node audit-bundled-typescript.mjs --self-test && node audit-why-typescript.mjs --self-test && node negative-tests.mjs --self-test && node cla-gate.mjs --self-test"
+    "test": "node audit-lockfile.mjs --self-test && node audit-bundled-typescript.mjs --self-test && node audit-why-typescript.mjs --self-test && node negative-tests.mjs --self-test && node cla-gate.mjs --self-test && node receipt-gate.mjs --self-test && ../deploy/scripts/db-push.test.sh"
   },
   "devDependencies": {
     "@enduva/config": "workspace:*",
