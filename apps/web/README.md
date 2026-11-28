@@ -51,14 +51,14 @@ server functions ([`src/auth/functions.ts`](src/auth/functions.ts)), so no token
 - **Session cookies** ([`src/auth/session.server.ts`](src/auth/session.server.ts)): a fixed set of names, so
   overlapping responses can only overwrite cookies, never add them. `enduva-login` = `<slot>.<login ID>` names the
   active login (only a sign-in writes it); `enduva-session-a`/`-b` are two slots holding `<login ID>.<tokens>` (a
-  sign-in takes the slot the current login doesn't use); `enduva-ended` = `<login ID>.<revoked|local>` marks the last
-  sign-out. All are `HttpOnly`, `SameSite=Lax`, `Path=/`, 30 days; over https also `Secure` with the `__Host-`
-  prefix. A session counts only if its slot holds the active login's ID and the marker doesn't name it, so a late
-  response from one tab (a refresh, a refused refresh, a sign-out) can't replace, clear or revive another tab's newer
-  login; if overlapping sign-ins put two logins in one slot, the browser is signed out, never switched. A request
+  sign-in takes the slot the current login doesn't use); `enduva-ended-a`/`-b` = `<login ID>.<revoked|local>` mark,
+  per slot, the last login signed out there. All are `HttpOnly`, `SameSite=Lax`, `Path=/`, 30 days; over https also `Secure` with the `__Host-`
+  prefix. A session counts only if its slot holds the active login's ID and that slot's marker doesn't name it, and a
+  sign-out deletes its own slot's tokens at once, so a late response from one tab (a refresh, a refused refresh, a
+  sign-out) can't replace, clear or revive another tab's newer login; if overlapping sign-ins put two logins in one slot, the browser is signed out, never switched. A request
   whose access token expires within 60 s refreshes it first, once per request; a refresh token that Auth refuses ends
   that login, an outage or rate limit doesn't. A session cookie over 3800 bytes is never written (sign-in fails, a
-  refresh signs out), so the worst case, pointer plus two full slots plus the marker, stays under 8 KiB, half of
+  refresh signs out), so the worst case, pointer plus two full slots plus two markers, stays under 8 KiB, half of
   Node's request-header limit ([`test/http-budget.test.ts`](test/http-budget.test.ts) checks it through `server.mjs`).
   Server functions get the session from `sessionMiddleware` as `context.session`. The web server only forwards the
   access token: the API verifies it on every call. Every response from the server is `Cache-Control: private,
