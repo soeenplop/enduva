@@ -60,6 +60,12 @@ const stub = createServer((req, res) => {
             refresh_token: 'refresh-2',
             expires_at: 4_102_444_800,
           });
+        if (body['refresh_token'] === 'refresh-huge')
+          return json(200, {
+            access_token: `e30.${'x'.repeat(4000)}.sig`,
+            refresh_token: 'r',
+            expires_at: 4_102_444_800,
+          });
         if (body['refresh_token'] === 'refresh-down') return json(503, {});
         return json(400, { error_code: 'refresh_token_not_found' });
       });
@@ -211,6 +217,36 @@ describe('session cookies', () => {
     expect(calls.length).toBe(before);
     expect(jar.cookies.has(`__Host-enduva-session-${LOGIN_A}`)).toBe(false);
     expect(jar.cookies.get(`__Host-enduva-ended-${LOGIN_A}`)).toBe('1');
+  });
+
+  it("keeps only the active login's cookies, however many overlaps left behind", async () => {
+    const sessionB = encode([jwt('b@example.com'), 'refresh-b', 4_102_444_800]);
+    const jar = signedIn(LOGIN_B, [jwt('b@example.com'), 'refresh-b', 4_102_444_800]);
+    // Losing concurrent sign-ins, late refreshes and earlier sign-outs of other logins.
+    for (const id of ['CCCCCCCCCCCCCCCC', 'DDDDDDDDDDDDDDDD', LOGIN_A, 'not-a-login-id']) {
+      jar.cookies.set(`__Host-enduva-session-${id}`, encode([jwt('x@example.com'), 'refresh-x', 4_102_444_800]));
+      jar.cookies.set(`__Host-enduva-ended-${id}`, 'local');
+    }
+    jar.apply(await page(jar));
+    expect([...jar.cookies.keys()].sort()).toEqual(['__Host-enduva-login', `__Host-enduva-session-${LOGIN_B}`]);
+    expect(jar.cookies.get(`__Host-enduva-session-${LOGIN_B}`)).toBe(sessionB);
+  });
+
+  it('removes per-login cookies when no valid login is active', async () => {
+    const jar = new Jar({
+      [`__Host-enduva-session-${LOGIN_A}`]: encode([jwt('a@example.com'), 'r', 4_102_444_800]),
+      [`__Host-enduva-ended-${LOGIN_B}`]: 'revoked',
+    });
+    jar.apply(await page(jar));
+    expect(jar.cookies.size).toBe(0);
+  });
+
+  it('signs out cleanly when a refreshed session would exceed the cookie budget', async () => {
+    const jar = signedIn(LOGIN_A, expiring('refresh-huge'));
+    const res = await page(jar);
+    for (const line of res.headers.getSetCookie()) expect(line.length).toBeLessThan(4096);
+    jar.apply(res);
+    expect(jar.cookies.has(`__Host-enduva-session-${LOGIN_A}`)).toBe(false);
   });
 
   it('keeps pages out of shared caches', async () => {

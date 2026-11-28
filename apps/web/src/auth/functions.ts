@@ -146,6 +146,6 @@ export const signOut = createServerFn({ method: 'POST' })
         console.error('Auth logout failed', error);
       }
     } else if (!revoked) console.error('Auth logout skipped: the session could not be refreshed');
-    await endSession();
+    await endSession(revoked);
     return { ok: true, revoked };
   });
