@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { createRootRouteWithContext, HeadContent, Outlet, Scripts } from '@tanstack/react-router';
 import { tokens } from '@enduva/ui/tokens';
 import manrope from '@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2?url';
+import { viewerQuery } from '../auth/queries';
 import { AppHeader } from '../components/AppHeader';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
@@ -9,6 +10,8 @@ import type { RouterContext } from '../router';
 import stylesheet from '../styles.css?url';
 
 export const Route = createRootRouteWithContext<RouterContext>()({
+  // Every page knows whether someone is signed in; the session itself stays on the server.
+  beforeLoad: async ({ context }) => ({ viewer: await context.queryClient.ensureQueryData(viewerQuery) }),
   head: () => ({
     meta: [
       { charSet: 'utf-8' },
