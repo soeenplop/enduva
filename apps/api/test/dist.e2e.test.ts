@@ -70,9 +70,13 @@ describe('dist/main.js (SWC build, plain node)', () => {
     expect(res?.headers.get('x-request-id')).toMatch(/^[0-9a-f-]{36}$/);
   });
 
-  it('has a worker entrypoint', () => {
-    const r = spawnSync(process.execPath, [dist('worker.js')], { env: cleanEnv, encoding: 'utf8' });
-    expect(r.status).toBe(0);
-    expect(r.stdout).toContain('worker stub');
+  it('has a worker entrypoint that refuses an API login, naming the variable but not its value', () => {
+    const r = spawnSync(process.execPath, [dist('worker.js')], {
+      env: { ...cleanEnv, DATABASE_URL: UNREACHABLE_DATABASE_URL },
+      encoding: 'utf8',
+    });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('DATABASE_URL: must connect as enduva_worker_login');
+    expect(r.stderr).not.toContain(UNREACHABLE_DATABASE_URL);
   });
 });

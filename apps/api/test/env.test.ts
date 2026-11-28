@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { InvalidEnvError, loadEnv } from '../src/config/env.js';
+import { InvalidEnvError, loadEnv, loadWorkerEnv } from '../src/config/env.js';
 
 const url = 'postgresql://enduva_api_login.pooler-dev:s3cret-pw@127.0.0.1:54329/postgres';
 const issuer = 'http://127.0.0.1:54321/auth/v1';
@@ -147,5 +147,23 @@ describe('loadEnv', () => {
     expect(message).toContain('DATABASE_URL');
     expect(message).toContain('PORT');
     expect(message).not.toContain('s3cret');
+  });
+});
+
+describe('loadWorkerEnv', () => {
+  const workerUrl = 'postgresql://enduva_worker_login.pooler-dev:s3cret-pw@127.0.0.1:54329/postgres';
+
+  it('applies the defaults', () => {
+    expect(loadWorkerEnv({ DATABASE_URL: workerUrl })).toEqual({
+      NODE_ENV: 'development',
+      LOG_LEVEL: 'info',
+      DATABASE_URL: workerUrl,
+      DATABASE_POOL_MAX: 5,
+    });
+  });
+
+  it('refuses any login but the worker login, without echoing the value', () => {
+    expect(() => loadWorkerEnv({ DATABASE_URL: url })).toThrow('DATABASE_URL: must connect as enduva_worker_login');
+    expect(() => loadWorkerEnv({ DATABASE_URL: url })).not.toThrow(/s3cret-pw/);
   });
 });

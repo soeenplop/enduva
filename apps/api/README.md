@@ -11,7 +11,7 @@ legacy decorators and decorator metadata, and type-checked by TypeScript 7 `tsc 
 | `pnpm build` | SWC: `src` → `dist` (`dist/main.js`, `dist/worker.js`), preset `@enduva/config/swc/nest.json` |
 | `pnpm dev` | Builds the workspace packages it depends on (e.g. `@enduva/db`, whose runtime entry is `dist/`) and itself once, then runs `swc --watch` and `node --watch dist/main.js`, reading `apps/api/.env` if it exists |
 | `pnpm start` | `node dist/main.js` (production entrypoint) |
-| `pnpm start:worker` | `node dist/worker.js` (a stub until the worker lands in 0.12c) |
+| `pnpm start:worker` | `node dist/worker.js`, the pg-boss worker (see Worker) |
 | `pnpm generate` | Writes [`openapi.json`](openapi.json) from `@enduva/contracts` (needs its build; Turbo builds it first) |
 | `pnpm typecheck` | `tsc -p tsconfig.json` (TS 7, no emit) |
 | `pnpm lint` | oxlint, type-aware, shared config |
@@ -41,6 +41,22 @@ process with exit code 1 and a list of the offending variable names (never their
 
 Locally, start the database with `pnpm --filter @enduva/db db:start` and `db:reset` ([`packages/db`](../db/README.md)).
 Never point a local process at a hosted project.
+
+## Worker
+
+`dist/worker.js` runs [pg-boss](https://github.com/timgit/pg-boss) jobs from the same image
+([`src/worker.ts`](src/worker.ts)). Its environment is `DATABASE_URL`, `DATABASE_POOL_MAX` (default `5`),
+`NODE_ENV` and `LOG_LEVEL`, validated like the API's. `DATABASE_URL` must connect as `enduva_worker_login`
+through Supabase's **session** pooler (port 5432 on the pooler host), never the transaction pooler: each
+connection switches to `enduva_worker` once and keeps that role for its session. Locally use the direct port,
+`postgresql://enduva_worker_login:enduva-local-worker@127.0.0.1:54322/postgres`.
+
+- The `pgboss` schema and its queues come from a migration
+  ([`20261128121701_job_queue.sql`](../../supabase/migrations/20261128121701_job_queue.sql)). The worker starts pg-boss
+  with `migrate: false` and only reads and writes jobs. A pg-boss upgrade that changes its schema version needs a
+  new migration in the same PR.
+- At every start it enqueues one job on the `smoke` queue and consumes it. The deploy smoke test checks that a
+  `smoke` job completed after the deploy (0.12c).
 
 ## Behaviour
 
@@ -136,7 +152,7 @@ handlers use the same schemas: request bodies are parsed with them, and response
   readiness without a database, request IDs, problem bodies (404 inside and outside `/v1`, malformed body,
   unexpected and hostile errors), log redaction and throttling.
 - `test/dist.e2e.test.ts` runs the SWC build with plain `node`: it boots, serves `/v1/health`, and refuses to boot
-  with an invalid environment. The worker entrypoint runs and exits.
+  with an invalid environment. The worker entrypoint refuses any login but `enduva_worker_login`.
 - `test/database.e2e.test.ts` runs against the **local** Supabase stack through the transaction pooler, with access
   tokens from real sign-ins through the local Auth server: readiness, a request transaction as `enduva_api` under
   RLS, rollback, and a failed query whose parameter stays out of the logs.

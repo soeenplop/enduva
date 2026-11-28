@@ -66,7 +66,7 @@ docker compose -f deploy/compose.yaml up --build --wait
 - Sign-in on `web` talks to the local Auth through `host.docker.internal`. Export the local publishable key first
   (`export ENDUVA_AUTH_PUBLISHABLE_KEY=$(supabase status -o json | jq -r .PUBLISHABLE_KEY)`); without it only
   signed-out pages work. Mailed links point at the stack's `site_url` (the `vite dev` server).
-- The worker is a stub until 0.12c and exits right away: `docker compose -f deploy/compose.yaml --profile worker up worker`.
+- The worker connects to the local database directly as `enduva_worker_login` and consumes its `smoke` job at start.
 - Stop with `docker compose -f deploy/compose.yaml down`.
 
 ## Production migrations (receipt gate)

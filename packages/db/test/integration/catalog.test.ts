@@ -303,3 +303,38 @@ describe('runtime role grants', () => {
     ]);
   });
 });
+
+// The worker's job queue (supabase/migrations/…_job_queue.sql): pg-boss's schema, owned by the migration role.
+describe('schema pgboss', () => {
+  it('is reachable by enduva_worker only: not by the API, the logins, PUBLIC or a Data API role', async () => {
+    const roles = ['enduva_worker', 'enduva_api', 'enduva_api_login', 'enduva_worker_login', ...DATA_API_ROLES];
+    const rows = await query(
+      sql`select r.role, has_schema_privilege(r.role, 'pgboss', 'usage') as usage,
+                 has_table_privilege(r.role, 'pgboss.job', 'select, insert, update, delete') as jobs,
+                 has_schema_privilege(r.role, 'pgboss', 'create') as can_create
+          from unnest(array[${sql.join(
+            roles.map((role) => sql`${role}`),
+            sql`, `,
+          )}]::text[]) with ordinality r(role, n) order by r.n`,
+    );
+    expect(rows).toEqual(
+      roles.map((role) => ({
+        role,
+        usage: role === 'enduva_worker',
+        jobs: role === 'enduva_worker',
+        can_create: false,
+      })),
+    );
+    const publicFunctions = await query(
+      sql`select p.oid::regprocedure::text from pg_proc p, aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+          where p.pronamespace = 'pgboss'::regnamespace and a.grantee = 0`,
+    );
+    expect(publicFunctions).toEqual([]);
+  });
+
+  it('has the smoke queue the worker checks at start', async () => {
+    expect(await query(sql`select name, policy from pgboss.queue order by name`)).toEqual([
+      { name: 'smoke', policy: 'standard' },
+    ]);
+  });
+});
