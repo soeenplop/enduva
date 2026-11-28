@@ -44,5 +44,6 @@
   "auth_error_rate_limited": "Zu viele Versuche. Warte einen Moment und versuch es dann noch einmal.",
   "auth_error_unavailable": "Die Anmeldung ist gerade nicht verfügbar. Versuch es später noch einmal.",
   "auth_error_link_invalid": "Dieser Link ist ungültig oder abgelaufen. Fordere auf der Anmeldeseite einen neuen an.",
-  "auth_error_oauth": "Die Anmeldung mit Google hat nicht geklappt. Versuch es noch einmal."
+  "auth_error_oauth": "Die Anmeldung mit Google hat nicht geklappt. Versuch es noch einmal.",
+  "sign_out_not_confirmed": "Du bist auf diesem Gerät abgemeldet. Wir konnten die Sitzung auf unserem Server nicht beenden, dort bleibt sie noch bis zu einer Stunde gültig."
 }

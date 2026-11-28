@@ -49,7 +49,7 @@ function SignUpPage() {
       {done ? (
         <FormMessage notice={m.sign_up_check_inbox()} />
       ) : (
-        <form className="flex flex-col gap-4" onSubmit={(event) => void submit(event)}>
+        <form method="post" className="flex flex-col gap-4" onSubmit={(event) => void submit(event)}>
           <Field label={m.field_email()} name="email" type="email" autoComplete="email" required />
           <Field
             label={m.field_password()}

@@ -44,5 +44,6 @@
   "auth_error_rate_limited": "Too many attempts. Wait a moment and try again.",
   "auth_error_unavailable": "Sign-in is unavailable right now. Try again later.",
   "auth_error_link_invalid": "This link is invalid or has expired. Request a new one on the sign-in page.",
-  "auth_error_oauth": "Signing in with Google didn't work. Try again."
+  "auth_error_oauth": "Signing in with Google didn't work. Try again.",
+  "sign_out_not_confirmed": "You're signed out on this device. We couldn't end the session on our server, so it stays valid there for up to an hour."
 }
