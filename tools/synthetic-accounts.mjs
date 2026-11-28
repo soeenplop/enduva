@@ -5,11 +5,13 @@
 // Without --apply, create and delete only print what they would do.
 //
 // Env:   SUPABASE_PROJECT_REF, SUPABASE_SECRET_KEY (the project's secret key, admin API)
-// Usage: node tools/synthetic-accounts.mjs create <label>… [--apply]   creates missing accounts, prints passwords once
+//        SYNTHETIC_PASSWORD_<LABEL> optional (automation); otherwise create asks on the TTY with hidden input
+// Usage: node tools/synthetic-accounts.mjs create <label>… [--apply]   creates missing accounts, asks for passwords
 //        node tools/synthetic-accounts.mjs list
 //        node tools/synthetic-accounts.mjs delete <label>… [--apply]   deletes exactly these accounts
 //        node tools/synthetic-accounts.mjs --self-test
-import { randomBytes } from 'node:crypto';
+import { createInterface } from 'node:readline/promises';
+import { Writable } from 'node:stream';
 
 const email = (label) => `synthetic-${label}@example.com`;
 const PATTERN = /^synthetic-[a-z0-9-]+@example\.com$/;
@@ -48,6 +50,28 @@ async function syntheticUsers() {
   }
 }
 
+/** `SYNTHETIC_PASSWORD_<LABEL>`, label upper-cased, other characters as `_`. */
+export const passwordVar = (label) => `SYNTHETIC_PASSWORD_${label.toUpperCase().replaceAll(/[^A-Z0-9]/g, '_')}`;
+
+/** The password from the environment, else typed on the TTY. Never logged, never taken from argv. */
+export async function passwordFor(label, env = process.env, prompt = promptHidden) {
+  const password = env[passwordVar(label)] ?? (await prompt(`Password for ${label}: `));
+  if (password.length < 16) throw new Error(`The password for ${label} must have at least 16 characters`);
+  return password;
+}
+
+async function promptHidden(question) {
+  if (!process.stdin.isTTY) throw new Error('No TTY to ask for the password: set it in the environment instead');
+  process.stdout.write(question);
+  // Typed characters echo into a muted stream, so the password never appears on screen.
+  const muted = new Writable({ write: (_chunk, _encoding, done) => done() });
+  const rl = createInterface({ input: process.stdin, output: muted, terminal: true });
+  const answer = await rl.question('');
+  rl.close();
+  process.stdout.write('\n');
+  return answer;
+}
+
 async function create(labels, apply) {
   checkLabels(labels);
   const existing = new Set((await syntheticUsers()).map((u) => u.email));
@@ -60,14 +84,14 @@ async function create(labels, apply) {
       console.log(`${email(label)}: would be created (run again with --apply)`);
       continue;
     }
-    const password = randomBytes(18).toString('base64url');
+    const password = await passwordFor(label);
     await admin('POST', '/users', {
       email: email(label),
       password,
       email_confirm: true,
       app_metadata: { synthetic: true },
     });
-    console.log(`${email(label)}: created, password ${password} (store it in 1Password now; it is not shown again)`);
+    console.log(`${email(label)}: created`);
   }
 }
 
@@ -81,7 +105,15 @@ async function remove(labels, apply) {
   if (users.length === 0) console.log('No synthetic accounts with these labels.');
 }
 
-function selfTest() {
+async function selfTest() {
+  const noPrompt = () => {
+    throw new Error('prompted');
+  };
+  const refuses = (promise) =>
+    promise.then(
+      () => false,
+      (e) => e.message.includes('16 characters'),
+    );
   const checks = [
     ['marked synthetic account', isSynthetic({ email: email('ios-review'), app_metadata: { synthetic: true } })],
     ['unmarked account with the pattern', !isSynthetic({ email: email('a'), app_metadata: {} })],
@@ -99,6 +131,16 @@ function selfTest() {
         ).map((u) => u.email),
       ) === JSON.stringify([email('xt-a'), email('xt-b')]),
     ],
+    ['password variable name', passwordVar('xt-a') === 'SYNTHETIC_PASSWORD_XT_A'],
+    [
+      'password from the environment, no prompt',
+      (await passwordFor('smoke', { SYNTHETIC_PASSWORD_SMOKE: 'p'.repeat(16) }, noPrompt)) === 'p'.repeat(16),
+    ],
+    [
+      'short password from the environment refused',
+      await refuses(passwordFor('a', { SYNTHETIC_PASSWORD_A: 'short' }, noPrompt)),
+    ],
+    ['short typed password refused', await refuses(passwordFor('a', {}, async () => 'short'))],
     [
       'cleanup skips unmarked accounts',
       selectForDeletion([{ email: email('xt-a'), app_metadata: {} }], ['xt-a']).length === 0,
@@ -112,7 +154,7 @@ function selfTest() {
 const [command, ...rest] = process.argv.slice(2);
 const labels = rest.filter((a) => a !== '--apply');
 const apply = rest.includes('--apply');
-if (command === '--self-test') selfTest();
+if (command === '--self-test') await selfTest();
 else if (command === 'create') await create(labels, apply);
 else if (command === 'list') for (const u of await syntheticUsers()) console.log(`${u.email} ${u.id}`);
 else if (command === 'delete') await remove(labels, apply);

@@ -85,8 +85,8 @@ op run --environment <enduva-environment-id> --env-file ~/enduva-bootstrap.env -
 6. **Synthetic accounts.** `run node tools/synthetic-accounts.mjs create testflight smoke` shows what it would
    create; add `--apply` to create them. This creates
    `synthetic-testflight@example.com` (iOS sign-in, 0.11b) and `synthetic-smoke@example.com` (smoke tests, 0.12c),
-   already confirmed. Store each printed password in 1Password straight away. Running it again leaves existing
-   accounts unchanged.
+   already confirmed. With `--apply` it asks for each password (at least 16 characters, typing hidden) and never
+   prints or logs it. Running it again leaves existing accounts unchanged.
 7. **Record it.** Comment in #19 with the outputs of steps 3 and 5 (they contain no secrets) and the date. Revoke
    the personal access token if you created one just for this.
 
