@@ -1,7 +1,7 @@
 import type { MeUpdate } from '@enduva/api-client';
-import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { createFileRoute, redirect } from '@tanstack/react-router';
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useEffect, useState } from 'react';
 import { Field, formText, primaryButton, useHydrated } from '../components/form';
 import { m } from '../paraglide/messages.js';
 import { getLocale, setLocale } from '../paraglide/runtime.js';
@@ -13,14 +13,19 @@ export const Route = createFileRoute('/profile')({
   beforeLoad: ({ context, location }) => {
     if (context.viewer === null) throw redirect({ to: '/sign-in', search: { redirect: location.href } });
   },
+  // Always asks again on entering: a cached profile may belong to a session that was revoked, or to another account.
   loader: async ({ context, location }) => {
-    if ((await context.queryClient.ensureQueryData(profileQuery)) === null) {
+    const profile = await context.queryClient.fetchQuery({ ...profileQuery, staleTime: 0 });
+    if (profile === null) {
       // The API refused the session and the server dropped it. The cached viewer must go too, or /sign-in would
       // send the browser straight back here.
       context.queryClient.setQueryData(viewerQuery.queryKey, null);
       context.queryClient.removeQueries({ queryKey: profileQuery.queryKey });
       throw redirect({ to: '/sign-in', search: { redirect: location.href } });
     }
+    // Another tab signed in as someone else: the header follows the account this page now shows.
+    if (profile.me.id !== context.viewer?.id)
+      context.queryClient.setQueryData(viewerQuery.queryKey, () => ({ id: profile.me.id, email: profile.email }));
   },
   head: () => ({ meta: [{ title: `${m.profile_title()} · ${m.meta_title()}` }] }),
   component: ProfilePage,
@@ -45,10 +50,25 @@ function changes(form: FormData, me: Profile['me']): MeUpdate {
 }
 
 function ProfilePage() {
+  const profile = useSuspenseQuery(profileQuery).data;
+  // A later refetch (focus, reconnect) found the session gone.
+  return profile === null ? <SignedOut /> : <ProfileForm profile={profile} />;
+}
+
+/** A document load, so no router or query state of the old session survives. */
+function SignedOut() {
+  useEffect(() => window.location.assign('/sign-in?redirect=%2Fprofile'), []);
+  return null;
+}
+
+function ProfileForm({ profile }: Readonly<{ profile: Profile }>) {
   const queryClient = useQueryClient();
-  const { viewer } = Route.useRouteContext();
-  // The loader redirected unless there is a profile.
-  const profile = useSuspenseQuery(profileQuery).data!;
+  const { data: viewer } = useQuery(viewerQuery);
+  // A refetch brought another account's profile (another tab signed in): the header follows it.
+  useEffect(() => {
+    if (viewer?.id !== profile.me.id)
+      queryClient.setQueryData(viewerQuery.queryKey, () => ({ id: profile.me.id, email: profile.email }));
+  }, [queryClient, viewer?.id, profile]);
   const hydrated = useHydrated();
   const [pending, setPending] = useState(false);
   const [status, setStatus] = useState<'saved' | 'conflict' | 'invalid' | 'unavailable'>();
@@ -58,12 +78,16 @@ function ProfilePage() {
     const patch = changes(new FormData(event.currentTarget), profile.me);
     if (Object.keys(patch).length === 0) return setStatus('saved');
     setPending(true);
-    const saved = await updateProfile({ data: { etag: profile.etag, patch } }).catch((): ProfileSave => ({
-      ok: false,
-      error: 'unavailable',
-    }));
+    const saved = await updateProfile({ data: { userId: profile.me.id, etag: profile.etag, patch } }).catch(
+      (): ProfileSave => ({
+        ok: false,
+        error: 'unavailable',
+      }),
+    );
     setPending(false);
     if (!saved.ok && saved.error === 'signed_out') return window.location.assign('/sign-in?redirect=%2Fprofile');
+    // This browser is signed in as another account now: nothing was saved; show that account's page.
+    if (!saved.ok && saved.error === 'account_changed') return window.location.reload();
     const latest = 'profile' in saved ? saved.profile : undefined;
     if (latest !== undefined) queryClient.setQueryData(profileQuery.queryKey, latest);
     setStatus(saved.ok ? 'saved' : saved.error);
@@ -82,7 +106,7 @@ function ProfilePage() {
       <h1 id="profile-title" className="text-heading font-extrabold">
         {m.profile_title()}
       </h1>
-      <p className="break-words text-muted">{viewer?.email}</p>
+      <p className="break-words text-muted">{profile.email}</p>
       {/* Keyed by version: after a conflict the form shows the latest profile. */}
       {/* POST, and Save stays disabled until the page runs: personal fields never end up in a URL. */}
       <form key={profile.etag} method="post" className="flex flex-col gap-4" onSubmit={(event) => void save(event)}>
