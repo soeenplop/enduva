@@ -81,7 +81,7 @@ async function loginCookies(page: Page) {
   return {
     login,
     session,
-    all: cookies.filter((c) => c.name.startsWith('enduva-session') || c.name === 'enduva-login'),
+    all: cookies.filter((c) => /^enduva-(session-|ended-|login$)/.test(c.name)),
   };
 }
 
@@ -95,7 +95,7 @@ describe.skipIf(stack === undefined)(`sign-in (local Supabase${stack ? '' : ': S
     await page.getByLabel('Email').fill(email);
     await page.getByLabel('Password').fill(password);
     await submit(page, 'Create account');
-    await page.getByRole('status').filter({ hasText: 'Check your inbox' }).waitFor();
+    await page.getByRole('status').filter({ hasText: "you'll get an email with a link to confirm it" }).waitFor();
 
     await openMailedLink(page, email);
     await page.waitForURL(`${origin}/profile`);
@@ -128,7 +128,10 @@ describe.skipIf(stack === undefined)(`sign-in (local Supabase${stack ? '' : ': S
     const me = (token: string) => fetch(`${apiUrl}/v1/me`, { headers: { authorization: `Bearer ${token}` } });
     expect((await me(accessToken)).status).toBe(200);
     await Promise.all([page.waitForURL(`${origin}/`), page.getByRole('button', { name: 'Sign out' }).click()]);
-    expect((await loginCookies(page)).all).toEqual([]);
+    // The login's session is gone and its tombstone stays; `enduva-login` itself is left to the next sign-in.
+    const after = await loginCookies(page);
+    expect(after.session).toBeUndefined();
+    expect(after.all.map((c) => c.name)).toContain(`enduva-ended-${login!.value}`);
     expect((await me(accessToken)).status).toBe(401);
     await page.goto(`${origin}/profile`);
     await page.waitForURL(`${origin}/sign-in?redirect=%2Fprofile`);
@@ -180,6 +183,27 @@ describe.skipIf(stack === undefined)(`sign-in (local Supabase${stack ? '' : ': S
 });
 
 type User = Awaited<ReturnType<typeof newSession>>;
+
+const apiMe = (accessToken: string) =>
+  fetch(`${apiUrl}/v1/me`, { headers: { authorization: `Bearer ${accessToken}` } });
+
+/** Names the user's profile through the API, as the profile page would. */
+async function nameProfile(accessToken: string, displayName: string) {
+  const etag = (await apiMe(accessToken)).headers.get('etag')!;
+  const res = await fetch(`${apiUrl}/v1/me`, {
+    method: 'PATCH',
+    headers: { authorization: `Bearer ${accessToken}`, 'if-match': etag, 'content-type': 'application/json' },
+    body: JSON.stringify({ displayName }),
+  });
+  expect(res.status).toBe(200);
+}
+
+/** Ends the session at Auth behind the page's back (signed out elsewhere); the access token stays unexpired. */
+const revokeAtAuth = (user: User) =>
+  fetch(`${stack!.authUrl}/auth/v1/logout?scope=local`, {
+    method: 'POST',
+    headers: { apikey: stack!.publishableKey, authorization: `Bearer ${user.accessToken}` },
+  });
 const encodeSession = (user: User) =>
   Buffer.from(JSON.stringify([user.accessToken, user.refreshToken, user.expiresAt])).toString('base64url');
 
@@ -197,11 +221,11 @@ describe.skipIf(stack === undefined)('captcha', () => {
   // Cloudflare's test secret accepts any token, so a rejected token can't be produced locally. What can be shown: the
   // stack refuses sign-in without one (this fails if captcha is off), and the web server forwards the widget's token.
   it('is enforced by Auth: valid credentials without a token get captcha_failed', async () => {
-    const { email } = await newSession(stack!);
+    const { email, password } = await newSession(stack!);
     const res = await fetch(`${stack!.authUrl}/auth/v1/token?grant_type=password`, {
       method: 'POST',
       headers: { apikey: stack!.publishableKey, 'content-type': 'application/json' },
-      body: JSON.stringify({ email, password: 'irrelevant-for-the-captcha' }),
+      body: JSON.stringify({ email, password }),
     });
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error_code?: string }).error_code).toBe('captcha_failed');
@@ -217,7 +241,8 @@ describe.skipIf(stack === undefined)('captcha', () => {
     await page.getByLabel('Email').fill(`nobody-${randomUUID()}@example.com`);
     await page.getByLabel('Password').fill('any-password');
     await submit(page, 'Sign in');
-    await page.getByRole('alert').waitFor();
+    // The credentials error, so Auth accepted the token and judged the password: not a captcha rejection.
+    await page.getByRole('alert').filter({ hasText: "That didn't work. Check your email and password." }).waitFor();
     expect(bodies.some((body) => body.includes('XXXX.DUMMY.TOKEN.XXXX'))).toBe(true);
     expect((await loginCookies(page)).all).toEqual([]);
     await close();
@@ -258,15 +283,107 @@ describe.skipIf(stack === undefined)('account boundaries', () => {
     await page.goto(origin);
     await page.waitForLoadState('networkidle');
     // Signed out elsewhere: the token is still unexpired, but its session is gone.
-    await fetch(`${stack!.authUrl}/auth/v1/logout?scope=local`, {
-      method: 'POST',
-      headers: { apikey: stack!.publishableKey, authorization: `Bearer ${user.accessToken}` },
-    });
+    await revokeAtAuth(user);
     await page.getByRole('link', { name: 'Profile' }).click();
     await page.waitForURL(`${origin}/sign-in?redirect=%2Fprofile`);
     await page.getByRole('heading', { name: 'Sign in' }).waitFor();
     await new Promise((resolve) => setTimeout(resolve, 500));
     expect(page.url()).toBe(`${origin}/sign-in?redirect=%2Fprofile`);
+    expect(errors).toEqual([]);
+    await close();
+  });
+});
+
+describe.skipIf(stack === undefined)('two tabs, one browser', () => {
+  it('a sign-out answered after another tab signed in leaves the new login alone', async () => {
+    const { page: tab1, errors, close } = await open();
+    const tab2 = await tab1.context().newPage();
+    const [a, b] = await Promise.all([newSession(stack!), newSession(stack!)]);
+    await tab1.context().addCookies(sessionCookies(a, 'E2EloginA0000000'));
+    await tab1.goto(origin);
+    await tab1.waitForLoadState('networkidle');
+    // Tab 1's sign-out reaches the server now, its answer only after tab 2 signed in as B.
+    let release = () => {};
+    const released = new Promise<void>((resolve) => (release = resolve));
+    await tab1.route('**/_serverFn/**', async (route) => {
+      if (route.request().method() !== 'POST') return route.continue();
+      const response = await route.fetch();
+      await released;
+      await route.fulfill({ response });
+    });
+    const reloaded = tab1.waitForEvent('load');
+    await tab1.getByRole('button', { name: 'Sign out' }).click();
+    await expect.poll(async () => (await apiMe(a.accessToken)).status).toBe(401);
+    await tab2.context().addCookies(sessionCookies(b, 'E2EloginB0000000'));
+    release();
+    await reloaded;
+    expect((await loginCookies(tab2)).login?.value).toBe('E2EloginB0000000');
+    await tab2.goto(`${origin}/profile`);
+    await tab2.getByText(b.email).waitFor();
+    expect(errors).toEqual([]);
+    await close();
+  });
+
+  it('never saves to another account than the page shows', async () => {
+    const { page: tab1, errors, close } = await open();
+    const [a, b] = await Promise.all([newSession(stack!), newSession(stack!)]);
+    await Promise.all([nameProfile(a.accessToken, 'Alpha'), nameProfile(b.accessToken, 'Bravo')]);
+    await tab1.context().addCookies(sessionCookies(a, 'E2EloginA0000000'));
+    await tab1.goto(`${origin}/profile`);
+    await tab1.getByText(a.email).waitFor();
+    // Another tab signs in as B (the cookies a sign-in sets); tab 1 still shows A's form.
+    await tab1.context().addCookies(sessionCookies(b, 'E2EloginB0000000'));
+    await tab1.getByLabel('Name').fill('Changed');
+    const reloaded = tab1.waitForEvent('load');
+    await tab1.getByRole('button', { name: 'Save' }).click();
+    await reloaded;
+    // Nothing was written, and the page now shows B: its email and its own data.
+    await tab1.getByText(b.email).waitFor();
+    expect(await tab1.getByLabel('Name').inputValue()).toBe('Bravo');
+    const name = async (user: User) =>
+      ((await (await apiMe(user.accessToken)).json()) as { displayName: string }).displayName;
+    expect(await name(a)).toBe('Alpha');
+    expect(await name(b)).toBe('Bravo');
+    expect(errors).toEqual([]);
+    await close();
+  });
+});
+
+describe.skipIf(stack === undefined)('session loss and failures', () => {
+  it('re-checks the session when coming back to a profile it already loaded', async () => {
+    const { page, errors, close } = await open();
+    const user = await newSession(stack!);
+    await page.context().addCookies(sessionCookies(user));
+    await page.goto(`${origin}/profile`);
+    await page.getByText(user.email).waitFor();
+    await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Home' }).click();
+    await page.waitForURL(`${origin}/`);
+    await revokeAtAuth(user);
+    await page.getByRole('link', { name: 'Profile' }).click();
+    await page.waitForURL(`${origin}/sign-in?redirect=%2Fprofile`);
+    await page.getByRole('heading', { name: 'Sign in' }).waitFor();
+    expect(errors).toEqual([]);
+    await close();
+  });
+
+  it('says so when the sign-out request fails, and signs out on a retry', async () => {
+    const { page, errors, close } = await open();
+    const user = await newSession(stack!);
+    await page.context().addCookies(sessionCookies(user));
+    await page.goto(origin);
+    await page.waitForLoadState('networkidle');
+    await page.route('**/_serverFn/**', (route) =>
+      route.request().method() === 'POST' ? route.abort() : route.continue(),
+    );
+    await page.getByRole('button', { name: 'Sign out' }).click();
+    await page.getByRole('alert').filter({ hasText: "Signing out didn't work" }).waitFor();
+    expect(page.url()).toBe(`${origin}/`);
+    expect((await loginCookies(page)).session).toBeDefined();
+    await page.unroute('**/_serverFn/**');
+    const reloaded = page.waitForEvent('load');
+    await page.getByRole('button', { name: 'Sign out' }).click();
+    await reloaded;
+    expect((await loginCookies(page)).session).toBeUndefined();
     expect(errors).toEqual([]);
     await close();
   });
@@ -291,18 +408,6 @@ describe.skipIf(stack === undefined)('auth pages', () => {
 });
 
 describe.skipIf(stack === undefined)('SSR isolation with real sessions', () => {
-  /** Names the user's profile through the API, as the profile page would. */
-  async function nameProfile(accessToken: string, displayName: string) {
-    const headers = { authorization: `Bearer ${accessToken}` };
-    const etag = (await fetch(`${apiUrl}/v1/me`, { headers })).headers.get('etag')!;
-    const res = await fetch(`${apiUrl}/v1/me`, {
-      method: 'PATCH',
-      headers: { ...headers, 'if-match': etag, 'content-type': 'application/json' },
-      body: JSON.stringify({ displayName }),
-    });
-    expect(res.status).toBe(200);
-  }
-
   it('renders two users requesting the profile at once with their own data', async () => {
     const users = await Promise.all([newSession(stack!), newSession(stack!)]);
     await Promise.all(users.map((user, i) => nameProfile(user.accessToken, `Athlete ${String(i)}`)));

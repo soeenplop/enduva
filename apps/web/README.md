@@ -147,8 +147,13 @@ tests can never reach another server. The landing page's reflow check lives in [
 - `/auth/confirm` answers with `Referrer-Policy: no-referrer` and drops the token from its URL;
 - an unknown email gets the same answers as a known one; magic-link sign-in, and the link works only once;
 - a link to another account, confirmed with the signed-in user's address, leaves that login in place;
-- a session the API refuses during client navigation ends on `/sign-in` without bouncing back;
-- captcha: the stack refuses a sign-in without a token, and the web server forwards the widget's token. Cloudflare's
+- a session the API refuses during client navigation ends on `/sign-in` without bouncing back, also when coming
+  back to a profile loaded earlier;
+- two tabs: a sign-out answered after the other tab signed in leaves that new login alone, and a profile form
+  rendered for A never saves to B (it reloads and shows B);
+- a sign-out request that gets no answer is reported, and a retry signs out;
+- captcha: the stack refuses valid credentials without a token (`captcha_failed`), and the web server forwards the
+  widget's token (the answer is the credentials error, not a captcha rejection). Cloudflare's
   test secret accepts any token, so a *rejected* token can't be produced locally;
 - **SSR isolation with real sessions:** two users request `/profile` at once and each page shows only that user's
   email and name from `GET /v1/me` (fails with a module-level `QueryClient`); the server-rendered form posts and its

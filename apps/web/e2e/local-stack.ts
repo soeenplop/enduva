@@ -112,6 +112,7 @@ export async function newSession(stack: LocalStack) {
   });
   return {
     email,
+    password,
     accessToken: String(body['access_token']),
     refreshToken: String(body['refresh_token']),
     expiresAt: Number(body['expires_at']),
