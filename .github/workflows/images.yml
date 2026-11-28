@@ -1,7 +1,7 @@
 # Container images (task 0.12a, deploy/README.md): api (also the worker), web and landing from deploy/Dockerfile.
 # Pull requests build every image without pushing. A push to `main` builds and pushes them to GHCR, where deploys
-# reference them by digest (06-deployment.md, "Promote, don't rebuild"). Not a required check (yet): the `main`
-# ruleset lists only ci.yml's jobs, commitlint and cla.
+# reference them by digest (06-deployment.md, "Promote, don't rebuild"). The `image (…)` jobs are required checks
+# (.github/rulesets/main.json): renaming one needs the ruleset updated in the same PR.
 name: images
 
 on:
@@ -15,6 +15,14 @@ permissions:
 concurrency:
   group: images-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# The builder and the SBOM scanner are pinned as well, not only the actions: Buildx by release, BuildKit and the
+# scanner image by digest (the defaults float: the runner's Buildx, `moby/buildkit:buildx-stable-1`,
+# `docker/buildkit-syft-scanner:stable-1`). A bump changes version and digest together.
+env:
+  BUILDX_VERSION: v0.39.1
+  BUILDKIT_IMAGE: moby/buildkit:v0.35.1@sha256:baf6138eb8c37644800c7c913fba051e840ebb9ba13eaf92d92ef9a1712d0b4c
+  SBOM_GENERATOR: docker/buildkit-syft-scanner:1.13.0@sha256:a190379321cf51fba8c284a1834555b55e7bf58d577d574db23370461defc430
 
 jobs:
   build:
@@ -31,6 +39,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          version: ${{ env.BUILDX_VERSION }}
+          driver-opts: image=${{ env.BUILDKIT_IMAGE }}
       - name: Build (no push)
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
@@ -65,6 +76,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          version: ${{ env.BUILDX_VERSION }}
+          driver-opts: image=${{ env.BUILDKIT_IMAGE }}
       - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ghcr.io
@@ -87,7 +101,8 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.licenses=Elastic-2.0
           provenance: mode=max
-          sbom: true
+          # The web image carries sbom/web.cdx.json (bundled dependencies, deploy/Dockerfile); the scanner merges it.
+          sbom: generator=${{ env.SBOM_GENERATOR }}
           cache-from: type=gha,scope=image-${{ matrix.image }}-refs/heads/main
           cache-to: type=gha,mode=max,scope=image-${{ matrix.image }}-refs/heads/main
       - name: Digest
