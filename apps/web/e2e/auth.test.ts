@@ -87,7 +87,8 @@ async function loginCookies(page: Page) {
     loginId,
     session,
     tokens: session?.value.slice((loginId?.length ?? 0) + 1),
-    all: cookies.filter((c) => /^enduva-(session-[ab]|ended|login)$/.test(c.name)),
+    slot,
+    all: cookies.filter((c) => /^enduva-(session-[ab]|ended-[ab]|login)$/.test(c.name)),
   };
 }
 
@@ -109,7 +110,7 @@ describe.skipIf(stack === undefined)(`sign-in (local Supabase${stack ? '' : ': S
     expect(await page.getByText(email).isVisible()).toBe(true);
 
     // The login and session cookies are HttpOnly and Lax, and the tokens are nowhere in the page.
-    const { loginId, tokens, all } = await loginCookies(page);
+    const { loginId, slot, tokens, all } = await loginCookies(page);
     expect(tokens).toBeDefined();
     for (const cookie of all) expect(cookie).toMatchObject({ httpOnly: true, sameSite: 'Lax', path: '/' });
     const [accessToken, refreshToken] = JSON.parse(Buffer.from(tokens!, 'base64url').toString()) as [string, string];
@@ -134,7 +135,7 @@ describe.skipIf(stack === undefined)(`sign-in (local Supabase${stack ? '' : ': S
     // The login's session is gone and the marker names it as revoked; `enduva-login` is left to the next sign-in.
     const after = await loginCookies(page);
     expect(after.session).toBeUndefined();
-    expect(after.all.find((c) => c.name === 'enduva-ended')?.value).toBe(`${loginId!}.revoked`);
+    expect(after.all.find((c) => c.name === `enduva-ended-${slot}`)?.value).toBe(`${loginId!}.revoked`);
     expect((await me(accessToken)).status).toBe(401);
     await page.goto(`${origin}/profile`);
     await page.waitForURL(`${origin}/sign-in?redirect=%2Fprofile`);
@@ -349,6 +350,52 @@ describe.skipIf(stack === undefined)('two tabs, one browser', () => {
     expect((await loginCookies(tab2)).loginId).toBe('E2EloginB0000000');
     await tab2.goto(`${origin}/profile`);
     await tab2.getByText(b.email).waitFor();
+    expect(errors).toEqual([]);
+    await close();
+  });
+
+  it("an older sign-out answering late doesn't undo a newer login's sign-out", async () => {
+    const { page: tab1, errors, close } = await open();
+    const tab2 = await tab1.context().newPage();
+    const [a, b] = await Promise.all([newSession(stack!), newSession(stack!)]);
+    await tab1.context().addCookies(sessionCookies(a, 'E2EloginA0000000'));
+    await tab1.goto(origin);
+    await tab1.waitForLoadState('networkidle');
+    // A's sign-out reaches the server; its answer is held.
+    const held = await holdPosts(tab1);
+    await tab1.getByRole('button', { name: 'Sign out' }).click();
+    await held.sent;
+    // Meanwhile B signs in (slot b) and signs out in tab 2. Auth already lost B's session, so this sign-out is
+    // local-only: B's tokens are still unexpired.
+    await tab2.context().addCookies(sessionCookies(b, 'E2EloginB0000000', 'b'));
+    await revokeAtAuth(b);
+    await tab2.goto(origin);
+    await tab2.waitForLoadState('networkidle');
+    // Hold the page load that follows B's sign-out, so nothing cleans up before A's answer lands.
+    let releaseLoad = () => {};
+    const loadReleased = new Promise<void>((resolve) => (releaseLoad = resolve));
+    let markLoading = () => {};
+    const loading = new Promise<void>((resolve) => (markLoading = resolve));
+    await tab2.route('**/*', async (route) => {
+      if (!route.request().isNavigationRequest()) return route.continue();
+      markLoading();
+      await loadReleased;
+      await route.continue();
+    });
+    await tab2.getByRole('button', { name: 'Sign out' }).click();
+    await loading;
+    // B's sign-out answer is in; now A's lands, then B's page load goes out. B must stay signed out.
+    const reloaded = tab1.waitForEvent('load');
+    held.release();
+    await reloaded;
+    await held.dispose();
+    releaseLoad();
+    await tab2.waitForLoadState('load');
+    await tab2.unroute('**/*');
+    await tab2.goto(origin);
+    await tab2.getByRole('navigation', { name: 'Account' }).getByRole('link', { name: 'Sign in' }).waitFor();
+    expect(await tab2.getByText(b.email).count()).toBe(0);
+    expect((await loginCookies(tab2)).session).toBeUndefined();
     expect(errors).toEqual([]);
     await close();
   });
