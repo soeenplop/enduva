@@ -85,6 +85,9 @@ function ProfileForm({ profile }: Readonly<{ profile: Profile }>) {
       }),
     );
     setPending(false);
+    // The tab has moved on to another account since this save started (a refetch after another tab signed in): its
+    // answer belongs to that earlier account and is dropped, cache, status and language alike.
+    if (queryClient.getQueryData(profileQuery.queryKey)?.me.id !== profile.me.id) return;
     if (!saved.ok && saved.error === 'signed_out') return window.location.assign('/sign-in?redirect=%2Fprofile');
     // This browser is signed in as another account now: nothing was saved; show that account's page.
     if (!saved.ok && saved.error === 'account_changed') return window.location.reload();
