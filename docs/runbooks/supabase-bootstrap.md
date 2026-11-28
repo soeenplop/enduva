@@ -20,12 +20,18 @@ mirrors [`supabase/config.toml`](../../supabase/config.toml), but with the produ
 | Google | on only if `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set, off otherwise |
 | Sessions | access tokens 1 h, refresh token rotation, reuse interval 10 s |
 
-Without `--apply` the script only reads: it prints the fields that differ and whether an asymmetric key signs
+Without `--apply` the script only reads: it prints the fields that differ and whether an ES256 key signs
 tokens. With `--apply` it sends just those fields, then reads the config again and checks that nothing differs.
 Running it again is safe, and when nothing has changed it does nothing.
 
-The asymmetric JWT signing key is **checked, not created**. If the project still signs with the legacy HS256
-secret, step 4 rotates it in the dashboard.
+The ES256 JWT signing key is **checked, not created**. The API verifies ES256 by default (`AUTH_JWT_ALGORITHM`), so
+any other key in use (legacy HS256, RS256) means step 4 rotates it in the dashboard.
+
+**Email delivery:** custom SMTP (an EU transactional mail provider, chosen by the owner) is configured separately,
+before real users. Until then the hosted default sender applies, which is heavily rate-limited. Supabase may also
+refuse custom email templates without custom SMTP. If `--apply` is refused because of the `mailer_*` fields, run it
+with `SKIP_EMAIL_TEMPLATES=1` (everything else, including the sign-up lock, still applies), note it in #19, and
+apply again without it once SMTP is set up.
 
 ## Prerequisites
 
@@ -56,12 +62,14 @@ Below, `run` means `op run --env-file ~/enduva-bootstrap.env --`.
 3. **Dry run again.** The only fields left should be the secrets, if any. Everything else must be up to date.
 4. **JWT signing key.** If the script printed `ACTION NEEDED`, go to the dashboard → Project Settings → JWT Keys.
    Migrate the legacy JWT secret if asked to, create a standby **ES256** key, then **rotate** it in. No user or app
-   depends on the old key yet. Run step 1 again: it must print `JWT signing: asymmetric key in use.`
+   depends on the old key yet. Run step 1 again: it must print `JWT signing: ES256 key in use.`
 5. **Verify the sign-up lock.** `run node tools/supabase-auth-bootstrap.mjs --verify`. It must print
-   `Sign-up via the Auth API is rejected.`, which means `/auth/v1/settings` reports `disable_signup: true` and a direct
-   `POST /auth/v1/signup` with the publishable key fails. With captcha on, that request may be refused by the captcha
-   check first; the settings check is what proves the lock.
-6. **Synthetic accounts.** `run node tools/synthetic-accounts.mjs create testflight smoke`. This creates
+   `Sign-up via the Auth API is rejected.` It first reads `/auth/v1/settings` and stops, without sending anything, unless
+   that reports `disable_signup: true`. Only then does it send a direct `POST /auth/v1/signup` with the publishable key,
+   which must be refused with `signup_disabled`, or with `captcha_failed` because Turnstile runs before the sign-up
+   handler. A 429, a 5xx or any other answer fails the check.
+6. **Synthetic accounts.** `run node tools/synthetic-accounts.mjs create testflight smoke` shows what it would
+   create; add `--apply` to create them. This creates
    `synthetic-testflight@example.com` (iOS sign-in, 0.11b) and `synthetic-smoke@example.com` (smoke tests, 0.12c),
    already confirmed. Store each printed password in 1Password straight away. Running it again leaves existing
    accounts unchanged.
@@ -72,13 +80,15 @@ Below, `run` means `op run --env-file ~/enduva-bootstrap.env --`.
 
 Until G1.6, production holds synthetic data only (T25). Every account created by
 [`tools/synthetic-accounts.mjs`](../../tools/synthetic-accounts.mjs) is `synthetic-<label>@example.com` and is marked
-`app_metadata.synthetic = true`. Cleanup only touches accounts that have both the marker and that address.
+`app_metadata.synthetic = true`. Cleanup deletes only the labels you name, and only accounts that carry the
+marker. `testflight` and `smoke` are standing accounts: never name them in a cleanup.
 
 - `run node tools/synthetic-accounts.mjs list` lists them.
-- `run node tools/synthetic-accounts.mjs delete` shows what it would delete. With `--yes` it deletes them. Their app
-  rows go too, because every account table cascades from `auth.users` via `profiles`.
+- `run node tools/synthetic-accounts.mjs delete xt-a xt-b` shows what it would delete; add `--apply` to delete them.
+  Their app rows go too, because every account table cascades from `auth.users` via `profiles`.
 - Before G1.6, the cross-tenant suite may run against production only with such fixtures, and you delete them
-  afterwards. Create extra accounts for a run (for example `create xt-a xt-b`) and delete them when it's done. After
+  afterwards (0.12c, once the schema exists): `create xt-a xt-b --apply`, run the suite, then
+  `delete xt-a xt-b --apply`. After
   G1.6 it runs against staging and in the isolated environment instead.
 
 ## After the first gated migration (0.12c, not part of this bootstrap)

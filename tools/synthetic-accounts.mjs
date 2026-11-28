@@ -1,12 +1,13 @@
 // Pre-provisioned synthetic accounts on the hosted project (roadmap 0.12b, docs/runbooks/supabase-bootstrap.md).
 // Sign-up is off (G1.0), so test accounts are created through the Auth admin API. Run by the owner only.
-// Every account is `synthetic-<label>@example.com`, confirmed, and marked `app_metadata.synthetic = true`; cleanup
-// deletes only accounts that carry both the marker and that address pattern. Synthetic data only.
+// Every account is `synthetic-<label>@example.com`, confirmed, and marked `app_metadata.synthetic = true`. Cleanup
+// deletes only the labels it is given, and only accounts that carry the marker. Synthetic data only.
+// Without --apply, create and delete only print what they would do.
 //
 // Env:   SUPABASE_PROJECT_REF, SUPABASE_SECRET_KEY (the project's secret key, admin API)
-// Usage: node tools/synthetic-accounts.mjs create <label>…   creates missing accounts, prints each new password once
+// Usage: node tools/synthetic-accounts.mjs create <label>… [--apply]   creates missing accounts, prints passwords once
 //        node tools/synthetic-accounts.mjs list
-//        node tools/synthetic-accounts.mjs delete [--yes]     without --yes only lists what it would delete
+//        node tools/synthetic-accounts.mjs delete <label>… [--apply]   deletes exactly these accounts
 //        node tools/synthetic-accounts.mjs --self-test
 import { randomBytes } from 'node:crypto';
 
@@ -15,6 +16,16 @@ const PATTERN = /^synthetic-[a-z0-9-]+@example\.com$/;
 
 /** True only for accounts this script created. */
 export const isSynthetic = (user) => user.app_metadata?.synthetic === true && PATTERN.test(user.email ?? '');
+
+/** The synthetic accounts among `users` with exactly these labels. */
+export const selectForDeletion = (users, labels) =>
+  users.filter((u) => isSynthetic(u) && labels.map(email).includes(u.email));
+
+function checkLabels(labels) {
+  if (labels.length === 0 || labels.some((l) => !PATTERN.test(email(l)))) {
+    throw new Error('Give one or more labels (a-z, 0-9 and -)');
+  }
+}
 
 async function admin(method, path, body) {
   for (const n of ['SUPABASE_PROJECT_REF', 'SUPABASE_SECRET_KEY'])
@@ -37,12 +48,16 @@ async function syntheticUsers() {
   }
 }
 
-async function create(labels) {
-  if (labels.length === 0 || labels.some((l) => !PATTERN.test(email(l)))) throw new Error('Labels: a-z, 0-9 and -');
+async function create(labels, apply) {
+  checkLabels(labels);
   const existing = new Set((await syntheticUsers()).map((u) => u.email));
   for (const label of labels) {
     if (existing.has(email(label))) {
       console.log(`${email(label)}: exists, unchanged`);
+      continue;
+    }
+    if (!apply) {
+      console.log(`${email(label)}: would be created (run again with --apply)`);
       continue;
     }
     const password = randomBytes(18).toString('base64url');
@@ -56,14 +71,14 @@ async function create(labels) {
   }
 }
 
-async function remove(yes) {
-  const users = await syntheticUsers();
+async function remove(labels, apply) {
+  checkLabels(labels);
+  const users = selectForDeletion(await syntheticUsers(), labels);
   for (const u of users) {
-    if (yes) await admin('DELETE', `/users/${u.id}`);
-    console.log(`${u.email}: ${yes ? 'deleted' : 'would be deleted'}`);
+    if (apply) await admin('DELETE', `/users/${u.id}`);
+    console.log(`${u.email}: ${apply ? 'deleted' : 'would be deleted (run again with --apply)'}`);
   }
-  if (!yes && users.length > 0) console.log('Nothing deleted. Run again with --yes to delete these accounts.');
-  if (users.length === 0) console.log('No synthetic accounts.');
+  if (users.length === 0) console.log('No synthetic accounts with these labels.');
 }
 
 function selfTest() {
@@ -75,6 +90,19 @@ function selfTest() {
       !isSynthetic({ email: 'owner@enduva.soeenplop.dev', app_metadata: { synthetic: true } }),
     ],
     ['marker must be exactly true', !isSynthetic({ email: email('a'), app_metadata: { synthetic: 'true' } })],
+    [
+      'cleanup keeps the standing accounts',
+      JSON.stringify(
+        selectForDeletion(
+          ['testflight', 'smoke', 'xt-a', 'xt-b'].map((l) => ({ email: email(l), app_metadata: { synthetic: true } })),
+          ['xt-a', 'xt-b'],
+        ).map((u) => u.email),
+      ) === JSON.stringify([email('xt-a'), email('xt-b')]),
+    ],
+    [
+      'cleanup skips unmarked accounts',
+      selectForDeletion([{ email: email('xt-a'), app_metadata: {} }], ['xt-a']).length === 0,
+    ],
   ];
   for (const [name, pass] of checks) console.log(`${pass ? 'ok  ' : 'FAIL'} ${name}`);
   if (checks.some(([, pass]) => !pass)) process.exit(1);
@@ -82,8 +110,10 @@ function selfTest() {
 }
 
 const [command, ...rest] = process.argv.slice(2);
+const labels = rest.filter((a) => a !== '--apply');
+const apply = rest.includes('--apply');
 if (command === '--self-test') selfTest();
-else if (command === 'create') await create(rest);
+else if (command === 'create') await create(labels, apply);
 else if (command === 'list') for (const u of await syntheticUsers()) console.log(`${u.email} ${u.id}`);
-else if (command === 'delete') await remove(rest.includes('--yes'));
-else throw new Error('Usage: create <label>… | list | delete [--yes] | --self-test');
+else if (command === 'delete') await remove(labels, apply);
+else throw new Error('Usage: create <label>… [--apply] | list | delete <label>… [--apply] | --self-test');
