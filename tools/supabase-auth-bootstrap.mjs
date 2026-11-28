@@ -1,21 +1,23 @@
 // Initial Auth configuration of the hosted production project (roadmap 0.12b, docs/runbooks/supabase-bootstrap.md).
 // Run by the owner only. Without --apply it changes nothing: it prints the difference between the project's Auth
-// config and the desired one below, and whether the project signs tokens with an asymmetric key. --apply sends only
+// config and the desired one below, and whether the project signs tokens with an ES256 key. --apply sends only
 // the differing fields (Management API PATCH), so a second run finds nothing to do. --verify checks from outside,
-// with the publishable key, that sign-up is off and a sign-up request is rejected.
+// with the publishable key, that /settings reports sign-up off and only then that a sign-up request is refused.
 //
 // The desired values mirror supabase/config.toml (0.9b), with the production URLs. Keep the two in step.
 //
 // Env:  SUPABASE_ACCESS_TOKEN, SUPABASE_PROJECT_REF       always
 //       TURNSTILE_SECRET                                   dry run and --apply (production Turnstile secret)
 //       GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET             optional; without them Google stays disabled
+//       SKIP_EMAIL_TEMPLATES=1                             optional; leaves the email templates out (no SMTP yet)
 //       SUPABASE_PUBLISHABLE_KEY                           --verify
 // Usage: node tools/supabase-auth-bootstrap.mjs [--apply | --verify]
 //        node tools/supabase-auth-bootstrap.mjs --self-test
 import { readFileSync } from 'node:fs';
 
 const APP = 'https://app.enduva.soeenplop.dev';
-const ASYMMETRIC = new Set(['ES256', 'RS256', 'EdDSA']);
+// The API verifies ES256 by default (AUTH_JWT_ALGORITHM), so production must sign with ES256.
+const SIGNING_ALGORITHM = 'ES256';
 const template = (name) => readFileSync(new URL(`../supabase/templates/${name}.html`, import.meta.url), 'utf8');
 
 /** Desired Auth config, in the Management API's field names. */
@@ -39,12 +41,15 @@ export function desiredConfig(env, readTemplate = template) {
     security_captcha_enabled: true,
     security_captcha_provider: 'turnstile',
     security_captcha_secret: env.TURNSTILE_SECRET,
-    mailer_subjects_confirmation: 'Enduva: confirm your email address · Bestätige deine E-Mail-Adresse',
-    mailer_templates_confirmation_content: readTemplate('confirmation'),
-    mailer_subjects_magic_link: 'Enduva: your sign-in link · Dein Anmeldelink',
-    mailer_templates_magic_link_content: readTemplate('magic_link'),
     external_google_enabled: google,
     external_google_skip_nonce_check: false,
+    // Custom templates may need custom SMTP; SKIP_EMAIL_TEMPLATES=1 leaves them out until SMTP is set up.
+    ...(!env.SKIP_EMAIL_TEMPLATES && {
+      mailer_subjects_confirmation: 'Enduva: confirm your email address · Bestätige deine E-Mail-Adresse',
+      mailer_templates_confirmation_content: readTemplate('confirmation'),
+      mailer_subjects_magic_link: 'Enduva: your sign-in link · Dein Anmeldelink',
+      mailer_templates_magic_link_content: readTemplate('magic_link'),
+    }),
     ...(google && {
       external_google_client_id: env.GOOGLE_CLIENT_ID,
       external_google_secret: env.GOOGLE_CLIENT_SECRET,
@@ -59,9 +64,9 @@ export function diff(current, desired) {
 
 const show = (key, value) => (/secret/.test(key) ? '<redacted>' : JSON.stringify(value)?.slice(0, 80));
 
-/** True if a key with an asymmetric algorithm signs new tokens. */
+/** True if an ES256 key signs new tokens. */
 export function signingKeysOk(keys) {
-  return keys.some((k) => k.status === 'in_use' && ASYMMETRIC.has(k.algorithm));
+  return keys.some((k) => k.status === 'in_use' && k.algorithm === SIGNING_ALGORITHM);
 }
 
 function need(env, ...names) {
@@ -97,26 +102,38 @@ async function bootstrap(apply) {
   const { keys: signingKeys = [] } = await call('GET', '/config/auth/signing-keys');
   for (const k of signingKeys) console.log(`  signing key ${k.id}: ${k.algorithm}, ${k.status}`);
   if (!signingKeysOk(signingKeys)) {
-    console.error('ACTION NEEDED: no asymmetric key in use. Rotate to ES256 in the dashboard (see the runbook).');
+    console.error('ACTION NEEDED: no ES256 key in use. Rotate to ES256 in the dashboard (see the runbook).');
     process.exitCode = 1;
   } else {
-    console.log('JWT signing: asymmetric key in use.');
+    console.log('JWT signing: ES256 key in use.');
   }
 }
 
+/** Auth error codes that prove a sign-up request was refused (captcha runs before the sign-up handler). */
+export const REFUSED = new Set(['signup_disabled', 'captcha_failed']);
+
+// Read-only until the lock is confirmed: the sign-up probe is sent only once /settings reports sign-up off, so
+// Auth refuses it whatever it carries. Only the specific refusal codes count, never a 429 or 5xx.
 async function verify() {
   need(process.env, 'SUPABASE_PROJECT_REF', 'SUPABASE_PUBLISHABLE_KEY');
   const auth = `https://${process.env.SUPABASE_PROJECT_REF}.supabase.co/auth/v1`;
   const headers = { apikey: process.env.SUPABASE_PUBLISHABLE_KEY, 'content-type': 'application/json' };
-  const settings = await (await fetch(`${auth}/settings`, { headers })).json();
+  const settingsRes = await fetch(`${auth}/settings`, { headers });
+  const settings = settingsRes.ok ? await settingsRes.json() : {};
+  console.log(`GET /settings -> HTTP ${settingsRes.status}, disable_signup = ${settings.disable_signup}`);
+  if (settings.disable_signup !== true) {
+    console.error('FAILED: sign-up is not locked on production. No sign-up probe was sent.');
+    process.exit(1);
+  }
   const signup = await fetch(`${auth}/signup`, {
     method: 'POST',
     headers,
     body: JSON.stringify({ email: `signup-probe-${Date.now()}@example.com`, password: crypto.randomUUID() }),
   });
-  console.log(`settings.disable_signup = ${settings.disable_signup}; POST /signup -> HTTP ${signup.status}`);
-  if (settings.disable_signup !== true || signup.ok) {
-    console.error('FAILED: sign-up is not locked on production.');
+  const { error_code: code } = await signup.json().catch(() => ({}));
+  console.log(`POST /signup -> HTTP ${signup.status}, error_code = ${code}`);
+  if (!REFUSED.has(code)) {
+    console.error('FAILED: the sign-up probe was not refused with signup_disabled or captcha_failed.');
     process.exit(1);
   }
   console.log('Sign-up via the Auth API is rejected.');
@@ -127,6 +144,11 @@ function selfTest() {
   const desired = desiredConfig(env, (name) => `<p>${name}</p>`);
   const checks = [
     ['sign-up is locked', desired.disable_signup === true],
+    ['templates are set', desired.mailer_templates_confirmation_content === '<p>confirmation</p>'],
+    [
+      'templates can be left out',
+      !('mailer_templates_confirmation_content' in desiredConfig({ ...env, SKIP_EMAIL_TEMPLATES: '1' }, () => '')),
+    ],
     [
       'Google stays off without a client',
       desired.external_google_enabled === false && !('external_google_secret' in desired),
@@ -148,6 +170,7 @@ function selfTest() {
         { algorithm: 'ES256', status: 'in_use' },
       ]),
     ],
+    ['RS256 in use is not ok', !signingKeysOk([{ algorithm: 'RS256', status: 'in_use' }])],
     [
       'HS256 in use is not ok',
       !signingKeysOk([
