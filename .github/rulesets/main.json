@@ -40,7 +40,8 @@
           { "context": "e2e", "integration_id": 15368 },
           { "context": "image (api)", "integration_id": 15368 },
           { "context": "image (web)", "integration_id": 15368 },
-          { "context": "image (landing)", "integration_id": 15368 }
+          { "context": "image (landing)", "integration_id": 15368 },
+          { "context": "apple", "integration_id": 15368 }
         ]
       }
     }
