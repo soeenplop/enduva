@@ -1,30 +1,41 @@
-# Build context of deploy/Dockerfile (the repository root). Mirrors a clean checkout: no installs, build output,
-# caches or secrets from the host, and nothing the images don't build from.
-.git
-.github
-.worktrees
+# Build context of deploy/Dockerfile (the repository root). Allowlist: everything is excluded, then only the build
+# inputs are let back in. Credential and env files (`.npmrc`, `.env*`, `.envrc`, Docker or cloud configs) can never
+# reach a layer or the build cache, wherever they sit. No build step needs a credential.
+*
+
+# Workspace root and the packages the images build from. tools/package.json only, because it is a workspace
+# importer of the lockfile.
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!turbo.json
+!tools/package.json
+!apps/api
+!apps/web
+!apps/landing
+!packages
+!assets/brand/final/web
+!deploy/landing.nginx.conf
+
+# Excluded again inside the allowed directories: installs, build output, caches, generated sources (the build
+# regenerates them, as in a clean checkout) and any credential or env file.
 **/node_modules
 **/dist
-**/build
 **/.turbo
 **/coverage
+**/.tanstack
 **/.DS_Store
-
-# Env & secrets: only examples, which no image needs either.
+**/.npmrc
+**/.yarnrc*
+**/.envrc
 **/.env
 **/.env.*
-
-# Generated and scratch files (the packages' .gitignore files): the image build regenerates them.
+**/.netrc
+**/.docker
+**/*.pem
+**/*.key
 apps/*/src/routeTree.gen.ts
 apps/*/src/paraglide
 apps/*/project.inlang/cache
-apps/*/.tanstack
 apps/*/tsconfig.negative.json
 packages/api-client/src/generated
-
-# Not part of any image.
-apps/apple
-spikes
-docs
-supabase
-deploy/compose.yaml
