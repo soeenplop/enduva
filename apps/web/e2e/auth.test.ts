@@ -2,7 +2,7 @@
 // confirmation and magic-link mails read from Mailpit. The Turnstile widget is Cloudflare's, with its test site key.
 // CI starts the stack (e2e job); locally the suite is skipped without one.
 import { randomUUID } from 'node:crypto';
-import { type Browser, chromium, type Page } from 'playwright-core';
+import { type Browser, chromium, type Page, request, type Route } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { freePort, localStack, mailedLink, newSession, startApi, TURNSTILE_TEST_TOKEN } from './local-stack';
 import { startPreview } from './preview';
@@ -184,6 +184,33 @@ describe.skipIf(stack === undefined)(`sign-in (local Supabase${stack ? '' : ': S
 
 type User = Awaited<ReturnType<typeof newSession>>;
 
+/**
+ * Holds the server-function POSTs of `page`: each is sent at once through a separate request context (so its
+ * `Set-Cookie` doesn't reach the browser early), and its answer, cookies included, reaches the browser only on
+ * `release()`. `sent` resolves once the first held request has its answer from the server.
+ */
+async function holdPosts(page: Page) {
+  const upstream = await request.newContext();
+  let release = () => {};
+  const released = new Promise<void>((resolve) => (release = resolve));
+  let markSent = () => {};
+  const sent = new Promise<void>((resolve) => (markSent = resolve));
+  await page.route('**/_serverFn/**', async (route: Route) => {
+    const req = route.request();
+    if (req.method() !== 'POST') return route.continue();
+    const response = await upstream.fetch(req.url(), {
+      method: 'POST',
+      headers: await req.allHeaders(),
+      data: req.postDataBuffer() ?? undefined,
+      maxRedirects: 0,
+    });
+    markSent();
+    await released;
+    await route.fulfill({ response });
+  });
+  return { sent, release, dispose: () => upstream.dispose() };
+}
+
 const apiMe = (accessToken: string) =>
   fetch(`${apiUrl}/v1/me`, { headers: { authorization: `Bearer ${accessToken}` } });
 
@@ -302,21 +329,20 @@ describe.skipIf(stack === undefined)('two tabs, one browser', () => {
     await tab1.context().addCookies(sessionCookies(a, 'E2EloginA0000000'));
     await tab1.goto(origin);
     await tab1.waitForLoadState('networkidle');
-    // Tab 1's sign-out reaches the server now, its answer only after tab 2 signed in as B.
-    let release = () => {};
-    const released = new Promise<void>((resolve) => (release = resolve));
-    await tab1.route('**/_serverFn/**', async (route) => {
-      if (route.request().method() !== 'POST') return route.continue();
-      const response = await route.fetch();
-      await released;
-      await route.fulfill({ response });
-    });
+    // Tab 1's sign-out reaches the server now, its answer (and its cookies) only after tab 2 signed in as B.
+    const held = await holdPosts(tab1);
     const reloaded = tab1.waitForEvent('load');
     await tab1.getByRole('button', { name: 'Sign out' }).click();
-    await expect.poll(async () => (await apiMe(a.accessToken)).status).toBe(401);
+    await held.sent;
+    expect((await apiMe(a.accessToken)).status).toBe(401);
+    // The browser hasn't seen the sign-out's cookies yet: A is still fully in place.
+    const before = await loginCookies(tab1);
+    expect(before.login?.value).toBe('E2EloginA0000000');
+    expect(before.session).toBeDefined();
     await tab2.context().addCookies(sessionCookies(b, 'E2EloginB0000000'));
-    release();
+    held.release();
     await reloaded;
+    await held.dispose();
     expect((await loginCookies(tab2)).login?.value).toBe('E2EloginB0000000');
     await tab2.goto(`${origin}/profile`);
     await tab2.getByText(b.email).waitFor();
@@ -345,6 +371,50 @@ describe.skipIf(stack === undefined)('two tabs, one browser', () => {
     expect(await name(a)).toBe('Alpha');
     expect(await name(b)).toBe('Bravo');
     expect(errors).toEqual([]);
+    await close();
+  });
+});
+
+describe.skipIf(stack === undefined)('late answers after an account switch', () => {
+  it('drops a save answer for A once the tab shows B', async () => {
+    const { page: tab1, errors, close } = await open();
+    const [a, b] = await Promise.all([newSession(stack!), newSession(stack!)]);
+    await Promise.all([nameProfile(a.accessToken, 'Alpha'), nameProfile(b.accessToken, 'Bravo')]);
+    await tab1.context().addCookies(sessionCookies(a, 'E2EloginA0000000'));
+    await tab1.goto(`${origin}/profile`);
+    await tab1.getByText(a.email).waitFor();
+    // A's save reaches the server; its answer is held while the tab moves on to B.
+    const held = await holdPosts(tab1);
+    await tab1.getByLabel('Name').fill('Alpha 2');
+    await tab1.getByRole('button', { name: 'Save' }).click();
+    await held.sent;
+    await tab1.context().addCookies(sessionCookies(b, 'E2EloginB0000000'));
+    await tab1.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Home' }).click();
+    await tab1.getByRole('link', { name: 'Profile' }).click();
+    await tab1.getByText(b.email).waitFor();
+    expect(await tab1.getByLabel('Name').inputValue()).toBe('Bravo');
+    held.release();
+    // Give the late answer time to land: the page must keep showing B.
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(await tab1.getByText(a.email).count()).toBe(0);
+    expect(await tab1.getByLabel('Name').inputValue()).toBe('Bravo');
+    expect(await tab1.getByRole('status').filter({ hasText: 'Saved.' }).count()).toBe(0);
+    // A's save itself went through, for A.
+    const name = async (user: User) =>
+      ((await (await apiMe(user.accessToken)).json()) as { displayName: string }).displayName;
+    expect(await name(a)).toBe('Alpha 2');
+    expect(await name(b)).toBe('Bravo');
+    await held.dispose();
+    expect(errors).toEqual([]);
+    await close();
+  });
+
+  it('shows the local-only sign-out notice on home even while signed in', async () => {
+    const { page, close } = await open();
+    await page.context().addCookies(sessionCookies(await newSession(stack!)));
+    await page.goto(`${origin}/?signedOut=local`);
+    expect(page.url()).toBe(`${origin}/?signedOut=local`);
+    await page.getByRole('status').filter({ hasText: "couldn't end it on our server" }).waitFor();
     await close();
   });
 });

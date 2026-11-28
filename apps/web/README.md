@@ -152,8 +152,10 @@ tests can never reach another server. The landing page's reflow check lives in [
 - a link to another account, confirmed with the signed-in user's address, leaves that login in place;
 - a session the API refuses during client navigation ends on `/sign-in` without bouncing back, also when coming
   back to a profile loaded earlier;
-- two tabs: a sign-out answered after the other tab signed in leaves that new login alone, and a profile form
-  rendered for A never saves to B (it reloads and shows B);
+- two tabs: a sign-out answered after the other tab signed in leaves that new login alone (the answer and its
+  cookies are held in a separate request context until then), a profile form rendered for A never saves to B (it
+  reloads and shows B), and a save answer for A that arrives after the tab shows B is dropped;
+- the local-only sign-out notice shows on home even with an active login;
 - a sign-out request that gets no answer is reported, and a retry signs out;
 - captcha: the stack refuses valid credentials without a token (`captcha_failed`), and the web server forwards the
   widget's token (the answer is the credentials error, not a captcha rejection). Cloudflare's
