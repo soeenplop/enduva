@@ -40,7 +40,7 @@ All agents share the owner's GitHub account, so every comment starts with an aut
 
 The lead starts a **new** Sol run for every PR and for each re-check. A re-check receives the prior findings and replies, resolves fixed threads, answers disagreements and respects recorded owner rulings.
 
-A verdict is bound to a head SHA. **Any push invalidates it** and needs a new reviewer run (at least a delta review). After two exchanges without agreement on a thread, the lead adds `needs-arbiter` and posts `[Claude] arbiter request`. The owner's `Ruling: …` is final; apply it, reply `[Claude] ruling applied in <sha>`, resolve the thread, remove the label.
+A verdict is bound to a head SHA. **Any push invalidates it** and needs a new reviewer run (at least a delta review). **Exception (owner request, 2026-11-28):** a conflict-free merge of `main` into the branch (or down a stack) needs no reviewer run if the lead verifies that `git diff <old-head> <new-head>` has the same `git patch-id --stable` as the diff `main` gained, and records that in a `[Claude]` PR comment; the verdict then carries over to the new head. Reviews are budgeted: reasoning effort `low` by default, `medium` only for security, auth or production-write code; briefs scoped to the diff; one complete pass; minors and nits never block. After two exchanges without agreement on a thread, the lead adds `needs-arbiter` and posts `[Claude] arbiter request`. The owner's `Ruling: …` is final; apply it, reply `[Claude] ruling applied in <sha>`, resolve the thread, remove the label.
 
 ## Merging
 
