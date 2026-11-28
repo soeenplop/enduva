@@ -69,5 +69,6 @@
   "profile_error_invalid": "Some details aren't valid. Check them and try again.",
   "profile_error_unavailable": "Your profile couldn't be saved. Try again later.",
   "sign_out_not_confirmed": "You're signed out on this device. We couldn't end the session on our server, so it stays valid there for up to an hour.",
-  "auth_error_email_mismatch": "This link was sent to a different address. Request a new link on the sign-in page with your own address."
+  "auth_error_email_mismatch": "This link was sent to a different address. Request a new link on the sign-in page with your own address.",
+  "sign_out_failed": "Signing out didn't work: we couldn't reach the server. Check your connection and try again."
 }

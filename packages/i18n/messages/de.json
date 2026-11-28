@@ -69,5 +69,6 @@
   "profile_error_invalid": "Einige Angaben sind ungültig. Prüf sie und versuch es noch einmal.",
   "profile_error_unavailable": "Dein Profil konnte nicht gespeichert werden. Versuch es später noch einmal.",
   "sign_out_not_confirmed": "Du bist auf diesem Gerät abgemeldet. Wir konnten die Sitzung auf unserem Server nicht beenden, dort bleibt sie noch bis zu einer Stunde gültig.",
-  "auth_error_email_mismatch": "Dieser Link wurde an eine andere Adresse geschickt. Fordere auf der Anmeldeseite mit deiner eigenen Adresse einen neuen Link an."
+  "auth_error_email_mismatch": "Dieser Link wurde an eine andere Adresse geschickt. Fordere auf der Anmeldeseite mit deiner eigenen Adresse einen neuen Link an.",
+  "sign_out_failed": "Das Abmelden hat nicht geklappt: Wir haben den Server nicht erreicht. Prüf deine Verbindung und versuch es noch einmal."
 }
