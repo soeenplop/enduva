@@ -55,7 +55,10 @@ server functions ([`src/auth/functions.ts`](src/auth/functions.ts)), so no token
   functions run; a refresh token that Auth refuses ends that login, an outage or rate limit doesn't. A refresh or a
   dropped session only writes the cookie of the login it started from, so a late response from one tab can't replace
   or clear a newer sign-in from another. Sign-out leaves `enduva-login` alone too: it deletes its own login's session
-  and sets a tombstone (`enduva-ended-<id>`), so a refresh of that login answering later can't revive it. Server functions get the session from `sessionMiddleware` as
+  and sets a tombstone (`enduva-ended-<id>`), so a refresh of that login answering later can't revive it. Every
+  request prunes the session cookies and tombstones of other logins, so at most the active login's two remain; a
+  session cookie over 3800 bytes is never written (sign-in fails, a refresh signs out) rather than dropped by the
+  browser. Server functions get the session from `sessionMiddleware` as
   `context.session`. The web server only forwards the access token: the API verifies it on every call. Every response
   from the server is `Cache-Control: private, no-store` unless it sets its own, so no shared cache keeps a page or a
   cookie.
