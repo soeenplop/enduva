@@ -130,6 +130,8 @@ describe('OAuth callback', () => {
     expect(res.status).toBe(303);
     expect(res.headers.get('location')).toBe('https://app.example/sign-in?error=oauth');
     expect(res.headers.getSetCookie().some((c) => c.startsWith('__Host-enduva-login='))).toBe(false);
+    // An unverified callback leaves a pending sign-in's state alone.
+    expect(res.headers.getSetCookie().some((c) => c.startsWith('__Host-enduva-oauth='))).toBe(false);
   });
 });
 

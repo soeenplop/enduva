@@ -35,13 +35,14 @@ export async function finishOAuth(request: Request): Promise<Response> {
   const origin = webOrigin(request.url);
   const { name, options } = authCookie('enduva-oauth');
   const state = readState(getCookie(name));
-  deleteCookie(name, options);
   const code = new URL(request.url).searchParams.get('code');
   let target = '/sign-in?error=oauth';
   if (state !== undefined && code !== null && code.length <= 512) {
     try {
       const result = await exchangeCode(code, state.verifier);
       if (result.ok) {
+        // Spent only by a verified exchange: a callback anyone can trigger (a cross-site link) leaves it alone.
+        deleteCookie(name, options);
         await startLogin(result.value);
         target = state.redirect;
       }
