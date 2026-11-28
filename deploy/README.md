@@ -1,7 +1,7 @@
 # Deploy
 
-Container images and the local compose stack (task 0.12a). The Dokploy production stack, deploy script and receipts
-follow in 0.12c ([`06-deployment.md`](../docs/plan/06-deployment.md)).
+Container images and the local compose stack (task 0.12a), and the Dokploy production stack (task 0.12c,
+[`06-deployment.md`](../docs/plan/06-deployment.md)).
 
 ## Images
 
@@ -68,6 +68,20 @@ docker compose -f deploy/compose.yaml up --build --wait
   signed-out pages work. Mailed links point at the stack's `site_url` (the `vite dev` server).
 - The worker connects to the local database directly as `enduva_worker_login` and consumes its `smoke` job at start.
 - Stop with `docker compose -f deploy/compose.yaml down`.
+
+## Production stack
+
+- [`compose.production.yaml`](compose.production.yaml): the stack in Dokploy. Dokploy never builds anything and the
+  file is never edited there. Images are referenced by digest, every other value comes from the compose's
+  Environment in Dokploy, and domains/TLS come from its Domains tab.
+- [`scripts/deploy.sh`](scripts/deploy.sh) renders it with `ghcr.io/soeenplop/enduva-<image>@sha256:…` and sends it
+  to Dokploy as the compose's raw file, then starts the deploy and waits for its result. It calls the API that the
+  Dokploy CLI (v0.30) wraps, using curl. The CLI's own dependencies aren't pinned, and it reads a `.env` file from
+  the working directory. `--render-only` prints the rendered file. Tested with a stubbed API in
+  [`scripts/deploy.test.sh`](scripts/deploy.test.sh).
+- [`scripts/smoke.sh`](scripts/smoke.sh): API readiness, the web server and an SSR page, the landing page, and
+  (with a database URL) the worker's `smoke` job completed after the deploy.
+- The receipt-gated pipeline that runs them follows in the next 0.12c PR.
 
 ## Production migrations (receipt gate)
 

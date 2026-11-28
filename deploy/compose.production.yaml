@@ -1,0 +1,50 @@
+# Production stack in Dokploy (task 0.12c, docs/runbooks/deploy.md). Never edited in Dokploy and never built there:
+# deploy/scripts/deploy.sh replaces the three `@IMAGE_…@` placeholders with the image digests the pipeline built and
+# verified, and sends the result to Dokploy as a raw compose file. Every `${…}` comes from the compose's
+# Environment in Dokploy; a missing one stops the deploy. Domains and TLS are set in Dokploy's Domains tab, which
+# adds the Traefik labels and the `dokploy-network` to the services with a domain.
+#
+# The images are private on GHCR: Dokploy pulls them with its `ghcr.io` registry credentials (runbook).
+
+name: enduva-production
+
+services:
+  api:
+    image: '@IMAGE_API@'
+    environment:
+      NODE_ENV: production
+      # Transaction pooler as enduva_api_login (apps/api README, Environment).
+      DATABASE_URL: ${API_DATABASE_URL:?}
+      AUTH_ISSUER: ${AUTH_ISSUER:?}
+      # Traefik's own address(es) only, never the dokploy-network subnet (apps/api README, Client IPs).
+      TRUST_PROXY: ${TRUST_PROXY:-}
+    restart: unless-stopped
+
+  # Same image, pg-boss over the session pooler as enduva_worker_login (apps/api README, Worker).
+  worker:
+    image: '@IMAGE_API@'
+    command: [--enable-source-maps, dist/worker.js]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${WORKER_DATABASE_URL:?}
+    healthcheck:
+      disable: true
+    restart: unless-stopped
+
+  web:
+    image: '@IMAGE_WEB@'
+    environment:
+      ENDUVA_API_URL: http://api:3000
+      ENDUVA_AUTH_URL: ${SUPABASE_URL:?}
+      ENDUVA_AUTH_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY:?}
+      ENDUVA_WEB_ORIGIN: https://app.enduva.de
+      # Production Turnstile site key: public, sent to the sign-in pages. The secret stays in Supabase Auth.
+      ENDUVA_TURNSTILE_SITE_KEY: 0x4AAAAAAGXBOONCBWDjvHnR
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  landing:
+    image: '@IMAGE_LANDING@'
+    restart: unless-stopped
