@@ -2,9 +2,10 @@
 // assets from dist/client and hands every other request to the SSR fetch handler in dist/server/server.js.
 // Listens on HOST:PORT (default 0.0.0.0:3000) and drains open requests on SIGTERM/SIGINT.
 //
-// Behind TLS termination (Traefik) the request URL stays the plain-HTTP backend origin: srvx ignores
-// `X-Forwarded-Proto`. Server-function calls that rely on TanStack's `Origin` fallback (no Fetch Metadata) are then
-// refused with 403. Trusting forwarded headers from the configured ingress only is task 0.12c (#136).
+// Behind TLS termination (Traefik) the socket sees the plain-HTTP backend origin. With `ENDUVA_WEB_ORIGIN` set (required
+// in production), the SSR handler sees every request at that public origin instead, so TanStack's `Origin` check of
+// server-function calls compares against `https://app…`. `X-Forwarded-*` headers are never read: no peer can
+// change the origin the app believes it serves (#136).
 import { fileURLToPath } from 'node:url';
 
 import { serve } from 'srvx/node';
@@ -27,10 +28,25 @@ const plain = staticMiddleware({ dir: client });
 const files = (request, next) =>
   new URL(request.url).pathname.startsWith('/assets/') ? hashed(request, next) : plain(request, next);
 
+const publicOrigin = process.env['ENDUVA_WEB_ORIGIN'] ? new URL(process.env['ENDUVA_WEB_ORIGIN']).origin : undefined;
+
+/** The request with its URL moved to the public origin; path, query, method, headers and body unchanged. */
+const atPublicOrigin = (request) => {
+  if (publicOrigin === undefined) return request;
+  const { pathname, search } = new URL(request.url);
+  return new Request(new URL(`${pathname}${search}`, publicOrigin), {
+    method: request.method,
+    headers: request.headers,
+    body: request.body,
+    duplex: 'half',
+    signal: request.signal,
+  });
+};
+
 serve({
   hostname: process.env['HOST'] ?? '0.0.0.0',
   port: process.env['PORT'] ?? 3000,
   middleware: [health, files],
-  fetch: (request) => ssr.fetch(request),
+  fetch: (request) => ssr.fetch(atPublicOrigin(request)),
   gracefulShutdown: true,
 });
