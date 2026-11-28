@@ -3,7 +3,7 @@ import { MeUpdate } from '@enduva/contracts';
 import { createServerFn } from '@tanstack/react-start';
 import * as z from 'zod';
 import { sessionMiddleware } from '../auth/middleware';
-import { clearSession } from '../auth/session.server';
+import { dropSession } from '../auth/session.server';
 import { apiBaseUrl } from '../config.server';
 
 /** The profile with the `ETag` that a `PATCH` must send back in `If-Match` (apps/api README, `/v1/me`). */
@@ -26,7 +26,7 @@ async function fetchProfile(accessToken: string): Promise<Profile | null> {
   if (res.status === 200) return { me: res.data, etag: res.headers.get('etag') ?? '' };
   // The API refused the session (signed out elsewhere, revoked, deleted): drop the cookie.
   if (res.status === 401) {
-    clearSession();
+    await dropSession();
     return null;
   }
   console.error('GET /v1/me failed', res.status);
@@ -58,7 +58,7 @@ export const updateProfile = createServerFn({ method: 'POST' })
       const res = await updateMe(patch, { 'If-Match': input.data.etag }, api(accessToken));
       if (res.status === 200) return { ok: true, profile: { me: res.data, etag: res.headers.get('etag') ?? '' } };
       if (res.status === 401) {
-        clearSession();
+        await dropSession();
         return { ok: false, error: 'signed_out' };
       }
       if (res.status === 412) {

@@ -41,7 +41,7 @@
   "sign_up_to_sign_in": "Sign in",
   "sign_up_check_inbox": "Check your inbox: we've sent a link to confirm your address. If you already have an account, sign in instead.",
   "confirm_title": "Confirm your email address",
-  "confirm_body": "Continue to confirm your address and sign in.",
+  "confirm_body": "Enter the email address this link was sent to, then continue.",
   "confirm_submit": "Continue",
   "captcha_label": "Security check",
   "captcha_unavailable": "The security check couldn't load. Check your connection, or allow challenges.cloudflare.com for this page.",
@@ -67,5 +67,7 @@
   "profile_saved": "Saved.",
   "profile_error_conflict": "Your profile was changed somewhere else. The form now shows the latest version: check it and save again.",
   "profile_error_invalid": "Some details aren't valid. Check them and try again.",
-  "profile_error_unavailable": "Your profile couldn't be saved. Try again later."
+  "profile_error_unavailable": "Your profile couldn't be saved. Try again later.",
+  "sign_out_not_confirmed": "You're signed out on this device. We couldn't end the session on our server, so it stays valid there for up to an hour.",
+  "auth_error_email_mismatch": "This link was sent to a different address. Request a new link on the sign-in page with your own address."
 }

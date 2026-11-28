@@ -74,8 +74,14 @@ export function AppHeader() {
   );
 }
 
-/** A full page load afterwards, so nothing of the signed-out user stays in the query cache. */
+/**
+ * A full page load afterwards, so nothing of the signed-out user stays in the query cache. If Auth couldn't confirm
+ * the sign-out, the sign-in page says the session stays valid at the server until it expires.
+ */
 async function signOutAndReload() {
-  await signOut().catch(() => undefined);
-  window.location.assign('/');
+  const revoked = await signOut().then(
+    (result) => result.revoked,
+    () => false,
+  );
+  window.location.assign(revoked ? '/' : '/sign-in?signedOut=local');
 }

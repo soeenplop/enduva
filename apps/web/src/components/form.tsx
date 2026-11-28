@@ -1,4 +1,4 @@
-import { type InputHTMLAttributes, type ReactNode, useId } from 'react';
+import { type InputHTMLAttributes, type ReactNode, useId, useSyncExternalStore } from 'react';
 import type { AuthError, AuthOutcome } from '../auth/functions';
 import { m } from '../paraglide/messages.js';
 
@@ -69,3 +69,16 @@ export function formText(form: FormData, name: string): string {
   const value = form.get(name);
   return typeof value === 'string' ? value : '';
 }
+
+const noSubscription = () => () => {};
+
+/**
+ * False in the server render and until hydration, then true. Forms keep their submit button disabled until then, so
+ * a native submit never happens before their handler exists.
+ */
+export const useHydrated = () =>
+  useSyncExternalStore(
+    noSubscription,
+    () => true,
+    () => false,
+  );

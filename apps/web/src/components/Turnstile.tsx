@@ -47,6 +47,8 @@ export function Turnstile({
   const widget = useRef<string | undefined>(undefined);
   const report = useRef(onToken);
   const [failed, setFailed] = useState(false);
+  // Bumped by "Try again" when the script itself failed, which loads it once more.
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     report.current = onToken;
@@ -54,25 +56,40 @@ export function Turnstile({
 
   useEffect(() => {
     let cancelled = false;
-    loadTurnstile().then(
-      (api) => {
-        if (cancelled || container.current === null) return;
+    const fail = () => {
+      report.current(null);
+      setFailed(true);
+    };
+    loadTurnstile().then((api) => {
+      if (cancelled || container.current === null) return;
+      try {
         widget.current = api.render(container.current, {
           sitekey: siteKey,
           language: getLocale(),
-          callback: (token: string) => report.current(token),
+          callback: (token: string) => {
+            setFailed(false);
+            report.current(token);
+          },
           'expired-callback': () => report.current(null),
-          'error-callback': () => report.current(null),
+          // The challenge failed after the script loaded (network, a blocked frame): say so, and offer a retry.
+          'error-callback': fail,
         });
-      },
-      () => setFailed(true),
-    );
+      } catch {
+        fail();
+      }
+    }, fail);
     return () => {
       cancelled = true;
       if (widget.current !== undefined) window.turnstile?.remove(widget.current);
       widget.current = undefined;
     };
-  }, [siteKey]);
+  }, [siteKey, attempt]);
+
+  function retry() {
+    setFailed(false);
+    if (widget.current !== undefined) window.turnstile?.reset(widget.current);
+    else setAttempt((n) => n + 1);
+  }
 
   useEffect(() => {
     if (resetKey === 0 || widget.current === undefined) return;
@@ -83,7 +100,14 @@ export function Turnstile({
   return (
     <div role="group" aria-label={m.captcha_label()}>
       <div ref={container} className="min-h-16" />
-      {failed && <p className="text-small text-danger">{m.captcha_unavailable()}</p>}
+      {failed && (
+        <div role="alert" className="flex flex-wrap items-center gap-3 text-small text-danger">
+          <p>{m.captcha_unavailable()}</p>
+          <button type="button" className="font-semibold underline" onClick={retry}>
+            {m.error_retry()}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
