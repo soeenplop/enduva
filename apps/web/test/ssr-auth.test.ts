@@ -121,6 +121,23 @@ describe('OAuth callback', () => {
     expect(jar.cookies.has('__Host-enduva-oauth')).toBe(false);
   });
 
+  it('keeps the fixed cookie set however many sign-ins overlap', async () => {
+    // Forty sign-ins (Google callbacks) in two waves, each wave sent from one snapshot of an A-signed-in browser and
+    // answered in shuffled order.
+    const jar = signedIn(LOGIN_A, [jwt('a@example.com'), 'refresh-a', 4_102_444_800]);
+    const fixed = ['__Host-enduva-ended', '__Host-enduva-login', '__Host-enduva-session-a', '__Host-enduva-session-b'];
+    for (let wave = 0; wave < 2; wave++) {
+      const cookie = `${jar.header()}; ${oauthState('/')}`;
+      const answers = await Promise.all(Array.from({ length: 20 }, () => callback('?code=good-code', cookie)));
+      for (const res of answers.sort(() => Math.random() - 0.5)) jar.apply(res);
+      for (const name of jar.cookies.keys()) expect(fixed).toContain(name);
+      expect(Buffer.byteLength(jar.header())).toBeLessThan(8 * 1024);
+    }
+    // The browser ends up in one consistent login: the pointer's ID is the one in its slot.
+    const [slot, id] = (jar.cookies.get('__Host-enduva-login') ?? '').split('.');
+    expect(jar.cookies.get(`__Host-enduva-session-${slot ?? ''}`)?.startsWith(`${id ?? ''}.`)).toBe(true);
+  });
+
   it('never redirects off the app', async () => {
     const res = await callback('?code=good-code', oauthState('//evil.example/'));
     expect(res.headers.get('location')).toBe('https://app.example/');
