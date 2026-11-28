@@ -57,20 +57,22 @@ services:
       disable: true
     restart: unless-stopped
 
-  # A stub until 0.12c: it logs one line and exits 0, which `up --wait` would report as a failure. Opt in with
-  # `--profile worker`; 0.12c drops the profile.
+  # pg-boss over the direct port as the worker login: the local pooler runs in transaction mode, and the worker
+  # needs a session (apps/api README, Worker). Hosted, it uses the session pooler.
   worker:
     image: enduva-api:local
-    profiles: [worker]
     depends_on:
       api:
         condition: service_started
     <<: *host-gateway
-    environment: *api-env
+    environment:
+      NODE_ENV: production
+      # The seeded local password of the worker login (supabase/seed.sql). Not a secret.
+      DATABASE_URL: postgresql://enduva_worker_login:enduva-local-worker@host.docker.internal:54322/postgres
     command: [--enable-source-maps, dist/worker.js]
     healthcheck:
       disable: true
-    restart: 'no'
+    restart: unless-stopped
 
   web:
     build: { <<: *build, target: web }

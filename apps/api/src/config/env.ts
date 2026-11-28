@@ -3,6 +3,7 @@ import { isIP } from 'node:net';
 import * as z from 'zod';
 
 export const API_LOGIN = 'enduva_api_login';
+export const WORKER_LOGIN = 'enduva_worker_login';
 
 /**
  * Query parameters a `DATABASE_URL` may carry: TLS settings only. node-postgres (pg-connection-string) lets query
@@ -12,7 +13,7 @@ export const API_LOGIN = 'enduva_api_login';
 const allowedDatabaseParams = new Set(['sslmode', 'sslrootcert', 'uselibpqcompat']);
 
 /** The login node-postgres will use: the URL's user name, with no override. `<role>.<tenant>` is Supabase's pooler. */
-function connectsAsApiLogin(value: string): boolean {
+function connectsAs(login: string, value: string): boolean {
   const url = URL.parse(value);
   if (url === null) return false;
   if ([...url.searchParams.keys()].some((key) => !allowedDatabaseParams.has(key))) return false;
@@ -22,15 +23,16 @@ function connectsAsApiLogin(value: string): boolean {
   } catch {
     return false;
   }
-  return user === API_LOGIN || user.startsWith(`${API_LOGIN}.`);
+  return user === login || user.startsWith(`${login}.`);
 }
 
-/** Postgres URL of the API's login role (ADR-0002). */
-const databaseUrl = z
-  .url({ protocol: /^postgres(ql)?$/, error: 'must be a postgres:// or postgresql:// URL' })
-  .refine(connectsAsApiLogin, {
-    error: `must connect as ${API_LOGIN} (ADR-0002), never as postgres or service_role, with no query parameters but sslmode, sslrootcert and uselibpqcompat`,
-  });
+/** Postgres URL of a login role (ADR-0002). */
+const databaseUrl = (login: string) =>
+  z
+    .url({ protocol: /^postgres(ql)?$/, error: 'must be a postgres:// or postgresql:// URL' })
+    .refine((value) => connectsAs(login, value), {
+      error: `must connect as ${login} (ADR-0002), never as postgres or service_role, with no query parameters but sslmode, sslrootcert and uselibpqcompat`,
+    });
 
 /**
  * A decimal port number. Blank or whitespace-only values are rejected instead of coerced to 0, which would silently
@@ -94,7 +96,7 @@ export const envSchema = z.object({
   PORT: port.default(3000),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   /** Supabase transaction-pooler URL with the `enduva_api_login` role (ADR-0002). */
-  DATABASE_URL: databaseUrl,
+  DATABASE_URL: databaseUrl(API_LOGIN),
   /** Pool size per process (06-deployment → Connection budget). */
   DATABASE_POOL_MAX: positiveInt.max(100).default(10),
   /** How long a checkout may wait for a connection, queued or new, before it fails (node-postgres). */
@@ -117,6 +119,18 @@ export const envSchema = z.object({
 
 export type Env = z.output<typeof envSchema>;
 
+/** Environment of the worker process (`dist/worker.js`). */
+export const workerEnvSchema = z.object({
+  NODE_ENV: envSchema.shape.NODE_ENV,
+  LOG_LEVEL: envSchema.shape.LOG_LEVEL,
+  /** Supabase session-pooler URL with the `enduva_worker_login` role (ADR-0002, 06-deployment → Connections). */
+  DATABASE_URL: databaseUrl(WORKER_LOGIN),
+  /** Pool size per process, pg-boss maintenance included (06-deployment → Connection budget). */
+  DATABASE_POOL_MAX: positiveInt.max(100).default(5),
+});
+
+export type WorkerEnv = z.output<typeof workerEnvSchema>;
+
 export class InvalidEnvError extends Error {
   override readonly name = 'InvalidEnvError';
 }
@@ -126,7 +140,16 @@ export class InvalidEnvError extends Error {
  * values: `DATABASE_URL` carries a password.
  */
 export function loadEnv(source: Readonly<Record<string, string | undefined>>): Env {
-  const result = envSchema.safeParse(source);
+  return parseEnv(envSchema, source);
+}
+
+/** Parses the worker's environment, with the same error rules as `loadEnv`. */
+export function loadWorkerEnv(source: Readonly<Record<string, string | undefined>>): WorkerEnv {
+  return parseEnv(workerEnvSchema, source);
+}
+
+function parseEnv<T extends z.ZodType>(schema: T, source: Readonly<Record<string, string | undefined>>): z.output<T> {
+  const result = schema.safeParse(source);
   if (result.success) return result.data;
   const problems = result.error.issues.map((issue) => {
     const name = issue.path.join('.');

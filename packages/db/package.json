@@ -38,6 +38,7 @@
     "vitest": "catalog:"
   },
   "dependencies": {
+    "@opentelemetry/api": "1.10.0",
     "drizzle-orm": "0.45.4",
     "pg": "8.23.1"
   }
