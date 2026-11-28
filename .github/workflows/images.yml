@@ -55,6 +55,10 @@ jobs:
             type=gha,scope=image-${{ matrix.image }}-refs/heads/main
             type=gha,scope=image-${{ matrix.image }}-${{ github.ref }}
           cache-to: type=gha,mode=max,scope=image-${{ matrix.image }}-${{ github.ref }}
+      # Once per run: planted credential files must stay out of the build context (.dockerignore).
+      - name: Build context keeps credentials out
+        if: matrix.image == 'api'
+        run: tools/check-docker-context.sh
 
   publish:
     name: publish (${{ matrix.image }})
