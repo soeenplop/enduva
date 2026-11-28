@@ -32,9 +32,9 @@ class Jar {
   }
 }
 
-/** A browser signed in as login `id` with these tokens. */
-const signedIn = (id: string, tokens: [string, string, number]) =>
-  new Jar({ '__Host-enduva-login': id, [`__Host-enduva-session-${id}`]: encode(tokens) });
+/** A browser signed in as login `id` in `slot` with these tokens. */
+const signedIn = (id: string, tokens: [string, string, number], slot: 'a' | 'b' = 'a') =>
+  new Jar({ '__Host-enduva-login': `${slot}.${id}`, [`__Host-enduva-session-${slot}`]: `${id}.${encode(tokens)}` });
 
 /** Refresh calls wait for this before Auth answers, so a test can act while one is in flight. */
 let refreshGate: Promise<void> = Promise.resolve();
@@ -110,9 +110,11 @@ describe('OAuth callback', () => {
     expect(res.headers.get('location')).toBe('https://app.example/status?tab=1');
     const jar = new Jar({ '__Host-enduva-oauth': 'x' });
     jar.apply(res);
-    const loginId = jar.cookies.get('__Host-enduva-login');
-    expect(loginId).toMatch(/^[A-Za-z0-9_-]{16}$/);
-    expect(jar.cookies.get(`__Host-enduva-session-${loginId}`)).toBe(encode(['a.b.c', 'refresh-1', 4_102_444_800]));
+    const pointer = jar.cookies.get('__Host-enduva-login') ?? '';
+    expect(pointer).toMatch(/^a\.[A-Za-z0-9_-]{16}$/);
+    expect(jar.cookies.get('__Host-enduva-session-a')).toBe(
+      `${pointer.slice(2)}.${encode(['a.b.c', 'refresh-1', 4_102_444_800])}`,
+    );
     for (const line of res.headers.getSetCookie().filter((c) => !c.startsWith('__Host-enduva-oauth=')))
       expect(line).toMatch(/; Path=\/; HttpOnly; Secure; SameSite=Lax/i);
     // The PKCE state is spent.
@@ -155,10 +157,10 @@ describe('session cookies', () => {
     const res = await page(jar);
     expect(res.status).toBe(200);
     jar.apply(res);
-    expect(jar.cookies.has(`__Host-enduva-session-${LOGIN_A}`)).toBe(false);
+    expect(jar.cookies.has('__Host-enduva-session-a')).toBe(false);
   });
 
-  it('refreshes an expiring session once per request and stores the new tokens for the same login', async () => {
+  it('refreshes an expiring session once per request and stores the new tokens in the same slot', async () => {
     const jar = signedIn(LOGIN_A, expiring('refresh-ok'));
     const before = calls.length;
     const res = await page(jar);
@@ -166,18 +168,18 @@ describe('session cookies', () => {
     const set = res.headers.getSetCookie();
     expect(set).toHaveLength(1);
     expect(set[0]).toMatch(
-      /^__Host-enduva-session-A{16}=[^;]+; Max-Age=2592000; Path=\/; HttpOnly; Secure; SameSite=Lax/i,
+      /^__Host-enduva-session-a=A{16}\.[^;]+; Max-Age=2592000; Path=\/; HttpOnly; Secure; SameSite=Lax/i,
     );
     jar.apply(res);
-    expect(jar.cookies.get(`__Host-enduva-session-${LOGIN_A}`)).toBe(
-      encode([jwt('fresh@example.com'), 'refresh-2', 4_102_444_800]),
+    expect(jar.cookies.get('__Host-enduva-session-a')).toBe(
+      `${LOGIN_A}.${encode([jwt('fresh@example.com'), 'refresh-2', 4_102_444_800])}`,
     );
   });
 
   it('ends the login when Auth refuses the refresh token', async () => {
     const jar = signedIn(LOGIN_A, expiring('refresh-revoked'));
     jar.apply(await page(jar));
-    expect(jar.cookies.has(`__Host-enduva-session-${LOGIN_A}`)).toBe(false);
+    expect(jar.cookies.has('__Host-enduva-session-a')).toBe(false);
   });
 
   it('keeps the session through an Auth outage', async () => {
@@ -189,56 +191,68 @@ describe('session cookies', () => {
     ['a refresh', 'refresh-ok'],
     ['a refused refresh', 'refresh-revoked'],
   ])('lets a late %s leave a newer login alone', async (_, refreshToken) => {
-    // Tab 1 is still refreshing login A when tab 2 signs in as B (the cookies a sign-in sets).
+    // Tab 1 is still refreshing login A (slot a) when tab 2 signs in as B, which takes slot b.
     let release = () => {};
     refreshGate = new Promise((resolve) => (release = resolve));
     const jar = signedIn(LOGIN_A, expiring(refreshToken));
     const late = page(jar);
     await new Promise((resolve) => setTimeout(resolve, 50));
-    const sessionB = encode([jwt('b@example.com'), 'refresh-b', 4_102_444_800]);
-    jar.cookies.set('__Host-enduva-login', LOGIN_B);
-    jar.cookies.set(`__Host-enduva-session-${LOGIN_B}`, sessionB);
+    const sessionB = `${LOGIN_B}.${encode([jwt('b@example.com'), 'refresh-b', 4_102_444_800])}`;
+    jar.cookies.set('__Host-enduva-login', `b.${LOGIN_B}`);
+    jar.cookies.set('__Host-enduva-session-b', sessionB);
     release();
     jar.apply(await late);
     refreshGate = Promise.resolve();
-    expect(jar.cookies.get('__Host-enduva-login')).toBe(LOGIN_B);
-    expect(jar.cookies.get(`__Host-enduva-session-${LOGIN_B}`)).toBe(sessionB);
+    expect(jar.cookies.get('__Host-enduva-login')).toBe(`b.${LOGIN_B}`);
+    expect(jar.cookies.get('__Host-enduva-session-b')).toBe(sessionB);
   });
 
   it.each([
     ['still valid', [jwt('a@example.com'), 'refresh-ok', 4_102_444_800] as [string, string, number]],
     ['expiring', expiring('refresh-ok')],
   ])('keeps a signed-out login dead when a late refresh wrote it back (%s)', async (_, tokens) => {
-    // Sign-out of A left its tombstone; a refresh of A that answered afterwards stored A's tokens again.
+    // Sign-out of A marked it ended; a refresh of A that answered afterwards stored A's tokens again.
     const jar = signedIn(LOGIN_A, tokens);
-    jar.cookies.set(`__Host-enduva-ended-${LOGIN_A}`, '1');
+    jar.cookies.set('__Host-enduva-ended', `${LOGIN_A}.local`);
     const before = calls.length;
     jar.apply(await page(jar));
     expect(calls.length).toBe(before);
-    expect(jar.cookies.has(`__Host-enduva-session-${LOGIN_A}`)).toBe(false);
-    expect(jar.cookies.get(`__Host-enduva-ended-${LOGIN_A}`)).toBe('1');
+    expect(jar.cookies.has('__Host-enduva-session-a')).toBe(false);
+    expect(jar.cookies.get('__Host-enduva-ended')).toBe(`${LOGIN_A}.local`);
   });
 
-  it("keeps only the active login's cookies, however many overlaps left behind", async () => {
-    const sessionB = encode([jwt('b@example.com'), 'refresh-b', 4_102_444_800]);
-    const jar = signedIn(LOGIN_B, [jwt('b@example.com'), 'refresh-b', 4_102_444_800]);
-    // Losing concurrent sign-ins, late refreshes and earlier sign-outs of other logins.
-    for (const id of ['CCCCCCCCCCCCCCCC', 'DDDDDDDDDDDDDDDD', LOGIN_A, 'not-a-login-id']) {
-      jar.cookies.set(`__Host-enduva-session-${id}`, encode([jwt('x@example.com'), 'refresh-x', 4_102_444_800]));
-      jar.cookies.set(`__Host-enduva-ended-${id}`, 'local');
-    }
-    jar.apply(await page(jar));
-    expect([...jar.cookies.keys()].sort()).toEqual(['__Host-enduva-login', `__Host-enduva-session-${LOGIN_B}`]);
-    expect(jar.cookies.get(`__Host-enduva-session-${LOGIN_B}`)).toBe(sessionB);
+  it('signs out, never switches, when another login ended up in the active slot', async () => {
+    // Overlapping sign-ins: the pointer names A in slot a, but slot a holds C's tokens.
+    const jar = signedIn(LOGIN_A, [jwt('a@example.com'), 'refresh-a', 4_102_444_800]);
+    jar.cookies.set(
+      '__Host-enduva-session-a',
+      `CCCCCCCCCCCCCCCC.${encode([jwt('c@example.com'), 'r', 4_102_444_800])}`,
+    );
+    const before = calls.length;
+    const res = await page(jar);
+    expect(await res.text()).not.toContain('c@example.com');
+    expect(calls.length).toBe(before);
   });
 
-  it('removes per-login cookies when no valid login is active', async () => {
-    const jar = new Jar({
-      [`__Host-enduva-session-${LOGIN_A}`]: encode([jwt('a@example.com'), 'r', 4_102_444_800]),
-      [`__Host-enduva-ended-${LOGIN_B}`]: 'revoked',
-    });
-    jar.apply(await page(jar));
-    expect(jar.cookies.size).toBe(0);
+  it('keeps the fixed cookie set however many refresh answers overlap', async () => {
+    // Twenty requests from one snapshot are in flight at once; all of their answers land afterwards.
+    let release = () => {};
+    refreshGate = new Promise((resolve) => (release = resolve));
+    const jar = signedIn(LOGIN_A, expiring('refresh-ok'));
+    jar.cookies.set('__Host-enduva-ended', `${LOGIN_B}.local`);
+    const header = jar.header();
+    const answers = Array.from({ length: 20 }, () =>
+      server.fetch(new Request('https://app.example/', { headers: { cookie: header } })),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    release();
+    for (const res of await Promise.all(answers)) jar.apply(res);
+    refreshGate = Promise.resolve();
+    expect([...jar.cookies.keys()].sort()).toEqual([
+      '__Host-enduva-ended',
+      '__Host-enduva-login',
+      '__Host-enduva-session-a',
+    ]);
   });
 
   it('signs out cleanly when a refreshed session would exceed the cookie budget', async () => {
@@ -246,7 +260,7 @@ describe('session cookies', () => {
     const res = await page(jar);
     for (const line of res.headers.getSetCookie()) expect(line.length).toBeLessThan(4096);
     jar.apply(res);
-    expect(jar.cookies.has(`__Host-enduva-session-${LOGIN_A}`)).toBe(false);
+    expect(jar.cookies.has('__Host-enduva-session-a')).toBe(false);
   });
 
   it('keeps pages out of shared caches', async () => {
