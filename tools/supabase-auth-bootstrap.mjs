@@ -8,8 +8,8 @@
 //
 // Env:  SUPABASE_ACCESS_TOKEN, SUPABASE_PROJECT_REF       always
 //       TURNSTILE_SECRET                                   dry run and --apply (production Turnstile secret)
+//       SMTP_PASS, SMTP_ADMIN_EMAIL                         dry run and --apply (Resend API key, sender address)
 //       GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET             optional; without them Google stays disabled
-//       SKIP_EMAIL_TEMPLATES=1                             optional; leaves the email templates out (no SMTP yet)
 //       SUPABASE_PUBLISHABLE_KEY                           --verify
 // Usage: node tools/supabase-auth-bootstrap.mjs [--apply | --verify]
 //        node tools/supabase-auth-bootstrap.mjs --self-test
@@ -43,13 +43,17 @@ export function desiredConfig(env, readTemplate = template) {
     security_captcha_secret: env.TURNSTILE_SECRET,
     external_google_enabled: google,
     external_google_skip_nonce_check: false,
-    // Custom templates may need custom SMTP; SKIP_EMAIL_TEMPLATES=1 leaves them out until SMTP is set up.
-    ...(!env.SKIP_EMAIL_TEMPLATES && {
-      mailer_subjects_confirmation: 'Enduva: confirm your email address · Bestätige deine E-Mail-Adresse',
-      mailer_templates_confirmation_content: readTemplate('confirmation'),
-      mailer_subjects_magic_link: 'Enduva: your sign-in link · Dein Anmeldelink',
-      mailer_templates_magic_link_content: readTemplate('magic_link'),
-    }),
+    // Custom SMTP: Resend, EU region (runbook). The password is a sending-only Resend API key.
+    smtp_host: 'smtp.resend.com',
+    smtp_port: '465',
+    smtp_user: 'resend',
+    smtp_pass: env.SMTP_PASS,
+    smtp_admin_email: env.SMTP_ADMIN_EMAIL,
+    smtp_sender_name: 'Enduva',
+    mailer_subjects_confirmation: 'Enduva: confirm your email address · Bestätige deine E-Mail-Adresse',
+    mailer_templates_confirmation_content: readTemplate('confirmation'),
+    mailer_subjects_magic_link: 'Enduva: your sign-in link · Dein Anmeldelink',
+    mailer_templates_magic_link_content: readTemplate('magic_link'),
     ...(google && {
       external_google_client_id: env.GOOGLE_CLIENT_ID,
       external_google_secret: env.GOOGLE_CLIENT_SECRET,
@@ -62,7 +66,10 @@ export function diff(current, desired) {
   return Object.fromEntries(Object.entries(desired).filter(([key, value]) => current[key] !== value));
 }
 
-const show = (key, value) => (/secret/.test(key) ? '<redacted>' : JSON.stringify(value)?.slice(0, 80));
+/** Fields never printed: their values are secrets. */
+export const isSecret = (key) => /secret|pass/.test(key);
+
+const show = (key, value) => (isSecret(key) ? '<redacted>' : JSON.stringify(value)?.slice(0, 80));
 
 /** True if an ES256 key signs new tokens. */
 export function signingKeysOk(keys) {
@@ -85,7 +92,15 @@ async function call(method, path, body) {
 }
 
 async function bootstrap(apply) {
-  need(process.env, 'SUPABASE_ACCESS_TOKEN', 'SUPABASE_PROJECT_REF', 'TURNSTILE_SECRET');
+  need(
+    process.env,
+    'SUPABASE_ACCESS_TOKEN',
+    'SUPABASE_PROJECT_REF',
+    'TURNSTILE_SECRET',
+    'SMTP_PASS',
+    'SMTP_ADMIN_EMAIL',
+  );
+  if (process.env.SMTP_ADMIN_EMAIL.includes('<')) throw new Error('SMTP_ADMIN_EMAIL is still the placeholder');
   const desired = desiredConfig(process.env);
   const changes = diff(await call('GET', '/config/auth'), desired);
   const keys = Object.keys(changes);
@@ -93,7 +108,7 @@ async function bootstrap(apply) {
   for (const key of keys) console.log(`  ${key} -> ${show(key, changes[key])}`);
   if (apply && keys.length > 0) {
     await call('PATCH', '/config/auth', changes);
-    const left = Object.keys(diff(await call('GET', '/config/auth'), desired)).filter((k) => !/secret/.test(k));
+    const left = Object.keys(diff(await call('GET', '/config/auth'), desired)).filter((k) => !isSecret(k));
     if (left.length > 0) throw new Error(`Still differing after the update: ${left.join(', ')}`);
     console.log('Auth config: updated.');
   } else if (!apply && keys.length > 0) {
@@ -145,10 +160,7 @@ function selfTest() {
   const checks = [
     ['sign-up is locked', desired.disable_signup === true],
     ['templates are set', desired.mailer_templates_confirmation_content === '<p>confirmation</p>'],
-    [
-      'templates can be left out',
-      !('mailer_templates_confirmation_content' in desiredConfig({ ...env, SKIP_EMAIL_TEMPLATES: '1' }, () => '')),
-    ],
+    ['SMTP password is redacted', isSecret('smtp_pass') && desired.smtp_port === '465'],
     [
       'Google stays off without a client',
       desired.external_google_enabled === false && !('external_google_secret' in desired),
