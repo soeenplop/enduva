@@ -13,6 +13,9 @@ import { type AuthSession, refreshSession } from './gotrue.server';
  * `enduva-session-<id>`. A refresh, or dropping a session the API or Auth refused, only ever touches the cookie of
  * the login it started from. So a response that arrives late (a tab refreshing account A after another tab signed
  * in as B) can't replace or clear B: the browser keeps `enduva-login` pointing at B.
+ *
+ * Sign-out doesn't touch `enduva-login` either (another tab may have just signed in). It deletes the login's session
+ * and leaves a tombstone, `enduva-ended-<id>`, so a refresh of that login that answers later can't bring it back.
  */
 
 const MAX_AGE_S = 60 * 60 * 24 * 30;
@@ -31,6 +34,7 @@ export function authCookie(name: string) {
 
 const loginCookie = () => authCookie('enduva-login');
 const sessionCookie = (loginId: string) => authCookie(`enduva-session-${loginId}`);
+const endedCookie = (loginId: string) => authCookie(`enduva-ended-${loginId}`);
 
 export function encodeSession({ accessToken, refreshToken, expiresAt }: AuthSession): string {
   return Buffer.from(JSON.stringify([accessToken, refreshToken, expiresAt])).toString('base64url');
@@ -80,6 +84,11 @@ async function loadSession(): Promise<RequestSession> {
     return { loginId: undefined, session: null };
   const loginId = getCookie(loginCookie().name);
   if (loginId === undefined || !LOGIN_ID.test(loginId)) return { loginId: undefined, session: null };
+  if (getCookie(endedCookie(loginId).name) !== undefined) {
+    // Signed out. Whatever a late refresh wrote for this login is never used.
+    if (getCookie(sessionCookie(loginId).name) !== undefined) deleteSessionCookie(loginId);
+    return { loginId, session: null };
+  }
   const stored = decodeSession(getCookie(sessionCookie(loginId).name));
   if (stored === null) return { loginId, session: null };
   if (stored.expiresAt - Date.now() / 1000 > REFRESH_MARGIN_S) return { loginId, session: stored };
@@ -108,19 +117,24 @@ function deleteSessionCookie(loginId: string): void {
   deleteCookie(name, options);
 }
 
-/** Whether this request came from a signed-in browser (a login cookie), whatever state its session is in. */
+/** Whether this request came from a browser with a login that wasn't signed out, whatever state its session is in. */
 export async function hasLogin(): Promise<boolean> {
-  return (await requestSession()).loginId !== undefined;
+  const { loginId } = await requestSession();
+  return loginId !== undefined && getCookie(endedCookie(loginId).name) === undefined;
 }
 
-/** A new sign-in: a new login ID becomes the active one, and this request's previous login cookie goes. */
+/** A new sign-in: a new login ID becomes the active one, and this request's previous login cookies go. */
 export async function startLogin(session: AuthSession): Promise<void> {
   const previous = (await requestSession()).loginId;
   const loginId = randomBytes(12).toString('base64url');
   storeSession(loginId, session);
   const { name, options } = loginCookie();
   setCookie(name, loginId, { ...options, maxAge: MAX_AGE_S });
-  if (previous !== undefined) deleteSessionCookie(previous);
+  if (previous !== undefined) {
+    deleteSessionCookie(previous);
+    const ended = endedCookie(previous);
+    if (getCookie(ended.name) !== undefined) deleteCookie(ended.name, ended.options);
+  }
   perRequest.set(getRequest(), Promise.resolve({ loginId, session }));
 }
 
@@ -134,11 +148,16 @@ export async function dropSession(): Promise<void> {
   perRequest.set(getRequest(), Promise.resolve({ loginId, session: null }));
 }
 
-/** Sign-out: removes the active login and its session. */
+/**
+ * Sign-out of the login this request started with: its session goes and a tombstone stays. `enduva-login` is left
+ * alone, since by the time this response arrives it may name a newer login from another tab.
+ */
 export async function endSession(): Promise<void> {
   const { loginId } = await requestSession();
-  if (loginId !== undefined) deleteSessionCookie(loginId);
-  const { name, options } = loginCookie();
-  deleteCookie(name, options);
-  perRequest.set(getRequest(), Promise.resolve({ loginId: undefined, session: null }));
+  if (loginId !== undefined) {
+    deleteSessionCookie(loginId);
+    const { name, options } = endedCookie(loginId);
+    setCookie(name, '1', { ...options, maxAge: MAX_AGE_S });
+  }
+  perRequest.set(getRequest(), Promise.resolve({ loginId, session: null }));
 }
