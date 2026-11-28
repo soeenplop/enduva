@@ -31,9 +31,14 @@ RUN pnpm turbo run build --filter=@enduva/api \
 
 FROM deps AS web-build
 # The SSR bundle includes its dependencies (apps/web/vite.config.mjs), so the server needs only srvx (no
-# dependencies of its own) next to it; `cp -L` resolves pnpm's symlink.
+# dependencies of its own) next to it; `cp -L` resolves pnpm's symlink. The bundled packages leave no
+# package.json in the image, so an image scan can't see them: sbom/web.cdx.json lists the web app's production
+# dependency closure from the lockfile (a superset of what is bundled), and the SBOM scanner of the image
+# attestation reads it from the image as well.
 RUN pnpm turbo run build --filter=@enduva/web \
- && mkdir -p /out/node_modules \
+ && mkdir -p /out/node_modules /out/sbom \
+ && pnpm --filter=@enduva/web sbom --prod --lockfile-only --sbom-format cyclonedx --sbom-type application \
+      > /out/sbom/web.cdx.json \
  && cd apps/web \
  && cp -R package.json server.mjs dist /out/ \
  && cp -RL node_modules/srvx /out/node_modules/srvx
@@ -65,6 +70,7 @@ ENV NODE_ENV=production \
 COPY --from=web-build /out/package.json /out/server.mjs ./
 COPY --from=web-build /out/node_modules ./node_modules
 COPY --from=web-build /out/dist ./dist
+COPY --from=web-build /out/sbom ./sbom
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD ["/nodejs/bin/node", "-e", "fetch(`http://127.0.0.1:${process.env.PORT}/healthz`).then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
