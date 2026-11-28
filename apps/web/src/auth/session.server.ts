@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { deleteCookie, getCookie, getRequest, setCookie } from '@tanstack/react-start/server';
+import { deleteCookie, getCookie, getCookies, getRequest, setCookie } from '@tanstack/react-start/server';
 import { webOrigin } from '../config.server';
 import { type AuthSession, refreshSession } from './gotrue.server';
 
@@ -16,12 +16,21 @@ import { type AuthSession, refreshSession } from './gotrue.server';
  *
  * Sign-out doesn't touch `enduva-login` either (another tab may have just signed in). It deletes the login's session
  * and leaves a tombstone, `enduva-ended-<id>`, so a refresh of that login that answers later can't bring it back.
+ *
+ * The cookies stay bounded: every request that carries any of them deletes the session cookies and tombstones of
+ * other logins (left behind by overlapping sign-ins or late refreshes), so after it only the active login's session
+ * and tombstone remain. A session cookie larger than SESSION_COOKIE_MAX_BYTES is never written: a browser would
+ * drop it silently, so sign-in fails and a refresh signs out instead.
  */
 
 const MAX_AGE_S = 60 * 60 * 24 * 30;
 /** Refresh this long before the access token expires, so a token never runs out on its way to the API. */
 const REFRESH_MARGIN_S = 60;
 const LOGIN_ID = /^[A-Za-z0-9_-]{16}$/;
+/** Name and value of one session cookie; below the 4096 bytes every browser must accept (RFC 6265, 6.1). */
+export const SESSION_COOKIE_MAX_BYTES = 3_800;
+/** The per-login cookies, with or without the `__Host-` prefix. */
+const PER_LOGIN = /^(?:__Host-)?enduva-(?:session|ended)-(.*)$/;
 
 /** An auth cookie: `__Host-` prefixed and `Secure` when the app's origin is https. */
 export function authCookie(name: string) {
@@ -78,12 +87,24 @@ export async function getSession(): Promise<AuthSession | null> {
   return (await requestSession()).session;
 }
 
+/** Deletes every per-login cookie that doesn't belong to `keep` (all of them without an active login). */
+function pruneOtherLogins(keep: string | undefined): void {
+  for (const cookieName of Object.keys(getCookies())) {
+    const id = PER_LOGIN.exec(cookieName)?.[1];
+    if (id === undefined || id === keep) continue;
+    deleteCookie(cookieName, authCookie(cookieName).options);
+  }
+}
+
 async function loadSession(): Promise<RequestSession> {
-  // Without a login cookie, a signed-out page needs no auth configuration.
-  if (getCookie('__Host-enduva-login') === undefined && getCookie('enduva-login') === undefined)
+  // Without any auth cookie, a signed-out page needs no auth configuration.
+  const names = Object.keys(getCookies());
+  if (!names.some((name) => /^(?:__Host-)?enduva-login$/.test(name) || PER_LOGIN.test(name)))
     return { loginId: undefined, session: null };
-  const loginId = getCookie(loginCookie().name);
-  if (loginId === undefined || !LOGIN_ID.test(loginId)) return { loginId: undefined, session: null };
+  const pointer = getCookie(loginCookie().name);
+  const loginId = pointer !== undefined && LOGIN_ID.test(pointer) ? pointer : undefined;
+  pruneOtherLogins(loginId);
+  if (loginId === undefined) return { loginId: undefined, session: null };
   if (getCookie(endedCookie(loginId).name) !== undefined) {
     // Signed out. Whatever a late refresh wrote for this login is never used.
     if (getCookie(sessionCookie(loginId).name) !== undefined) deleteSessionCookie(loginId);
@@ -95,8 +116,11 @@ async function loadSession(): Promise<RequestSession> {
   try {
     const refreshed = await refreshSession(stored.refreshToken);
     if (refreshed.ok) {
-      storeSession(loginId, refreshed.value);
-      return { loginId, session: refreshed.value };
+      if (storeSession(loginId, refreshed.value)) return { loginId, session: refreshed.value };
+      // Too large to store: signing out cleanly beats a cookie the browser would drop.
+      console.error('Refreshed session exceeds the cookie budget; signing out');
+      deleteSessionCookie(loginId);
+      return { loginId, session: null };
     }
     // A refresh token Auth refuses (revoked, reused, signed out) ends this login. Rate limits and outages don't: the
     // next request tries again.
@@ -107,9 +131,13 @@ async function loadSession(): Promise<RequestSession> {
   }
 }
 
-function storeSession(loginId: string, session: AuthSession): void {
+/** Writes the login's session cookie, unless it would exceed SESSION_COOKIE_MAX_BYTES (then false, nothing written). */
+function storeSession(loginId: string, session: AuthSession): boolean {
   const { name, options } = sessionCookie(loginId);
-  setCookie(name, encodeSession(session), { ...options, maxAge: MAX_AGE_S });
+  const value = encodeSession(session);
+  if (name.length + 1 + value.length > SESSION_COOKIE_MAX_BYTES) return false;
+  setCookie(name, value, { ...options, maxAge: MAX_AGE_S });
+  return true;
 }
 
 function deleteSessionCookie(loginId: string): void {
@@ -123,11 +151,17 @@ export async function hasLogin(): Promise<boolean> {
   return loginId !== undefined && getCookie(endedCookie(loginId).name) === undefined;
 }
 
-/** A new sign-in: a new login ID becomes the active one, and this request's previous login cookies go. */
-export async function startLogin(session: AuthSession): Promise<void> {
+/**
+ * A new sign-in: a new login ID becomes the active one, and this request's previous login cookies go. False (and
+ * nothing changed) if the session is too large for its cookie; the caller reports the sign-in as failed.
+ */
+export async function startLogin(session: AuthSession): Promise<boolean> {
   const previous = (await requestSession()).loginId;
   const loginId = randomBytes(12).toString('base64url');
-  storeSession(loginId, session);
+  if (!storeSession(loginId, session)) {
+    console.error('Session exceeds the cookie budget; sign-in refused');
+    return false;
+  }
   const { name, options } = loginCookie();
   setCookie(name, loginId, { ...options, maxAge: MAX_AGE_S });
   if (previous !== undefined) {
@@ -136,6 +170,7 @@ export async function startLogin(session: AuthSession): Promise<void> {
     if (getCookie(ended.name) !== undefined) deleteCookie(ended.name, ended.options);
   }
   perRequest.set(getRequest(), Promise.resolve({ loginId, session }));
+  return true;
 }
 
 /**
@@ -150,14 +185,22 @@ export async function dropSession(): Promise<void> {
 
 /**
  * Sign-out of the login this request started with: its session goes and a tombstone stays. `enduva-login` is left
- * alone, since by the time this response arrives it may name a newer login from another tab.
+ * alone, since by the time this response arrives it may name a newer login from another tab. The tombstone records
+ * whether Auth confirmed the sign-out (`revoked`), so a repeated sign-out can report the same, and it lives as long as
+ * a session cookie could (a late refresh may write one); pruning keeps at most the active login's tombstone.
  */
-export async function endSession(): Promise<void> {
+export async function endSession(revoked: boolean): Promise<void> {
   const { loginId } = await requestSession();
   if (loginId !== undefined) {
     deleteSessionCookie(loginId);
     const { name, options } = endedCookie(loginId);
-    setCookie(name, '1', { ...options, maxAge: MAX_AGE_S });
+    setCookie(name, revoked ? 'revoked' : 'local', { ...options, maxAge: MAX_AGE_S });
   }
   perRequest.set(getRequest(), Promise.resolve({ loginId, session: null }));
+}
+
+/** Whether the active login was signed out on this device only (Auth didn't confirm), per its tombstone. */
+export async function endedLocally(): Promise<boolean> {
+  const { loginId } = await requestSession();
+  return loginId !== undefined && getCookie(endedCookie(loginId).name) === 'local';
 }
