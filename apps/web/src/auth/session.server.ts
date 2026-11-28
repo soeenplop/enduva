@@ -14,15 +14,21 @@ import { type AuthSession, refreshSession } from './gotrue.server';
  * - `enduva-login` = `<slot>.<login ID>`: the active login. Only a sign-in writes it.
  * - `enduva-session-a` and `enduva-session-b` = `<login ID>.<tokens>`: two slots. A sign-in takes the slot its
  *   request's active login doesn't use, so the previous login's slot is never in its way.
- * - `enduva-ended` = `<login ID>.<revoked|local>`: the last sign-out.
+ * - `enduva-ended-a` and `enduva-ended-b` = `<login ID>.<revoked|local>`: per slot, the last login signed out there.
  *
- * A session counts only if its slot holds the active login's ID and the marker doesn't name that ID. So a response
- * that arrives late can never put another account in place: a refresh of A after another tab signed in as B writes
- * A's slot, which B's pointer doesn't use; a sign-out of A leaves `enduva-login` alone and only marks A as ended,
- * which a late refresh of A can't undo. When enough races overlap that two logins meet in one slot, the IDs don't
- * match and the browser is signed out, never switched.
+ * A session counts only if its slot holds the active login's ID and that slot's marker doesn't name it. So a
+ * response that arrives late can never put another account in place, or bring a signed-out one back:
  *
- * Worst case, the browser holds the pointer, two full slots (each at most SESSION_COOKIE_MAX_BYTES) and the marker:
+ * - a refresh of A after another tab signed in as B writes A's slot, which B's pointer doesn't use;
+ * - a sign-out of A leaves `enduva-login` alone; it deletes A's slot and marks A ended in that slot's marker, which a
+ *   late refresh of A can't undo;
+ * - a late sign-out of A writes only slot A's marker, never B's, and B's own sign-out already deleted B's tokens, so
+ *   no marker overwrite can revive a session.
+ *
+ * When enough races overlap that two logins meet in one slot, the IDs don't match and the browser is signed out,
+ * never switched.
+ *
+ * Worst case, the browser holds the pointer, two full slots (each at most SESSION_COOKIE_MAX_BYTES) and two markers:
  * under 8 KiB, half of Node's default 16 KiB request-header limit (test/http-budget.test.ts). A session too large for
  * its slot is never written: sign-in fails and a refresh signs out, rather than leaving a cookie a browser would drop.
  */
@@ -46,8 +52,8 @@ export function authCookie(name: string) {
 
 const loginCookie = () => authCookie('enduva-login');
 const slotCookie = (slot: Slot) => authCookie(`enduva-session-${slot}`);
-const endedCookie = () => authCookie('enduva-ended');
-const AUTH_COOKIE = /^(?:__Host-)?enduva-(?:login|session-[ab]|ended)$/;
+const endedCookie = (slot: Slot) => authCookie(`enduva-ended-${slot}`);
+const AUTH_COOKIE = /^(?:__Host-)?enduva-(?:login|session-[ab]|ended-[ab])$/;
 
 export function encodeSession({ accessToken, refreshToken, expiresAt }: AuthSession): string {
   return Buffer.from(JSON.stringify([accessToken, refreshToken, expiresAt])).toString('base64url');
@@ -108,9 +114,9 @@ function readActive(): Active | undefined {
   return (slot === 'a' || slot === 'b') && loginId !== undefined ? { slot, loginId } : undefined;
 }
 
-/** What `enduva-ended` says about this login: `revoked`, `local`, or undefined if it names another (or none). */
-function endedFor(loginId: string): string | undefined {
-  const ended = tagged(getCookie(endedCookie().name));
+/** What the slot's marker says about this login: `revoked`, `local`, or undefined if it names another (or none). */
+function endedFor({ slot, loginId }: Active): string | undefined {
+  const ended = tagged(getCookie(endedCookie(slot).name));
   return ended?.loginId === loginId ? ended.rest : undefined;
 }
 
@@ -122,7 +128,7 @@ async function loadSession(): Promise<RequestSession> {
   const slot = tagged(getCookie(slotCookie(active.slot).name));
   // Another login in the active slot (overlapping sign-ins): signed out, never switched.
   if (slot?.loginId !== active.loginId) return { active, session: null };
-  if (endedFor(active.loginId) !== undefined) {
+  if (endedFor(active) !== undefined) {
     // Signed out; whatever a late refresh wrote back for this login goes (this request saw it in the slot).
     deleteSlot(active.slot);
     return { active, session: null };
@@ -165,7 +171,7 @@ function deleteSlot(slot: Slot): void {
 /** Whether this request came from a browser with a login that wasn't signed out, whatever state its session is in. */
 export async function hasLogin(): Promise<boolean> {
   const { active } = await requestSession();
-  return active !== undefined && endedFor(active.loginId) === undefined;
+  return active !== undefined && endedFor(active) === undefined;
 }
 
 /**
@@ -198,22 +204,23 @@ export async function dropSession(): Promise<void> {
 }
 
 /**
- * Sign-out of the login this request started with: `enduva-ended` names it, with whether Auth confirmed the
- * sign-out (`revoked`), so a repeated sign-out can report the same. `enduva-login` and the slots are left alone,
- * since by the time this response arrives another tab may have signed in; the next request clears the ended login's
- * slot. The marker lives as long as a session cookie could, because a late refresh may write one.
+ * Sign-out of the login this request started with: its slot's session goes at once, and its slot's marker names it,
+ * with whether Auth confirmed the sign-out (`revoked`), so a repeated sign-out can report the same. `enduva-login`
+ * and the other slot are left alone, since by the time this response arrives another tab may have signed in. The
+ * marker lives as long as a session cookie could, because a late refresh may write one.
  */
 export async function endSession(revoked: boolean): Promise<void> {
   const { active } = await requestSession();
   if (active !== undefined) {
-    const { name, options } = endedCookie();
+    deleteSlot(active.slot);
+    const { name, options } = endedCookie(active.slot);
     setCookie(name, `${active.loginId}.${revoked ? 'revoked' : 'local'}`, { ...options, maxAge: MAX_AGE_S });
   }
   perRequest.set(getRequest(), Promise.resolve({ active, session: null }));
 }
 
-/** Whether the active login was signed out on this device only (Auth didn't confirm), per `enduva-ended`. */
+/** Whether the active login was signed out on this device only (Auth didn't confirm), per its slot's marker. */
 export async function endedLocally(): Promise<boolean> {
   const { active } = await requestSession();
-  return active !== undefined && endedFor(active.loginId) === 'local';
+  return active !== undefined && endedFor(active) === 'local';
 }
