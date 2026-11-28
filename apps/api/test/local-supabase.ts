@@ -62,11 +62,17 @@ async function call(auth: LocalAuth, path: string, { method, body, admin, header
   return response.status === 204 ? undefined : response.json();
 }
 
+/**
+ * Cloudflare's documented Turnstile test token. The local stack verifies captchas with Cloudflare's test secret
+ * (supabase/config.toml), which accepts it; production secrets refuse it.
+ */
+export const TURNSTILE_TEST_TOKEN = 'XXXX.DUMMY.TOKEN.XXXX';
+
 /** Signs in through the local Auth server (email + password), as a client would. */
 export async function signIn(auth: LocalAuth, email: string, password: string): Promise<Session> {
   const body = (await call(auth, '/token?grant_type=password', {
     method: 'POST',
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, gotrue_meta_security: { captcha_token: TURNSTILE_TEST_TOKEN } }),
   })) as { access_token: string };
   const { sub, session_id: sessionId } = decodeJwt(body.access_token);
   return { accessToken: body.access_token, userId: String(sub), sessionId: String(sessionId) };
