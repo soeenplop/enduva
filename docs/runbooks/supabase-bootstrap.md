@@ -81,7 +81,7 @@ Below, `run` means `node --env-file="$HOME/enduva-bootstrap.env"`, for example `
    handler. A 429, a 5xx or any other answer fails the check.
 6. **Synthetic accounts.** `run tools/synthetic-accounts.mjs create testflight smoke` shows what it would
    create; add `--apply` to create them. This creates
-   `synthetic-testflight@example.com` (iOS sign-in, 0.11b) and `synthetic-smoke@example.com` (smoke tests, 0.12c),
+   `synthetic-testflight@enduva.de` (iOS sign-in, 0.11b) and `synthetic-smoke@enduva.de` (smoke tests, 0.12c),
    already confirmed. With `--apply` it asks for each password (at least 16 characters, typing hidden) and never
    prints or logs it. Running it again leaves existing accounts unchanged.
 7. **Record it.** Comment in #19 with the outputs of steps 3 and 5 (they contain no secrets) and the date. Revoke
@@ -90,7 +90,7 @@ Below, `run` means `node --env-file="$HOME/enduva-bootstrap.env"`, for example `
 ## Synthetic accounts and cleanup
 
 Until G1.6, production holds synthetic data only (T25). Every account created by
-[`tools/synthetic-accounts.mjs`](../../tools/synthetic-accounts.mjs) is `synthetic-<label>@example.com` and is marked
+[`tools/synthetic-accounts.mjs`](../../tools/synthetic-accounts.mjs) is `synthetic-<label>@enduva.de` and is marked
 `app_metadata.synthetic = true`. Cleanup deletes only the labels you name, and only accounts that carry the
 marker. `testflight` and `smoke` are standing accounts: never name them in a cleanup.
 
