@@ -2,6 +2,7 @@ import { createServerFn } from '@tanstack/react-start';
 import * as z from 'zod';
 import { turnstileSiteKey } from '../config.server';
 import { getLocale } from '../paraglide/runtime.js';
+import { readClaims } from './claims';
 import * as gotrue from './gotrue.server';
 import { serverErrors, sessionMiddleware } from './middleware';
 import { beginOAuth } from './oauth.server';
@@ -33,20 +34,14 @@ const credentials = z.object({
   captchaToken: z.string().min(1).max(4096),
 });
 
-/** The signed-in user, for the page chrome (email only), or null. */
+/** The signed-in user (account ID and email), for the page chrome, or null. A cookie that isn't a JWT is dropped. */
 export const getViewer = createServerFn({ method: 'GET' })
   .middleware([sessionMiddleware])
   .handler(async ({ context }) => {
     if (context.session === null) return null;
-    // Display only: the API verifies the token itself on every call. A cookie that isn't a JWT is dropped.
-    try {
-      const payload = context.session.accessToken.split('.')[1] ?? '';
-      const claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as { email?: unknown } | null;
-      return { email: typeof claims?.email === 'string' ? claims.email : '' };
-    } catch {
-      await dropSession();
-      return null;
-    }
+    const claims = readClaims(context.session.accessToken);
+    if (claims === null) await dropSession();
+    return claims === null ? null : { id: claims.sub, email: claims.email };
   });
 
 /** What the sign-in forms need: the Turnstile site key and whether Google sign-in is enabled. */
@@ -110,10 +105,14 @@ export const confirmEmail = createServerFn({ method: 'POST' })
         if (!result.ok) return linkOutcome(result);
         const { session, email } = result.value;
         if (email.toLowerCase() !== data.email.toLowerCase()) {
-          // The link is spent either way; the session it created is ended rather than left unused.
-          await gotrue
-            .signOut(session.accessToken)
-            .catch((error: unknown) => console.error('Ending the mismatched session failed', error));
+          // The link is spent either way; the session it created is ended rather than left unused. The browser keeps
+          // its current login whatever Auth answers.
+          await gotrue.signOut(session.accessToken).then(
+            (ended) => {
+              if (!ended.ok) console.error('Ending the mismatched session failed', ended.status, ended.code);
+            },
+            (error: unknown) => console.error('Ending the mismatched session failed', error),
+          );
           return { ok: false, error: 'email_mismatch' };
         }
         await startLogin(session);
