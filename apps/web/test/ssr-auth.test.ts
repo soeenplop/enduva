@@ -5,8 +5,9 @@ import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-/** An unsigned token with an email claim; the web server only reads it for display. */
-const jwt = (email: string) => `e30.${Buffer.from(JSON.stringify({ email })).toString('base64url')}.sig`;
+/** An unsigned token with `sub` and `email`; the web server only reads them for display. */
+const jwt = (email: string) =>
+  `e30.${Buffer.from(JSON.stringify({ sub: `user-${email}`, email })).toString('base64url')}.sig`;
 const encode = (tokens: [string, string, number]) => Buffer.from(JSON.stringify(tokens)).toString('base64url');
 const VERIFIER = 'v'.repeat(43);
 const LOGIN_A = 'AAAAAAAAAAAAAAAA';
@@ -196,6 +197,20 @@ describe('session cookies', () => {
     refreshGate = Promise.resolve();
     expect(jar.cookies.get('__Host-enduva-login')).toBe(LOGIN_B);
     expect(jar.cookies.get(`__Host-enduva-session-${LOGIN_B}`)).toBe(sessionB);
+  });
+
+  it.each([
+    ['still valid', [jwt('a@example.com'), 'refresh-ok', 4_102_444_800] as [string, string, number]],
+    ['expiring', expiring('refresh-ok')],
+  ])('keeps a signed-out login dead when a late refresh wrote it back (%s)', async (_, tokens) => {
+    // Sign-out of A left its tombstone; a refresh of A that answered afterwards stored A's tokens again.
+    const jar = signedIn(LOGIN_A, tokens);
+    jar.cookies.set(`__Host-enduva-ended-${LOGIN_A}`, '1');
+    const before = calls.length;
+    jar.apply(await page(jar));
+    expect(calls.length).toBe(before);
+    expect(jar.cookies.has(`__Host-enduva-session-${LOGIN_A}`)).toBe(false);
+    expect(jar.cookies.get(`__Host-enduva-ended-${LOGIN_A}`)).toBe('1');
   });
 
   it('keeps pages out of shared caches', async () => {
