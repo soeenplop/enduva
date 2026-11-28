@@ -48,20 +48,21 @@ Sign-in goes through Supabase Auth (02-architecture.md, Authentication), called 
 the web server over Auth's REST API ([`src/auth/gotrue.server.ts`](src/auth/gotrue.server.ts)). The pages post to
 server functions ([`src/auth/functions.ts`](src/auth/functions.ts)), so no token ever reaches the browser.
 
-- **Session cookies** ([`src/auth/session.server.ts`](src/auth/session.server.ts)): each sign-in gets a random
-  login ID; `enduva-login` names the active one and `enduva-session-<id>` holds its access token, refresh token and
-  expiry. All are `HttpOnly`, `SameSite=Lax`, `Path=/`, 30 days; over https also `Secure` with the `__Host-` prefix.
-  A request whose access token expires within 60 s refreshes it first, once per request however many server
-  functions run; a refresh token that Auth refuses ends that login, an outage or rate limit doesn't. A refresh or a
-  dropped session only writes the cookie of the login it started from, so a late response from one tab can't replace
-  or clear a newer sign-in from another. Sign-out leaves `enduva-login` alone too: it deletes its own login's session
-  and sets a tombstone (`enduva-ended-<id>`), so a refresh of that login answering later can't revive it. Every
-  request prunes the session cookies and tombstones of other logins, so at most the active login's two remain; a
-  session cookie over 3800 bytes is never written (sign-in fails, a refresh signs out) rather than dropped by the
-  browser. Server functions get the session from `sessionMiddleware` as
-  `context.session`. The web server only forwards the access token: the API verifies it on every call. Every response
-  from the server is `Cache-Control: private, no-store` unless it sets its own, so no shared cache keeps a page or a
-  cookie.
+- **Session cookies** ([`src/auth/session.server.ts`](src/auth/session.server.ts)): a fixed set of names, so
+  overlapping responses can only overwrite cookies, never add them. `enduva-login` = `<slot>.<login ID>` names the
+  active login (only a sign-in writes it); `enduva-session-a`/`-b` are two slots holding `<login ID>.<tokens>` (a
+  sign-in takes the slot the current login doesn't use); `enduva-ended` = `<login ID>.<revoked|local>` marks the last
+  sign-out. All are `HttpOnly`, `SameSite=Lax`, `Path=/`, 30 days; over https also `Secure` with the `__Host-`
+  prefix. A session counts only if its slot holds the active login's ID and the marker doesn't name it, so a late
+  response from one tab (a refresh, a refused refresh, a sign-out) can't replace, clear or revive another tab's newer
+  login; if overlapping sign-ins put two logins in one slot, the browser is signed out, never switched. A request
+  whose access token expires within 60 s refreshes it first, once per request; a refresh token that Auth refuses ends
+  that login, an outage or rate limit doesn't. A session cookie over 3800 bytes is never written (sign-in fails, a
+  refresh signs out), so the worst case, pointer plus two full slots plus the marker, stays under 8 KiB, half of
+  Node's request-header limit ([`test/http-budget.test.ts`](test/http-budget.test.ts) checks it through `server.mjs`).
+  Server functions get the session from `sessionMiddleware` as `context.session`. The web server only forwards the
+  access token: the API verifies it on every call. Every response from the server is `Cache-Control: private,
+  no-store` unless it sets its own, so no shared cache keeps a page or a cookie.
 - **CSRF:** Start's default CSRF middleware guards every server function: `Sec-Fetch-Site` must be `same-origin`, or
   without it the `Origin` (then `Referer`) must be the request's origin; a call without any of them is refused.
   Mutations are `POST`. `SameSite=Lax` keeps the cookie off cross-site subrequests too.
