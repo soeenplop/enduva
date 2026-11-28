@@ -101,7 +101,9 @@ switch with the theme. Tailwind's default palette is removed, so only token colo
 
 `negative/*.tsx` must fail `tsc` with exactly the diagnostic they name (`pnpm test:negative` from the repository root):
 a wrong component prop, a `Link` to a missing route, an undeclared search param, a misspelled message, a misspelled
-router-context field, a loader-data field that doesn't exist and a misspelled field of the API status query data.
+router-context field, a loader-data field that doesn't exist, a misspelled field of the API status query data, a
+search value the route doesn't accept (`/sign-in`'s `error`), a misspelled server-function input field (`signIn`) and a
+misspelled middleware context field (`sessionMiddleware`). A typed route param waits for the first route with one.
 
 ## E2E
 
@@ -111,6 +113,21 @@ browser prefers another one, client-side navigation to `/status` with the API do
 reflow in light and dark. Uncaught page errors, hydration errors included, fail a test.
 [`e2e/preview.ts`](e2e/preview.ts) starts `vite preview` on port 0 and uses the address its own process reports, so the
 tests can never reach another server. The landing page's reflow check lives in [`apps/landing/e2e`](../landing/e2e).
+
+[`e2e/auth.test.ts`](e2e/auth.test.ts) runs sign-in end to end against the local Supabase stack (`pnpm --filter
+@enduva/db db:start`) and the built API, which it starts itself ([`e2e/local-stack.ts`](e2e/local-stack.ts)):
+
+- sign up → the confirmation mail from Mailpit → confirm → edit the profile (saved, still there after a reload) →
+  sign out → a wrong password → sign in; the session cookie is `HttpOnly` and `SameSite=Lax`, and neither token
+  appears in the page or `document.cookie`;
+- an unknown email gets the same answers as a known one; magic-link sign-in, and the link works only once;
+- **SSR isolation with real sessions:** two users request `/profile` at once and each page shows only that user's
+  email and name from `GET /v1/me` (fails with a module-level `QueryClient`).
+
+It needs `ENDUVA_WEB_ORIGIN` before the preview starts, so it picks a free port first; `--strictPort` makes the
+preview fail rather than share it. Without a running stack the suite is skipped locally (`CI=true` fails instead).
+`ENDUVA_SUPABASE_WORKDIR` points it at a stack started from another directory. The files run one after another:
+Vite allows one preview server per project.
 
 We use the library, not `@playwright/test`: its runner (`playwright`) bundles a Babel TypeScript loader for test
 files, and `playwright-core` contains neither a loader nor TypeScript compiler code. Vitest transforms the tests with
