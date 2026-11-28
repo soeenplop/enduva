@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { deleteCookie, getCookie, getRequest, setCookie } from '@tanstack/react-start/server';
 import { webOrigin } from '../config.server';
-import { authorizeUrl, exchangeCode } from './gotrue.server';
+import { authorizeUrl, exchangeCode, signOut } from './gotrue.server';
 import { safeRedirect } from './redirect';
 import { authCookie, startLogin } from './session.server';
 
@@ -43,8 +43,8 @@ export async function finishOAuth(request: Request): Promise<Response> {
       if (result.ok) {
         // Spent only by a verified exchange: a callback anyone can trigger (a cross-site link) leaves it alone.
         deleteCookie(name, options);
-        await startLogin(result.value);
-        target = state.redirect;
+        if (await startLogin(result.value)) target = state.redirect;
+        else await signOut(result.value.accessToken).catch(() => undefined);
       }
     } catch (error) {
       console.error('OAuth code exchange failed', error);
