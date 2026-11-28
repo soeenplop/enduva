@@ -9,7 +9,7 @@ public struct APIEnvironment: Sendable, Equatable {
         self.baseURL = baseURL
     }
 
-    public static let production = APIEnvironment(baseURL: URL(string: "https://api.enduva.soeenplop.dev")!)
+    public static let production = APIEnvironment(baseURL: URL(string: "https://api.enduva.de")!)
 
     /// The generated client for this environment, sending the user's access token on every request.
     public func client(accessToken: @escaping @Sendable () async throws -> String?) -> Client {

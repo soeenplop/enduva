@@ -30,7 +30,7 @@ export function authPublishableKey(): string {
 }
 
 /**
- * The public origin of this web app (`https://app.enduva.soeenplop.dev`). It decides the session cookie's `Secure`
+ * The public origin of this web app (`https://app.enduva.de`). It decides the session cookie's `Secure`
  * flag and builds the OAuth callback URL, so it never comes from request headers in production. `pnpm dev` falls back
  * to the request's own origin.
  */

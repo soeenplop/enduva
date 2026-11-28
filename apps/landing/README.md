@@ -1,6 +1,6 @@
 # @enduva/landing
 
-The landing page at `https://enduva.soeenplop.dev` (T4): TanStack Start, prerendered to static HTML, no server at run time. Stack and pitfalls: [ADR-0001](../../docs/adr/0001-typescript-7-toolchain.md).
+The landing page at `https://enduva.de` (T4): TanStack Start, prerendered to static HTML, no server at run time. Stack and pitfalls: [ADR-0001](../../docs/adr/0001-typescript-7-toolchain.md).
 
 ## URLs
 

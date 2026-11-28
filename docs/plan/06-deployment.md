@@ -5,12 +5,12 @@
 | Env | Landing | Web app | API | Database | Trigger |
 | --- | --- | --- | --- | --- | --- |
 | **local** | `localhost:5174` | `localhost:5173` | `localhost:3000` | Supabase CLI (`supabase start`, Docker) | `pnpm dev` |
-| **staging** *(from G1.6)* | `staging.enduva.soeenplop.dev` | `app.staging.enduva.soeenplop.dev` | `api.staging.enduva.soeenplop.dev` | Supabase Cloud project `enduva-staging` (EU), created in G1.6 | Merge to `main` |
-| **production** | `enduva.soeenplop.dev` | `app.enduva.soeenplop.dev` | `api.enduva.soeenplop.dev` | Supabase Cloud production project (EU; exists, credentials in the 1Password Environment `enduva`) | **Until G1.6:** merge to `main` after isolated verification. **From G1.6:** release tag + manual approval |
+| **staging** *(from G1.6)* | `staging.enduva.de` | `app.staging.enduva.de` | `api.staging.enduva.de` | Supabase Cloud project `enduva-staging` (EU), created in G1.6 | Merge to `main` |
+| **production** | `enduva.de` | `app.enduva.de` | `api.enduva.de` | Supabase Cloud production project (EU; exists, credentials in the 1Password Environment `enduva`) | **Until G1.6:** merge to `main` after isolated verification. **From G1.6:** release tag + manual approval |
 
 **Single-environment phase (T25):** until task G1.6 there is no staging environment. Production holds synthetic data only. In the pipeline below, the **isolated candidate environment** takes the place of staging: every push to `main` is verified there (migrations from the production history + candidate migrations, candidate image digests, smoke tests), produces the receipt, and is then deployed to production. From G1.6 on, the full staging → release → production flow below applies.
 
-All of these names (and `errors.enduva.soeenplop.dev` for GlitchTip) already resolve to the Dokploy server via the wildcard DNS record (checked). Traefik in Dokploy issues Let's Encrypt certificates per host.
+All of these names (and `errors.enduva.de` for GlitchTip, `tiles.enduva.de` for the tile proxy) point to the Dokploy server via DNS records for `enduva.de`; `www.enduva.de` redirects to `enduva.de`. The product domain moved from `enduva.soeenplop.dev` on 2026-11-28; the Dokploy dashboard itself stays under `soeenplop.dev`. Traefik in Dokploy issues Let's Encrypt certificates per host.
 
 ## Docker Compose
 
@@ -22,7 +22,7 @@ All of these names (and `errors.enduva.soeenplop.dev` for GlitchTip) already res
 | `worker` | same image as `api` | `node dist/worker.js` | pg-boss consumers. Scale independently |
 | `web` | `ghcr.io/soeenplop/enduva-web:<tag>` | `node server.mjs` (srvx on Node, SSR bundle with its dependencies, pinned in 0.12a) | TanStack Start SSR. Health check `/healthz` |
 | `landing` | `ghcr.io/soeenplop/enduva-landing:<tag>` | static server (unprivileged nginx, 0.12a) | Prerendered |
-| `tiles` | Caddy/nginx (pinned digest) | caching reverse proxy | `tiles.enduva.soeenplop.dev` → OpenFreeMap. Strips cookies, `Referer`, user agents. Disk cache |
+| `tiles` | Caddy/nginx (pinned digest) | caching reverse proxy | `tiles.enduva.de` → OpenFreeMap. Strips cookies, `Referer`, user agents. Disk cache |
 
 - There is no database in the compose file: Supabase Cloud is used for production (and staging from G1.6).
 - Images: multi-stage builds, `pnpm deploy --prod` for minimal node_modules, non-root user, distroless or alpine runtime.
@@ -103,7 +103,7 @@ flowchart LR
 ## Observability & operations
 
 - **Logs:** pino JSON → Dokploy log viewer. Request IDs propagated to clients in the `x-request-id` header. Logs never contain health payloads or tokens. Client IPs are truncated. **Tile and share paths** are not logged together with client IPs or referrers anywhere (API, tile proxy, Traefik ingress); see 0.12f.
-- **Errors:** self-hosted **GlitchTip** (separate Dokploy compose stack with its own Postgres + Valkey, at `errors.enduva.soeenplop.dev`, task 0.12e) for API, worker, web, landing and iOS, via the Sentry SDKs. Its database is included in the nightly dumps. Alerts go out by email.
+- **Errors:** self-hosted **GlitchTip** (separate Dokploy compose stack with its own Postgres + Valkey, at `errors.enduva.de`, task 0.12e) for API, worker, web, landing and iOS, via the Sentry SDKs. Its database is included in the nightly dumps. Alerts go out by email.
 - **Uptime:** health checks in Dokploy plus an external uptime monitor (e.g. Uptime Kuma on Dokploy) for landing, app and API.
 - **Backups:**
   - *Database:* Supabase Pro daily backups (prod). PITR is a **paid add-on on top of Pro** and only added if the data volume justifies it (budget decision with T13a). Plus a nightly encrypted `pg_dump` to S3-compatible storage (GitHub Actions cron) for the owner's own retention (30 days).

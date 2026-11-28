@@ -119,7 +119,7 @@ async function selfTest() {
     ['unmarked account with the pattern', !isSynthetic({ email: email('a'), app_metadata: {} })],
     [
       'marked account with another address',
-      !isSynthetic({ email: 'owner@enduva.soeenplop.dev', app_metadata: { synthetic: true } }),
+      !isSynthetic({ email: 'owner@enduva.de', app_metadata: { synthetic: true } }),
     ],
     ['marker must be exactly true', !isSynthetic({ email: email('a'), app_metadata: { synthetic: 'true' } })],
     [

@@ -9,14 +9,14 @@
 // Env:  SUPABASE_ACCESS_TOKEN, SUPABASE_PROJECT_REF       always
 //       TURNSTILE_SECRET                                   dry run and --apply (production Turnstile secret)
 //       RESEND_API_KEY                                     dry run and --apply (sending-only Resend API key)
-//       SMTP_ADMIN_EMAIL                                   optional sender address, default noreply@soeenplop.dev
+//       SMTP_ADMIN_EMAIL                                   optional sender address, default noreply@enduva.de
 //       GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET             optional; without them Google stays disabled
 //       SUPABASE_PUBLISHABLE_KEY                           --verify
 // Usage: node tools/supabase-auth-bootstrap.mjs [--apply | --verify]
 //        node tools/supabase-auth-bootstrap.mjs --self-test
 import { readFileSync } from 'node:fs';
 
-const APP = 'https://app.enduva.soeenplop.dev';
+const APP = 'https://app.enduva.de';
 // The API verifies ES256 by default (AUTH_JWT_ALGORITHM), so production must sign with ES256.
 const SIGNING_ALGORITHM = 'ES256';
 const template = (name) => readFileSync(new URL(`../supabase/templates/${name}.html`, import.meta.url), 'utf8');
@@ -49,7 +49,7 @@ export function desiredConfig(env, readTemplate = template) {
     smtp_port: '465',
     smtp_user: 'resend',
     smtp_pass: env.RESEND_API_KEY,
-    smtp_admin_email: env.SMTP_ADMIN_EMAIL || 'noreply@soeenplop.dev',
+    smtp_admin_email: env.SMTP_ADMIN_EMAIL || 'noreply@enduva.de',
     smtp_sender_name: 'Enduva',
     mailer_subjects_confirmation: 'Enduva: confirm your email address · Bestätige deine E-Mail-Adresse',
     mailer_templates_confirmation_content: readTemplate('confirmation'),
@@ -153,7 +153,7 @@ function selfTest() {
   const checks = [
     ['sign-up is locked', desired.disable_signup === true],
     ['templates are set', desired.mailer_templates_confirmation_content === '<p>confirmation</p>'],
-    ['SMTP password is redacted', isSecret('smtp_pass') && desired.smtp_admin_email === 'noreply@soeenplop.dev'],
+    ['SMTP password is redacted', isSecret('smtp_pass') && desired.smtp_admin_email === 'noreply@enduva.de'],
     [
       'Google stays off without a client',
       desired.external_google_enabled === false && !('external_google_secret' in desired),

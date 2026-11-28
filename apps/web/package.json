@@ -2,7 +2,7 @@
   "name": "@enduva/web",
   "version": "0.0.0",
   "private": true,
-  "description": "The web app at app.enduva.soeenplop.dev: TanStack Start with SSR.",
+  "description": "The web app at app.enduva.de: TanStack Start with SSR.",
   "type": "module",
   "scripts": {
     "generate": "node scripts/compile-paraglide.mjs && tsr generate",
