@@ -23,7 +23,13 @@ check() {
   work=$(mktemp -d)
   cp "$catalog" "$work/"
   synced="$work/$(basename "$catalog")"
-  xcrun xcstringstool sync "$synced" --stringsdata "$@"
+  # Valid compiler output syncs silently. Any message means the tool skipped or rejected input (e.g. "Couldn't read
+  # stringsdata file …, so will skip staleness checking", which still exits 0), so it fails the check.
+  if ! output=$(xcrun xcstringstool sync "$synced" --stringsdata "$@" 2>&1) || [ -n "$output" ]; then
+    echo "$output" | sed "s|^|error: $catalog: xcstringstool sync: |" >&2
+    rm -rf "$work"
+    return 1
+  fi
   problems=$(jq -r '.strings | to_entries[] | select(.value.shouldTranslate != false) | .key as $key | .value
     | if .extractionState == "stale" then "\($key) is not used in the code"
       else ("en", "de") as $language | select(.localizations[$language].stringUnit
@@ -63,7 +69,10 @@ JSON
   good="$dir/good/Localizable.xcstrings"
   : >"$dir/empty.stringsdata"
   echo '{"source": "Uses.swift"' >"$dir/invalid.stringsdata"
-  for data in "" "$dir/absent.stringsdata" "$dir/empty.stringsdata" "$dir/invalid.stringsdata"; do
+  # Valid JSON that xcstringstool rejects (it warns and skips the staleness check), alone and next to real data.
+  echo '{"tables": {}}' >"$dir/rejected.stringsdata"
+  for data in "" "$dir/absent.stringsdata" "$dir/empty.stringsdata" "$dir/invalid.stringsdata" \
+    "$dir/rejected.stringsdata" "$dir/Uses-swift.stringsdata $dir/rejected.stringsdata"; do
     # shellcheck disable=SC2086 # an empty $data passes no extraction file at all
     if check "$good" $data 2>/dev/null; then
       echo "error: self-test: the check accepted the extraction input \"${data:-none}\"" >&2
