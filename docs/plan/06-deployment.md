@@ -14,7 +14,7 @@ All of these names (and `errors.enduva.de` for GlitchTip, `tiles.enduva.de` for 
 
 ## Docker Compose
 
-`deploy/compose.yaml` defines one stack per environment in Dokploy. Until 0.12c turns it into the Dokploy stack (images by digest, env from Dokploy), it builds the images and starts them locally against the local Supabase stack (0.12a, [`deploy/README.md`](../../deploy/README.md)).
+`deploy/compose.production.yaml` is the production stack in Dokploy (0.12c): images by digest, filled in by the deploy script, and env from Dokploy. `deploy/compose.yaml` builds the images and starts them locally against the local Supabase stack (0.12a, [`deploy/README.md`](../../deploy/README.md)).
 
 | Service | Image | Command | Notes |
 | --- | --- | --- | --- |
@@ -75,7 +75,7 @@ flowchart LR
 - **0.12d acceptance:** run the whole release chain from a generated release PR (required checks start automatically) through merge, verification, tagging and deploy **against the isolated rehearsal target**, including a **failing smoke test** (no release, no deploy, recovery via re-run). The live staging → approved-production exercise with **deliberately slow staging** happens in G1.6.
 - **Serialisation:** GitHub Actions `concurrency` groups per environment (`deploy-staging`, `deploy-production`) so migrations and deploys never overlap. Migrations always run before the deploy in the same job.
 
-- Deploy commands go through the **Dokploy CLI** (`dokploy compose …`, installed v0.30.x), scripted in `deploy/scripts/deploy.sh` so they run the same way locally and in GitHub Actions. The exact commands are fixed in task 0.12 (`dokploy compose --help`).
+- Deploys go through `deploy/scripts/deploy.sh` (0.12c): it stores the rendered compose file (`compose.update`, source `raw`), starts `compose.deploy` and waits for the deployment's status. It uses the same Dokploy API that the Dokploy CLI v0.30.x wraps, but calls it with curl: the CLI's dependencies aren't pinned, and it reads a `.env` file from the working directory.
 - Migrations are **expand/contract** (backwards-compatible), so a deploy never breaks the previous API version during rollout.
 - Apple builds: built and signed locally (Xcode 27) or via Xcode Cloud / GitHub macOS runners (decided in 0.11; public repos get free macOS runners). Uploaded to App Store Connect via a **supported upload path** (Xcode Organizer, Transporter, or `xcrun altool --upload-app` where still supported, or fastlane `pilot`, which wraps these). Task 0.11b pins one path and checks that the build finishes processing and shows up in TestFlight internal. (`notarytool` is for macOS notarisation and is not used.)
 
