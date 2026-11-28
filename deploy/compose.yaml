@@ -1,0 +1,92 @@
+# Local start of the images (task 0.12a) against the LOCAL Supabase stack (`pnpm --filter @enduva/db db:start`),
+# never the hosted project. The production stack is Dokploy's (0.12c). Usage: deploy/README.md.
+#
+#   docker compose -f deploy/compose.yaml up --build --wait
+#
+# Host ports are bound to 127.0.0.1 only: API :3000, web :3001, landing :3002.
+
+name: enduva-local
+
+x-build: &build
+  context: ..
+  dockerfile: deploy/Dockerfile
+
+# The local Supabase stack publishes its ports on the host. On Linux `host.docker.internal` needs this entry.
+x-host-gateway: &host-gateway
+  extra_hosts:
+    - host.docker.internal:host-gateway
+
+x-api-env: &api-env
+  NODE_ENV: production
+  # The local pooler and the seeded local password of the API login (apps/api/.env.example). Not a secret.
+  DATABASE_URL: postgresql://enduva_api_login.pooler-dev:enduva-local-api@host.docker.internal:54329/postgres
+  # Must equal the `iss` of local tokens. The API fetches the JWKS from this loopback URL, which `auth-forward`
+  # relays to the host's Supabase.
+  AUTH_ISSUER: http://127.0.0.1:54321/auth/v1
+
+services:
+  api:
+    build: { <<: *build, target: api }
+    image: enduva-api:local
+    <<: *host-gateway
+    environment: *api-env
+    ports:
+      - 127.0.0.1:3000:3000
+    restart: unless-stopped
+
+  # Relays 127.0.0.1:54321 inside the API's network namespace to the host's Supabase API gateway, so the issuer
+  # stays the loopback URL of local tokens. Local only: production's issuer is the hosted https URL.
+  auth-forward:
+    image: enduva-api:local
+    network_mode: service:api
+    depends_on:
+      api:
+        condition: service_started
+    command:
+      - -e
+      - >-
+        const net = require('node:net');
+        net.createServer((client) => {
+          const upstream = net.connect(54321, 'host.docker.internal');
+          client.pipe(upstream).pipe(client);
+          client.on('error', () => upstream.destroy());
+          upstream.on('error', () => client.destroy());
+        }).listen(54321, '127.0.0.1');
+        process.on('SIGTERM', () => process.exit(0));
+    healthcheck:
+      disable: true
+    restart: unless-stopped
+
+  # A stub until 0.12c: it logs one line and exits 0, which `up --wait` would report as a failure. Opt in with
+  # `--profile worker`; 0.12c drops the profile.
+  worker:
+    image: enduva-api:local
+    profiles: [worker]
+    depends_on:
+      api:
+        condition: service_started
+    <<: *host-gateway
+    environment: *api-env
+    command: [--enable-source-maps, dist/worker.js]
+    healthcheck:
+      disable: true
+    restart: 'no'
+
+  web:
+    build: { <<: *build, target: web }
+    image: enduva-web:local
+    environment:
+      ENDUVA_API_URL: http://api:3000
+    ports:
+      - 127.0.0.1:3001:3000
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  landing:
+    build: { <<: *build, target: landing }
+    image: enduva-landing:local
+    ports:
+      - 127.0.0.1:3002:8080
+    restart: unless-stopped
