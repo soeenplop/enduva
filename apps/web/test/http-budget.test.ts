@@ -66,7 +66,8 @@ describe('auth cookie budget over HTTP', () => {
       `__Host-enduva-login=a.${loginId}`,
       filled('__Host-enduva-session-a', SLOT_MAX_BYTES),
       filled('__Host-enduva-session-b', SLOT_MAX_BYTES),
-      `__Host-enduva-ended=${loginId}.local`,
+      `__Host-enduva-ended-a=${loginId}.local`,
+      `__Host-enduva-ended-b=${loginId}.revoked`,
       // The ten-minute Google sign-in state and the locale, the other cookies the app sets.
       filled('__Host-enduva-oauth', 200),
       'enduva-locale=de',
