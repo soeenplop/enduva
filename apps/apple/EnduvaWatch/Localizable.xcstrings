@@ -1,0 +1,23 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "shell.status" : {
+      "comment" : "Shown below the name until the app has its first features.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In Entwicklung"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In development"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

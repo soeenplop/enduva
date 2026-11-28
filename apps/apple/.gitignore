@@ -1,0 +1,4 @@
+# Per-developer overrides, e.g. DEVELOPMENT_TEAM for device builds (Config/Shared.xcconfig).
+Config/Local.xcconfig
+# The Xcode project's Package.resolved is the one that pins the packages' dependencies.
+EnduvaKit/Package.resolved
