@@ -36,6 +36,13 @@ export function migrationSet(dir = MIGRATIONS_DIR) {
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const sorted = (obj) => Object.fromEntries(Object.entries(obj ?? {}).sort(([a], [b]) => a.localeCompare(b)));
 
+/** A nonempty map of image name → `sha256:<64 hex>`. */
+const pinned = (d) =>
+  d !== null &&
+  typeof d === 'object' &&
+  Object.keys(d).length > 0 &&
+  Object.values(d).every((v) => /^sha256:[0-9a-f]{64}$/.test(v));
+
 /** Every reason to refuse the production write; empty means the receipt authorises it. */
 export function judge({ receipt, sha, digests, migrations, applied }) {
   if (receipt === undefined) return ['no receipt for this SHA'];
@@ -43,6 +50,8 @@ export function judge({ receipt, sha, digests, migrations, applied }) {
   if (receipt.kind !== 'production') problems.push(`receipt kind is ${receipt.kind}, only a production receipt counts`);
   if (receipt.result !== 'passed') problems.push(`receipt result is ${receipt.result}, not passed`);
   if (receipt.sha !== sha) problems.push(`receipt is for ${receipt.sha}, not ${sha}`);
+  if (!pinned(digests)) problems.push('candidate image digests are missing or not sha256 digests');
+  if (!pinned(receipt.digests)) problems.push('receipt image digests are missing or not sha256 digests');
   if (!same(sorted(receipt.digests), sorted(digests))) problems.push('image digests differ from the receipt');
   if (!same(sorted(receipt.migrations), sorted(migrations))) problems.push('migration set differs from the receipt');
   if (!same(receipt.baseline, applied)) {
@@ -85,17 +94,25 @@ function selfTest() {
   writeFileSync(join(dir, '002_b.sql'), 'select 2;');
   const migrations = migrationSet(dir);
   const sha = 'a'.repeat(40);
-  const digests = { api: 'sha256:1', web: 'sha256:2' };
+  const [d1, d2, d3] = ['1', '2', '3'].map((c) => `sha256:${c.repeat(64)}`);
+  const digests = { api: d1, web: d2 };
   const receipt = { kind: 'production', result: 'passed', sha, digests, migrations, baseline: ['001'] };
   const ok = { receipt, sha, digests, migrations, applied: ['001'] };
   const cases = [
     ['valid receipt', ok, null],
-    ['digests in another key order', { ...ok, digests: { web: 'sha256:2', api: 'sha256:1' } }, null],
+    ['digests in another key order', { ...ok, digests: { web: d2, api: d1 } }, null],
     ['missing receipt', { ...ok, receipt: undefined }, 'no receipt'],
     ['staging receipt', { ...ok, receipt: { ...receipt, kind: 'staging' } }, 'only a production receipt'],
     ['failed receipt', { ...ok, receipt: { ...receipt, result: 'failed' } }, 'not passed'],
     ['other SHA', { ...ok, sha: 'b'.repeat(40) }, 'not bbbb'],
-    ['other digest', { ...ok, digests: { ...digests, web: 'sha256:3' } }, 'image digests'],
+    ['other digest', { ...ok, digests: { ...digests, web: d3 } }, 'image digests'],
+    ['no candidate digests', { ...ok, digests: {}, receipt: { ...receipt, digests: {} } }, 'candidate image digests'],
+    ['receipt without digests', { ...ok, receipt: { ...receipt, digests: undefined } }, 'receipt image digests'],
+    [
+      'tag instead of digest',
+      { ...ok, digests: { api: 'latest' }, receipt: { ...receipt, digests: { api: 'latest' } } },
+      'candidate image digests',
+    ],
     ['added migration', { ...ok, migrations: { ...migrations, '003_c.sql': 'x' } }, 'migration set'],
     ['edited migration', { ...ok, migrations: { ...migrations, '002_b.sql': 'x' } }, 'migration set'],
     // Migrations succeeded but the deploy failed: production moved on, so the old receipt is stale.

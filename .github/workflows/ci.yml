@@ -98,6 +98,7 @@ jobs:
 
   # Isolated bootstrap check (0.12b): a fresh local Supabase stack applies every migration from scratch (plus the
   # synthetic seed), then the cross-tenant suite and the rest of the database integration tests run against it.
+  # Required check (lead decision on PR #147).
   supabase-bootstrap:
     name: supabase-bootstrap
     runs-on: ubuntu-24.04

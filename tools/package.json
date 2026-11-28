@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "lint": "oxlint -c node_modules/@enduva/config/oxlint.json --deny-warnings *.mjs",
-    "test": "node audit-lockfile.mjs --self-test && node audit-bundled-typescript.mjs --self-test && node audit-why-typescript.mjs --self-test && node negative-tests.mjs --self-test && node cla-gate.mjs --self-test && node receipt-gate.mjs --self-test && node supabase-auth-bootstrap.mjs --self-test && node synthetic-accounts.mjs --self-test"
+    "test": "node audit-lockfile.mjs --self-test && node audit-bundled-typescript.mjs --self-test && node audit-why-typescript.mjs --self-test && node negative-tests.mjs --self-test && node cla-gate.mjs --self-test && node receipt-gate.mjs --self-test && ../deploy/scripts/db-push.test.sh && node supabase-auth-bootstrap.mjs --self-test && node synthetic-accounts.mjs --self-test"
   },
   "devDependencies": {
     "@enduva/config": "workspace:*",

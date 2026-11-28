@@ -15,9 +15,16 @@ cd "$(dirname "$0")/../.."
 # Applied history, one version per line. Before the first migration the history table doesn't exist yet.
 applied="$(mktemp)"
 trap 'rm -f "$applied"' EXIT
-if [ "$(psql "$SUPABASE_DB_URL" -Atc "select to_regclass('supabase_migrations.schema_migrations') is not null")" = t ]; then
-  psql "$SUPABASE_DB_URL" -Atc 'select version from supabase_migrations.schema_migrations order by version' >"$applied"
-fi
+# A failed probe or query aborts (set -e): an unreadable history must never count as an empty one.
+exists="$(psql "$SUPABASE_DB_URL" -Atc "select to_regclass('supabase_migrations.schema_migrations') is not null")"
+case "$exists" in
+  t) psql "$SUPABASE_DB_URL" -Atc 'select version from supabase_migrations.schema_migrations order by version' >"$applied" ;;
+  f) ;;
+  *)
+    echo "::error::Could not read the production migration history (got '$exists'). Refusing to write." >&2
+    exit 1
+    ;;
+esac
 
 node tools/receipt-gate.mjs --receipt "$RECEIPT" --sha "$SHA" --digests "$DIGESTS" --applied "$applied"
 supabase db push --db-url "$SUPABASE_DB_URL" "$@"
