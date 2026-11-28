@@ -1,0 +1,56 @@
+# Production deploy job skeleton (roadmap 0.12b, 06-deployment.md "Pipeline"). 0.12c calls it from the main pipeline
+# once the isolated candidate verifier has written the production receipt, passes the production secrets and adds
+# the Dokploy deploy. Until then it is inert: `workflow_call` only, and no workflow calls it.
+name: deploy-production
+
+on:
+  workflow_call:
+    inputs:
+      receipt:
+        description: Production receipt for this SHA (JSON, tools/receipt-gate.mjs)
+        type: string
+        required: true
+      digests:
+        description: Image digests of this SHA (JSON, e.g. {"api":"sha256:…"})
+        type: string
+        required: true
+    secrets:
+      SUPABASE_DB_URL:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: deploy (production)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    # The production lock: no two production writes overlap, and the migrations and the deploy of the same digests
+    # run in this one job, so nothing changes the migration history between the receipt check and the deploy.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13 # v3.2.0
+        with:
+          version: 3.2.0
+      # Refuses (no production write) unless the receipt matches this SHA, the digests, the migration set and the
+      # applied production history (deploy/scripts/db-push.sh).
+      - name: Migrate production (receipt-gated)
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          RECEIPT_JSON: ${{ inputs.receipt }}
+          DIGESTS_JSON: ${{ inputs.digests }}
+          SHA: ${{ github.sha }}
+        run: |
+          printf '%s' "$RECEIPT_JSON" >"$RUNNER_TEMP/receipt.json"
+          printf '%s' "$DIGESTS_JSON" >"$RUNNER_TEMP/digests.json"
+          RECEIPT="$RUNNER_TEMP/receipt.json" DIGESTS="$RUNNER_TEMP/digests.json" deploy/scripts/db-push.sh
+      - name: Deploy the same image digests
+        run: |
+          echo "::error::Not wired yet: 0.12c adds the Dokploy deploy of the receipt's digests here."
+          exit 1
