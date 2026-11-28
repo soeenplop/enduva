@@ -16,7 +16,11 @@ In this directory:
 | `pnpm test:e2e` | Browser tests in `e2e/` against `vite preview` of the build (see E2E) |
 | `pnpm test` | Vitest. Turbo builds first: `test/ssr*.test.ts` render through the production SSR bundle |
 
-`dist/server/server.js` exports the SSR fetch handler; the Node server preset is pinned in 0.12a.
+`dist/server/server.js` exports the SSR fetch handler. The production build bundles its dependencies into it
+(`ssr.noExternal` in [`vite.config.mjs`](vite.config.mjs)), and [`server.mjs`](server.mjs) serves it on Node with
+[srvx](https://srvx.h3.dev): `node server.mjs` after `pnpm build` (`HOST`, `PORT`, default `0.0.0.0:3000`), with the
+static files from `dist/client` and a `/healthz` liveness endpoint. The `web` image runs exactly that
+([`deploy/README.md`](../../deploy/README.md)).
 
 ## Per-request state
 
