@@ -1,7 +1,8 @@
 # Deploy
 
-Container images and the local compose stack (task 0.12a), and the Dokploy production stack (task 0.12c,
-[`06-deployment.md`](../docs/plan/06-deployment.md)).
+Container images and the local compose stack (task 0.12a), and the receipt-gated Dokploy production deploy (task
+0.12c, [`06-deployment.md`](../docs/plan/06-deployment.md)). Owner setup and the first deploy:
+[`docs/runbooks/deploy.md`](../docs/runbooks/deploy.md).
 
 ## Images
 
@@ -37,7 +38,7 @@ the context (CI, `image (api)`). No build step needs a credential.
   so server-function calls that rely on TanStack's `Origin` fallback get 403. Trusting forwarded headers from the
   configured ingress only belongs to 0.12c (#136).
 - **No query strings in access logs for `/auth/confirm`:** its URL carries an unspent single-use sign-in token
-  until the page replaces it (apps/web README, Sign-in). The ingress set up in 0.12c must not log it.
+  until the page replaces it (apps/web README, Sign-in). The ingress must not log it ([deploy runbook → Ingress logs](../docs/runbooks/deploy.md#dokploy-compose-service)).
 
 ## CI
 
@@ -83,23 +84,35 @@ docker compose -f deploy/compose.yaml up --build --wait
 - [`scripts/smoke.sh`](scripts/smoke.sh): exactly `200` (no redirects) plus a body marker of the expected service
   for API readiness, the web server and its SSR home page, the landing page, and
   (with a database URL) the worker's `smoke` job completed after the deploy.
-- The receipt-gated pipeline that runs them follows in the next 0.12c PR.
 
-## Production migrations (receipt gate)
+## Production deploy (receipt gate)
 
-Schema changes reach production only through `supabase db push` in the production deploy job, never by hand
-(roadmap 0.12b/0.12c, [`06-deployment.md` → Pipeline](../docs/plan/06-deployment.md#pipeline)).
+Schema and application changes reach production only through the pipeline on `main`, never by hand (roadmap
+0.12b/0.12c, [`06-deployment.md` → Pipeline](../docs/plan/06-deployment.md#pipeline), runbook
+[`deploy.md`](../docs/runbooks/deploy.md)).
 
-- [`.github/workflows/deploy-production.yml`](../.github/workflows/deploy-production.yml) is the job skeleton: one
-  job under the `deploy-production` lock that migrates and then deploys the same digests. It is `workflow_call` only
-  and nothing calls it yet; 0.12c calls it after the isolated candidate verifier, passes the secrets and adds the
-  Dokploy step.
-- [`scripts/db-push.sh`](scripts/db-push.sh) reads the applied production migration history, runs the gate and only
-  then pushes the checkout's migrations.
+- [`images.yml`](../.github/workflows/images.yml) on a push to `main`: publish the images, read the applied
+  production history (`baseline`), verify the candidate in isolation (`verify`), then call the deploy job.
+- [`scripts/verify-candidate.sh`](scripts/verify-candidate.sh): a fresh local stack with the production history
+  replayed, then the candidate's migrations, the cross-tenant suite, the pushed images by digest
+  ([`compose.yaml`](compose.yaml) with `API_IMAGE`/`WEB_IMAGE`/`LANDING_IMAGE`) and the smoke tests. Writes the
+  production receipt.
+- [`.github/workflows/deploy-production.yml`](../.github/workflows/deploy-production.yml): one job under the
+  `deploy-production` lock in the `production` environment. It checks the sign-up lock, migrates
+  (`db-push.sh`), deploys the same digests (`deploy.sh`) and runs [`scripts/smoke.sh`](scripts/smoke.sh) against
+  the public hosts.
+- [`scripts/db-push.sh`](scripts/db-push.sh) reads the applied production migration history
+  ([`scripts/applied-migrations.sh`](scripts/applied-migrations.sh)), runs the gate and only then pushes the
+  checkout's migrations.
+- The deploy job writes nothing unless its SHA is still the head of `main`, and waits for earlier Dokploy work on
+  the compose before migrating. Merged migrations are immutable:
+  [`tools/check-migrations-immutable.sh`](../tools/check-migrations-immutable.sh) fails `supabase-bootstrap` when
+  one that is already on `main` changes.
 - [`tools/receipt-gate.mjs`](../tools/receipt-gate.mjs) refuses unless there is a **production** receipt that passed,
   for exactly this SHA, with the same image digests and migration files, verified against exactly the applied
   history. A staging receipt, a failed or missing one, or a stale one (production moved on, e.g. migrations
   succeeded but the deploy failed) means no production write: re-verify the SHA in isolation. Its self-test runs
   in `pnpm --filter @enduva/tools test`.
 - The `supabase-bootstrap` CI job is the isolated bootstrap check: a fresh local stack applies every migration from
-  scratch and the cross-tenant suite runs against it.
+  scratch and the cross-tenant suite runs against it. Its self-tests and `deploy.test.sh` run in
+  `pnpm --filter @enduva/tools test`.

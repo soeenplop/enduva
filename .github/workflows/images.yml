@@ -1,6 +1,8 @@
-# Container images (task 0.12a, deploy/README.md): api (also the worker), web and landing from deploy/Dockerfile.
-# Pull requests build every image without pushing. A push to `main` builds and pushes them to GHCR, where deploys
-# reference them by digest (06-deployment.md, "Promote, don't rebuild"). The `image (…)` jobs are required checks
+# Container images (task 0.12a, deploy/README.md) and, on `main`, the production pipeline (task 0.12c).
+# Pull requests build every image (api, also the worker; web; landing) without pushing. A push to `main` builds and
+# pushes them to GHCR, verifies exactly those digests in the isolated candidate environment against the applied
+# production migration history, and hands the receipt to the receipt-gated production deploy
+# (06-deployment.md, "Pipeline", single-environment phase). The `image (…)` jobs are required checks
 # (.github/rulesets/main.json): renaming one needs the ruleset updated in the same PR.
 name: images
 
@@ -12,8 +14,9 @@ on:
 permissions:
   contents: read
 
+# Pushes to `main` run one at a time in `main-pipeline` (a later push waits, nothing is cancelled).
 concurrency:
-  group: images-${{ github.ref }}
+  group: ${{ github.event_name == 'push' && 'main-pipeline' || format('images-{0}', github.ref) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # The builder and the SBOM scanner are pinned as well, not only the actions: Buildx by release, BuildKit and the
@@ -112,6 +115,99 @@ jobs:
       - name: Digest
         env:
           DIGEST: ${{ steps.push.outputs.digest }}
+          NAME: ${{ matrix.image }}
         run: |
           echo "${IMAGE}@${DIGEST}"
           echo "\`${IMAGE}@${DIGEST}\`" >> "$GITHUB_STEP_SUMMARY"
+          jq -n --arg image "$NAME" --arg digest "$DIGEST" '{($image): $digest}' >"$RUNNER_TEMP/$NAME.json"
+      # The pipeline takes each digest from here, straight from the push, never from a tag.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: digest-${{ matrix.image }}
+          path: ${{ runner.temp }}/${{ matrix.image }}.json
+          retention-days: 30
+
+  # The migration history production has applied right now: what the candidate is verified against. Read-only,
+  # but it needs the production database URL, so it runs in the `production` environment.
+  baseline:
+    name: baseline (production history)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: production
+    outputs:
+      applied: ${{ steps.read.outputs.applied }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Read the applied migration history
+        id: read
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          deploy/scripts/applied-migrations.sh >"$RUNNER_TEMP/applied"
+          { echo 'applied<<EOF'; cat "$RUNNER_TEMP/applied"; echo EOF; } >>"$GITHUB_OUTPUT"
+
+  # Isolated candidate verifier (deploy/scripts/verify-candidate.sh): a fresh local Supabase stack, no production
+  # credentials. Writes the production receipt only if everything passed.
+  verify:
+    name: verify (isolated candidate)
+    needs: [publish, baseline]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      digests: ${{ steps.digests.outputs.json }}
+      receipt: ${{ steps.verify.outputs.receipt }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13 # v3.2.0
+        with:
+          version: 3.2.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: digest-*
+          path: ${{ runner.temp }}/digests
+          merge-multiple: true
+      - name: Digests of this push
+        id: digests
+        run: |
+          jq -cs add "$RUNNER_TEMP"/digests/*.json >"$RUNNER_TEMP/digests.json"
+          echo "json=$(cat "$RUNNER_TEMP/digests.json")" >>"$GITHUB_OUTPUT"
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify the candidate against the production history
+        id: verify
+        env:
+          SHA: ${{ github.sha }}
+          APPLIED: ${{ needs.baseline.outputs.applied }}
+        run: |
+          printf '%s\n' "$APPLIED" | sed '/^$/d' >"$RUNNER_TEMP/baseline"
+          SHA="$SHA" DIGESTS="$RUNNER_TEMP/digests.json" BASELINE="$RUNNER_TEMP/baseline" \
+            RECEIPT="$RUNNER_TEMP/receipt.json" deploy/scripts/verify-candidate.sh
+          echo "receipt=$(jq -c . "$RUNNER_TEMP/receipt.json")" >>"$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: production-receipt
+          path: ${{ runner.temp }}/receipt.json
+          retention-days: 90
+
+  deploy:
+    name: deploy
+    needs: verify
+    permissions:
+      contents: read
+    uses: ./.github/workflows/deploy-production.yml
+    with:
+      receipt: ${{ needs.verify.outputs.receipt }}
+      digests: ${{ needs.verify.outputs.digests }}
+    secrets: inherit
