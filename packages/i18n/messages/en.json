@@ -31,7 +31,7 @@
   "sign_in_title": "Sign in",
   "sign_in_submit": "Sign in",
   "sign_in_magic_link": "Email me a sign-in link instead",
-  "sign_in_magic_link_sent": "If there is an account for this address, we've sent it a sign-in link.",
+  "sign_in_magic_link_sent": "If there is an account for this address and we can send mail to it, you'll get an email with a sign-in link.",
   "sign_in_google": "Continue with Google",
   "sign_in_no_account": "No account yet?",
   "sign_in_to_sign_up": "Create one",
@@ -39,7 +39,7 @@
   "sign_up_submit": "Create account",
   "sign_up_have_account": "Already have an account?",
   "sign_up_to_sign_in": "Sign in",
-  "sign_up_check_inbox": "Check your inbox: we've sent a link to confirm your address. If you already have an account, sign in instead.",
+  "sign_up_check_inbox": "Thanks. If we can create an account for this address and send mail to it, you'll get an email with a link to confirm it. If you already have an account, sign in instead.",
   "confirm_title": "Confirm your email address",
   "confirm_body": "Enter the email address this link was sent to, then continue.",
   "confirm_submit": "Continue",
@@ -69,5 +69,6 @@
   "profile_error_invalid": "Some details aren't valid. Check them and try again.",
   "profile_error_unavailable": "Your profile couldn't be saved. Try again later.",
   "sign_out_not_confirmed": "You're signed out on this device. We couldn't end the session on our server, so it stays valid there for up to an hour.",
-  "auth_error_email_mismatch": "This link was sent to a different address. Request a new link on the sign-in page with your own address."
+  "auth_error_email_mismatch": "This link was sent to a different address. Request a new link on the sign-in page with your own address.",
+  "sign_out_failed": "Signing out didn't work: we couldn't reach the server. Check your connection and try again."
 }

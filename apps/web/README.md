@@ -54,7 +54,8 @@ server functions ([`src/auth/functions.ts`](src/auth/functions.ts)), so no token
   A request whose access token expires within 60 s refreshes it first, once per request however many server
   functions run; a refresh token that Auth refuses ends that login, an outage or rate limit doesn't. A refresh or a
   dropped session only writes the cookie of the login it started from, so a late response from one tab can't replace
-  or clear a newer sign-in from another. Server functions get the session from `sessionMiddleware` as
+  or clear a newer sign-in from another. Sign-out leaves `enduva-login` alone too: it deletes its own login's session
+  and sets a tombstone (`enduva-ended-<id>`), so a refresh of that login answering later can't revive it. Server functions get the session from `sessionMiddleware` as
   `context.session`. The web server only forwards the access token: the API verifies it on every call. Every response
   from the server is `Cache-Control: private, no-store` unless it sets its own, so no shared cache keeps a page or a
   cookie.
@@ -83,7 +84,9 @@ server functions ([`src/auth/functions.ts`](src/auth/functions.ts)), so no token
 - **Pages:** `/sign-up`, `/sign-in` (password, magic link, Google), `/auth/confirm` and `/profile` (`GET`/`PATCH
   /v1/me` with `If-Match`; a conflict reloads the form with the current profile). Signing in or out reloads the page,
   so the query cache starts empty. A session the API refuses (`401`) is dropped, the cached viewer with it, and the
-  page goes to sign-in. Every form posts natively (`method="post"`) and can't be submitted before hydration, so no
+  page goes to sign-in. `/profile` re-reads the profile on every visit and shows the email of the session it read it
+  with; a save names the account the form was rendered for, and if this browser has signed in as someone else since,
+  nothing is written and the page reloads. Every form posts natively (`method="post"`) and can't be submitted before hydration, so no
   personal field or credential ever lands in a URL.
 - **`/auth/confirm`** answers with `Referrer-Policy: no-referrer` and replaces its URL without the token once it
   runs. The first request still carries the unspent token in its query string: **the ingress must not log query
