@@ -75,11 +75,13 @@ docker compose -f deploy/compose.yaml up --build --wait
   file is never edited there. Images are referenced by digest, every other value comes from the compose's
   Environment in Dokploy, and domains/TLS come from its Domains tab.
 - [`scripts/deploy.sh`](scripts/deploy.sh) renders it with `ghcr.io/soeenplop/enduva-<image>@sha256:…` and sends it
-  to Dokploy as the compose's raw file, then starts the deploy and waits for its result. It calls the API that the
+  to Dokploy as the compose's raw file, then starts the deploy and waits for its result. Before it changes anything
+  it waits until no earlier deployment of the compose is queued or running (`--wait-idle` only waits). It calls the API that the
   Dokploy CLI (v0.30) wraps, using curl. The CLI's own dependencies aren't pinned, and it reads a `.env` file from
   the working directory. `--render-only` prints the rendered file. Tested with a stubbed API in
   [`scripts/deploy.test.sh`](scripts/deploy.test.sh).
-- [`scripts/smoke.sh`](scripts/smoke.sh): API readiness, the web server and an SSR page, the landing page, and
+- [`scripts/smoke.sh`](scripts/smoke.sh): exactly `200` (no redirects) plus a body marker of the expected service
+  for API readiness, the web server and its SSR home page, the landing page, and
   (with a database URL) the worker's `smoke` job completed after the deploy.
 - The receipt-gated pipeline that runs them follows in the next 0.12c PR.
 
