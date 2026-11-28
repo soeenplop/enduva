@@ -16,7 +16,7 @@ Swift 6, SwiftUI, iOS/watchOS 27, Xcode 27.2 ([T6](../../docs/plan/00-decisions.
 Open `Enduva.xcodeproj`, or from this directory:
 
 ```sh
-scripts/test.sh            # both apps on the simulators; `ios` or `watchos` for one
+scripts/test.sh            # iPhone tests on the simulator + Watch build; `ios` or `watchos` for one
 scripts/lint.sh            # swift-format, SwiftLint, String Catalog and icon checks
 ```
 
@@ -33,7 +33,8 @@ CI runs both in the `apple` job on the `xcode-27` image. Package versions come o
 - **Signing:** automatic, Team ID `4K9Y59Z87Y` in `Config/Shared.xcconfig`; the git-ignored `Config/Local.xcconfig`
   can override it. Bundle IDs: `dev.soeenplop.enduva` and `.watchkitapp`.
 - **Watch tests:** there is no hosted Watch test target. On CI's watchOS simulator, a test host app fails to launch
-  ("Application has termination assertions", then "The test runner hung before establishing connection"). So the
-  Watch scheme runs EnduvaKit's tests, which need no app, and `EnduvaTests` checks the Watch app's bundle (strings,
-  Info.plist) inside the copy embedded in the iPhone app. Shared logic belongs in EnduvaKit, where it's tested on
-  both platforms.
+  ("Application has termination assertions", then "The test runner hung before establishing connection"). The
+  Watch app's bundle (strings, Info.plist) is checked by `EnduvaTests` inside the copy embedded in the iPhone app.
+  Shared logic belongs in EnduvaKit, whose tests run in the iPhone scheme. `scripts/test.sh watchos` only builds the
+  Watch app: running EnduvaKit's tests on the watchOS simulator as well took ~20 minutes in CI, almost all of it
+  waiting for the test runner to start. You can still run them locally with the `EnduvaWatch` scheme's test action.
