@@ -104,6 +104,10 @@ Schema and application changes reach production only through the pipeline on `ma
 - [`scripts/db-push.sh`](scripts/db-push.sh) reads the applied production migration history
   ([`scripts/applied-migrations.sh`](scripts/applied-migrations.sh)), runs the gate and only then pushes the
   checkout's migrations.
+- The deploy job writes nothing unless its SHA is still the head of `main`, and waits for earlier Dokploy work on
+  the compose before migrating. Merged migrations are immutable:
+  [`tools/check-migrations-immutable.sh`](../tools/check-migrations-immutable.sh) fails `supabase-bootstrap` when
+  one that is already on `main` changes.
 - [`tools/receipt-gate.mjs`](../tools/receipt-gate.mjs) refuses unless there is a **production** receipt that passed,
   for exactly this SHA, with the same image digests and migration files, verified against exactly the applied
   history. A staging receipt, a failed or missing one, or a stale one (production moved on, e.g. migrations

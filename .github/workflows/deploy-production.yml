@@ -41,34 +41,61 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: ./.github/actions/setup
-      - uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13 # v3.2.0
+      # Under the lock, before any write: only the current head of main deploys. A re-run of an older run (GitHub
+      # keeps its SHA) would otherwise roll production back; it writes nothing and leaves production to the newer run.
+      - name: Still the head of main
+        id: fresh
+        run: |
+          head="$(git ls-remote "https://github.com/$GITHUB_REPOSITORY" refs/heads/main | cut -f1)"
+          if [ "$head" = "$SHA" ]; then
+            echo current=true >>"$GITHUB_OUTPUT"
+          else
+            echo "::warning::$SHA is no longer the head of main ($head). Nothing is written; the newer run deploys."
+            echo current=false >>"$GITHUB_OUTPUT"
+          fi
+      - if: steps.fresh.outputs.current == 'true'
+        uses: ./.github/actions/setup
+      - if: steps.fresh.outputs.current == 'true'
+        uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13 # v3.2.0
         with:
           version: 3.2.0
       - name: Inputs to files
+        if: steps.fresh.outputs.current == 'true'
         run: |
           printf '%s' "$RECEIPT_JSON" >"$RUNNER_TEMP/receipt.json"
           printf '%s' "$DIGESTS_JSON" >"$RUNNER_TEMP/digests.json"
       # Production hosts go live only with the sign-up lock active (G1.0): no write at all otherwise.
       - name: Sign-up lock is active
+        if: steps.fresh.outputs.current == 'true'
         env:
           SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
           SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
         run: node tools/supabase-auth-bootstrap.mjs --verify
+      # Deployments an earlier, cancelled or timed-out job left queued or running in Dokploy finish first.
+      - name: Dokploy is idle
+        if: steps.fresh.outputs.current == 'true'
+        env:
+          DOKPLOY_URL: ${{ vars.DOKPLOY_URL }}
+          DOKPLOY_COMPOSE_ID: ${{ vars.DOKPLOY_COMPOSE_ID }}
+          DOKPLOY_API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
+        run: deploy/scripts/deploy.sh --wait-idle
       # Refuses (no production write) unless the receipt matches this SHA, the digests, the migration set and the
       # applied production history (deploy/scripts/db-push.sh). A stale receipt, e.g. on a re-run after the
       # migrations succeeded but the deploy failed, is refused here: re-run all jobs to re-verify.
       - name: Migrate production (receipt-gated)
+        if: steps.fresh.outputs.current == 'true'
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: RECEIPT="$RUNNER_TEMP/receipt.json" DIGESTS="$RUNNER_TEMP/digests.json" deploy/scripts/db-push.sh
       # The worker's smoke job must be newer than this, measured on the database's clock.
       - name: Deploy start
         id: start
+        if: steps.fresh.outputs.current == 'true'
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: echo "since=$(psql "$SUPABASE_DB_URL" -Atc 'select now()')" >>"$GITHUB_OUTPUT"
       - name: Deploy the same image digests
+        if: steps.fresh.outputs.current == 'true'
         env:
           DOKPLOY_URL: ${{ vars.DOKPLOY_URL }}
           DOKPLOY_COMPOSE_ID: ${{ vars.DOKPLOY_COMPOSE_ID }}
@@ -76,6 +103,7 @@ jobs:
           TITLE: ${{ github.sha }} (run ${{ github.run_id }}.${{ github.run_attempt }})
         run: DIGESTS="$RUNNER_TEMP/digests.json" deploy/scripts/deploy.sh
       - name: Smoke tests
+        if: steps.fresh.outputs.current == 'true'
         env:
           API_URL: https://api.enduva.de
           WEB_URL: https://app.enduva.de

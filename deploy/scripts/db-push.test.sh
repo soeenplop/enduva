@@ -11,7 +11,7 @@ chmod +x "$stubs/supabase"
 for probe in 'exit 2' 'echo nonsense'; do
   printf '#!/bin/sh\n%s\n' "$probe" >"$stubs/psql"
   chmod +x "$stubs/psql"
-  if PATH="$stubs:$PATH" SUPABASE_DB_URL=x RECEIPT=x SHA=x DIGESTS=x "$root/deploy/scripts/db-push.sh" 2>/dev/null; then
+  if PATH="$stubs:$PATH" SUPABASE_DB_URL="postgresql://x?sslmode=require" RECEIPT=x SHA=x DIGESTS=x "$root/deploy/scripts/db-push.sh" 2>/dev/null; then
     echo "FAIL probe '$probe': db-push.sh succeeded"
     exit 1
   fi

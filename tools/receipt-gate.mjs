@@ -38,11 +38,14 @@ export function migrationSet(dir = MIGRATIONS_DIR) {
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const sorted = (obj) => Object.fromEntries(Object.entries(obj ?? {}).sort(([a], [b]) => a.localeCompare(b)));
 
-/** A nonempty map of image name → `sha256:<64 hex>`. */
+/** The images every deploy ships (deploy/compose.production.yaml). */
+const IMAGES = ['api', 'landing', 'web'];
+
+/** A map of exactly the deployed images → `sha256:<64 hex>`. */
 const pinned = (d) =>
   d !== null &&
   typeof d === 'object' &&
-  Object.keys(d).length > 0 &&
+  same(Object.keys(d).sort(), IMAGES) &&
   Object.values(d).every((v) => /^sha256:[0-9a-f]{64}$/.test(v));
 
 /** The production receipt the isolated verifier writes once the candidate passed against `baseline`. */
@@ -57,8 +60,9 @@ export function judge({ receipt, sha, digests, migrations, applied }) {
   if (receipt.kind !== 'production') problems.push(`receipt kind is ${receipt.kind}, only a production receipt counts`);
   if (receipt.result !== 'passed') problems.push(`receipt result is ${receipt.result}, not passed`);
   if (receipt.sha !== sha) problems.push(`receipt is for ${receipt.sha}, not ${sha}`);
-  if (!pinned(digests)) problems.push('candidate image digests are missing or not sha256 digests');
-  if (!pinned(receipt.digests)) problems.push('receipt image digests are missing or not sha256 digests');
+  if (!pinned(digests)) problems.push('candidate image digests are not exactly api, landing and web as sha256 digests');
+  if (!pinned(receipt.digests))
+    problems.push('receipt image digests are not exactly api, landing and web as sha256 digests');
   if (!same(sorted(receipt.digests), sorted(digests))) problems.push('image digests differ from the receipt');
   if (!same(sorted(receipt.migrations), sorted(migrations))) problems.push('migration set differs from the receipt');
   if (!same(receipt.baseline, applied)) {
@@ -84,7 +88,7 @@ function main() {
   const digests = readJson(values.digests);
   const applied = readFileSync(values.applied, 'utf8').split('\n').filter(Boolean);
   if (values.write) {
-    if (!pinned(digests)) throw new Error('--digests must map image names to sha256 digests');
+    if (!pinned(digests)) throw new Error('--digests must map exactly api, landing and web to sha256 digests');
     const receipt = receiptFor({ sha: values.sha, digests, migrations: migrationSet(), baseline: applied });
     writeFileSync(values.write, `${JSON.stringify(receipt, null, 2)}\n`);
     console.log(`Production receipt for ${values.sha} written to ${values.write}.`);
@@ -112,17 +116,22 @@ function selfTest() {
   const migrations = migrationSet(dir);
   const sha = 'a'.repeat(40);
   const [d1, d2, d3] = ['1', '2', '3'].map((c) => `sha256:${c.repeat(64)}`);
-  const digests = { api: d1, web: d2 };
+  const digests = { api: d1, web: d2, landing: d3 };
   const receipt = receiptFor({ sha, digests, migrations, baseline: ['001'] });
   const ok = { receipt, sha, digests, migrations, applied: ['001'] };
   const cases = [
     ['valid receipt', ok, null],
-    ['digests in another key order', { ...ok, digests: { web: d2, api: d1 } }, null],
+    ['digests in another key order', { ...ok, digests: { landing: d3, web: d2, api: d1 } }, null],
     ['missing receipt', { ...ok, receipt: undefined }, 'no receipt'],
     ['staging receipt', { ...ok, receipt: { ...receipt, kind: 'staging' } }, 'only a production receipt'],
     ['failed receipt', { ...ok, receipt: { ...receipt, result: 'failed' } }, 'not passed'],
     ['other SHA', { ...ok, sha: 'b'.repeat(40) }, 'not bbbb'],
-    ['other digest', { ...ok, digests: { ...digests, web: d3 } }, 'image digests'],
+    ['other digest', { ...ok, digests: { ...digests, web: d1 } }, 'image digests'],
+    [
+      'incomplete digest map',
+      { ...ok, digests: { api: d1, web: d2 }, receipt: { ...receipt, digests: { api: d1, web: d2 } } },
+      'candidate image digests',
+    ],
     ['no candidate digests', { ...ok, digests: {}, receipt: { ...receipt, digests: {} } }, 'candidate image digests'],
     ['receipt without digests', { ...ok, receipt: { ...receipt, digests: undefined } }, 'receipt image digests'],
     [

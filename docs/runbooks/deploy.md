@@ -25,6 +25,10 @@ Agents never deploy, migrate or call Dokploy or Supabase by hand. Production cha
   history ([`receipt-gate.mjs`](../../tools/receipt-gate.mjs)): the job stops before `supabase db push`.
 - Sign-up is not locked on production: the job stops before any write.
 - Production has applied a migration that the candidate doesn't contain: the verifier refuses.
+- The run's SHA is no longer the head of `main` (e.g. a re-run of an older run): the deploy job writes nothing and
+  leaves production to the newer run, so a re-run can't roll production back.
+- A migration file already on `main` was changed: CI fails (`supabase-bootstrap`). Applied migrations are
+  immutable, because the verifier replays production's history from the files in the checkout.
 
 **Re-runs:** if a deploy fails after its migrations went through, production's history has moved on and the old
 receipt is stale. "Re-run failed jobs" is then refused by the gate. Use **"Re-run all jobs"** (or push again): the
@@ -39,10 +43,10 @@ branches** and add `main` only. No required reviewers until G1.6.
 
 | Kind | Name | Value |
 | --- | --- | --- |
-| Secret | `SUPABASE_DB_URL` | Session pooler URL as `postgres`: `postgresql://postgres.<project-ref>:<database password>@aws-<n>-<region>.pooler.supabase.com:5432/postgres` (Dashboard → Connect → Session pooler). The GitHub runners have no IPv6, so don't use the direct URL |
+| Secret | `SUPABASE_DB_URL` | Session pooler URL as `postgres`, with TLS: `postgresql://postgres.<project-ref>:<database password>@aws-<n>-<region>.pooler.supabase.com:5432/postgres?sslmode=require` (Dashboard → Connect → Session pooler). The GitHub runners have no IPv6, so don't use the direct URL. The scripts refuse a URL without `sslmode=require` or `verify-full` |
 | Secret | `DOKPLOY_API_KEY` | Dokploy → Profile → API/CLI → generate a key for this pipeline |
 | Variable | `DOKPLOY_URL` | Base URL of the Dokploy panel, e.g. `https://<dokploy host>`, without a trailing slash |
-| Variable | `DOKPLOY_COMPOSE_ID` | ID of the compose service below (in its URL in Dokploy) |
+| Variable | `DOKPLOY_COMPOSE_ID` | ID of the compose service below (in its URL in Dokploy), e.g. `B85DKIGp7aceL4uwfN9Gi` |
 | Variable | `SUPABASE_PROJECT_REF` | Production project ref |
 | Variable | `SUPABASE_PUBLISHABLE_KEY` | Production publishable key (public, used for the sign-up lock check) |
 
@@ -56,7 +60,22 @@ The images are private. Dokploy pulls them with a registry entry (Settings → R
   **Test** there, then delete the old token on GitHub. When it expires, the next deploy fails while pulling the
   images. Production keeps running the old containers.
 
+### Supabase: TLS
+
+Dashboard → Database → Settings → **SSL Configuration**: turn **Enforce SSL on incoming connections** on. All
+database URLs below then need TLS, and carry it:
+
+- `psql` and the Supabase CLI (CI): `?sslmode=require`. The connection is encrypted; the certificate isn't checked
+  against Supabase's CA.
+- node-postgres (API, worker): `?sslmode=require&uselibpqcompat=true`. Without `uselibpqcompat`, node-postgres 8
+  treats `require` as `verify-full` against the system CAs, which Supabase's certificate doesn't chain to, so the
+  connection fails. With it, `require` means the same as for `psql`. Checking against Supabase's CA
+  (`verify-full` with `sslrootcert`) needs the CA file in the image and is a follow-up.
+
 ### Dokploy: compose service
+
+The lead created it through the Dokploy API: project `enduva`, compose `production` (ID `B85DKIGp7aceL4uwfN9Gi`),
+its environment and its domains, with DNS already resolving. To set it up from scratch:
 
 1. Project `enduva` → **Create service → Compose**, name `production`, type **Docker Compose**, source
    **Raw**. Leave the file empty: the pipeline writes it on every deploy (rendered from
@@ -66,8 +85,8 @@ The images are private. Dokploy pulls them with a registry entry (Settings → R
 
    | Variable | Value |
    | --- | --- |
-   | `API_DATABASE_URL` | Transaction pooler, port **6543**: `postgresql://enduva_api_login.<project-ref>:<api password>@aws-<n>-<region>.pooler.supabase.com:6543/postgres` |
-   | `WORKER_DATABASE_URL` | Session pooler, port **5432**: `postgresql://enduva_worker_login.<project-ref>:<worker password>@aws-<n>-<region>.pooler.supabase.com:5432/postgres` |
+   | `API_DATABASE_URL` | Transaction pooler, port **6543**: `postgresql://enduva_api_login.<project-ref>:<api password>@aws-<n>-<region>.pooler.supabase.com:6543/postgres?sslmode=require&uselibpqcompat=true` |
+   | `WORKER_DATABASE_URL` | Session pooler, port **5432**: `postgresql://enduva_worker_login.<project-ref>:<worker password>@aws-<n>-<region>.pooler.supabase.com:5432/postgres?sslmode=require&uselibpqcompat=true` |
    | `AUTH_ISSUER` | `https://<project-ref>.supabase.co/auth/v1` |
    | `SUPABASE_URL` | `https://<project-ref>.supabase.co` |
    | `SUPABASE_PUBLISHABLE_KEY` | Production publishable key |
@@ -79,7 +98,9 @@ The images are private. Dokploy pulls them with a registry entry (Settings → R
 
    Generate both login passwords (32+ random characters) in your password manager now. You set them in the
    database after the first deploy.
-3. **Domains** tab, HTTPS on, certificate **Let's Encrypt**:
+3. **Domains**, HTTPS on, certificate **Let's Encrypt**. The Domains tab offers only the services of the saved
+   compose file, which is empty until the first deploy. So either create the domains through the Dokploy API
+   (`domain.create` for the compose), as the lead did, or add them in the tab after the first deploy:
 
    | Service | Host | Port |
    | --- | --- | --- |
