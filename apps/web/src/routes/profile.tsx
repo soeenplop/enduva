@@ -2,19 +2,25 @@ import type { MeUpdate } from '@enduva/api-client';
 import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { createFileRoute, redirect } from '@tanstack/react-router';
 import { type FormEvent, useState } from 'react';
-import { Field, formText, primaryButton } from '../components/form';
+import { Field, formText, primaryButton, useHydrated } from '../components/form';
 import { m } from '../paraglide/messages.js';
 import { getLocale, setLocale } from '../paraglide/runtime.js';
 import { type Profile, type ProfileSave, updateProfile } from '../profile/functions';
 import { profileQuery } from '../profile/queries';
+import { viewerQuery } from '../auth/queries';
 
 export const Route = createFileRoute('/profile')({
   beforeLoad: ({ context, location }) => {
     if (context.viewer === null) throw redirect({ to: '/sign-in', search: { redirect: location.href } });
   },
   loader: async ({ context, location }) => {
-    if ((await context.queryClient.ensureQueryData(profileQuery)) === null)
+    if ((await context.queryClient.ensureQueryData(profileQuery)) === null) {
+      // The API refused the session and the server dropped it. The cached viewer must go too, or /sign-in would
+      // send the browser straight back here.
+      context.queryClient.setQueryData(viewerQuery.queryKey, null);
+      context.queryClient.removeQueries({ queryKey: profileQuery.queryKey });
       throw redirect({ to: '/sign-in', search: { redirect: location.href } });
+    }
   },
   head: () => ({ meta: [{ title: `${m.profile_title()} · ${m.meta_title()}` }] }),
   component: ProfilePage,
@@ -43,6 +49,7 @@ function ProfilePage() {
   const { viewer } = Route.useRouteContext();
   // The loader redirected unless there is a profile.
   const profile = useSuspenseQuery(profileQuery).data!;
+  const hydrated = useHydrated();
   const [pending, setPending] = useState(false);
   const [status, setStatus] = useState<'saved' | 'conflict' | 'invalid' | 'unavailable'>();
 
@@ -77,7 +84,8 @@ function ProfilePage() {
       </h1>
       <p className="break-words text-muted">{viewer?.email}</p>
       {/* Keyed by version: after a conflict the form shows the latest profile. */}
-      <form key={profile.etag} className="flex flex-col gap-4" onSubmit={(event) => void save(event)}>
+      {/* POST, and Save stays disabled until the page runs: personal fields never end up in a URL. */}
+      <form key={profile.etag} method="post" className="flex flex-col gap-4" onSubmit={(event) => void save(event)}>
         <Field
           label={m.profile_display_name()}
           name="displayName"
@@ -133,7 +141,7 @@ function ProfilePage() {
             {message[status]()}
           </p>
         )}
-        <button type="submit" className={`${primaryButton} self-start`} disabled={pending}>
+        <button type="submit" className={`${primaryButton} self-start`} disabled={!hydrated || pending}>
           {m.profile_save()}
         </button>
       </form>
