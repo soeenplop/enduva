@@ -1,0 +1,27 @@
+# SwiftLint checks code smells; swift-format (.swift-format) owns the layout, so the rules that overlap with it are off.
+# scripts/lint.sh runs both, CI with the SwiftLint version pinned in .github/workflows/ci.yml.
+included:
+  - Enduva
+  - EnduvaWatch
+  - EnduvaTests
+  - EnduvaKit/Sources
+  - EnduvaKit/Tests
+  - EnduvaAPIClient/Sources
+  - EnduvaAPIClient/Tests
+excluded:
+  - EnduvaAPIClient/Sources/EnduvaAPIClient/GeneratedSources
+disabled_rules:
+  - trailing_comma
+  - opening_brace
+  - line_length
+  - vertical_parameter_alignment
+  - closure_parameter_position
+opt_in_rules:
+  - empty_count
+  - first_where
+  - implicitly_unwrapped_optional
+  - modifier_order
+  - redundant_nil_coalescing
+  - sorted_first_last
+identifier_name:
+  min_length: 2
