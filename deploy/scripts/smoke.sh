@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Smoke tests after a deploy (task 0.12c), the same for the isolated candidate environment and for production.
-# Each URL must answer below 400 within about 5 minutes: API readiness (database reachable as the API login),
-# the web server and an SSR page, the landing page. With DB_URL and SINCE, a `smoke` job must also have completed
+# Each URL must answer exactly 200, without following redirects, with a body marker of the service that should
+# answer, within about 5 minutes: API readiness (database reachable as the API login), the web server and its SSR
+# home page, the landing page. With DB_URL and SINCE, a `smoke` job must also have completed
 # after SINCE: the worker enqueues and consumes one at every start, over its pooler (apps/api README, Worker).
 #
 # Usage: API_URL=… WEB_URL=… LANDING_URL=… [DB_URL=… SINCE=<timestamptz>] deploy/scripts/smoke.sh
@@ -9,22 +10,27 @@ set -euo pipefail
 : "${API_URL:?API_URL is not set}" "${WEB_URL:?WEB_URL is not set}" "${LANDING_URL:?LANDING_URL is not set}"
 
 failed=0
+body="$(mktemp)"
+trap 'rm -f "$body"' EXIT
+# check <url> <fixed string the body must contain>
 check() {
+  local status=''
   for _ in $(seq 1 30); do
-    if curl -fsS -o /dev/null --max-time 10 "$1"; then
+    status="$(curl -sS -o "$body" -w '%{http_code}' --max-time 10 "$1" || true)"
+    if [ "$status" = 200 ] && grep -qF -- "$2" "$body"; then
       echo "ok   $1"
       return 0
     fi
     sleep 10
   done
-  echo "::error::smoke: $1 did not answer successfully"
+  echo "::error::smoke: $1 did not answer 200 with '$2' (last status: ${status:-none})"
   failed=1
 }
 
-check "$API_URL/v1/health/ready"
-check "$WEB_URL/healthz"
-check "$WEB_URL/"
-check "$LANDING_URL/de/"
+check "$API_URL/v1/health/ready" '"status":"ok"'
+check "$WEB_URL/healthz" 'ok'
+check "$WEB_URL/" 'id="home-title"'
+check "$LANDING_URL/de/" 'id="hero-title"'
 
 if [ -n "${DB_URL:-}" ]; then
   : "${SINCE:?SINCE is not set}"
