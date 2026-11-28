@@ -1,0 +1,8 @@
+#include "Tests.xcconfig"
+
+PRODUCT_NAME = EnduvaTests
+PRODUCT_BUNDLE_IDENTIFIER = $(ENDUVA_BUNDLE_ID).tests
+SDKROOT = iphoneos
+SUPPORTED_PLATFORMS = iphoneos iphonesimulator
+TARGETED_DEVICE_FAMILY = 1
+TEST_HOST = $(BUILT_PRODUCTS_DIR)/Enduva.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Enduva

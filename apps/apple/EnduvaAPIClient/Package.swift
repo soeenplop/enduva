@@ -1,7 +1,9 @@
 // swift-tools-version: 6.0
-// The generated Swift client for the Enduva API. swift-openapi-generator's build plugin generates the types and the
-// client from openapi.json (a symlink to the committed apps/api/openapi.json) at build time, so the code is never
-// committed and can't go stale. Exact pins plus the committed Package.resolved (ADR-0001).
+// The generated Swift client for the Enduva API. The pinned swift-openapi-generator CLI (../scripts/generate-client.sh)
+// generates the types and the client from openapi.json (a symlink to the committed apps/api/openapi.json) into
+// GeneratedSources, which is committed; the swift-client CI job regenerates it and fails on a diff. Not the build plugin: Xcode runs it once per
+// platform into the same output path, which fails an iPhone app that embeds a Watch app. Exact pins plus the
+// committed Package.resolved (ADR-0001).
 import PackageDescription
 
 let package = Package(
@@ -22,7 +24,7 @@ let package = Package(
                 .product(name: "OpenAPIURLSession", package: "swift-openapi-urlsession"),
                 .product(name: "HTTPTypes", package: "swift-http-types"),
             ],
-            plugins: [.plugin(name: "OpenAPIGenerator", package: "swift-openapi-generator")]
+            exclude: ["openapi.json", "openapi-generator-config.yaml"]
         ),
         .testTarget(
             name: "EnduvaAPIClientTests",
